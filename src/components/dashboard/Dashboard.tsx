@@ -100,11 +100,11 @@ export function Dashboard({ onNavigate }: DashboardProps) {
       <div style={{ flex: 1, overflow: 'auto', padding: '0 24px 16px' }}>
         <div ref={containerRef} style={{ position: 'relative', height: gh, minHeight: gh }}>
 
-          <GridCardcard={getCard('quickAdd')} cw={cw} containerRef={containerRef} onUpdate={(p) => updateCard('quickAdd', p)} title={t.dash_quickAdd}>
+          <GridCard card={getCard('quickAdd')} cw={cw} containerRef={containerRef} onUpdate={(p) => updateCard('quickAdd', p)} title={t.dash_quickAdd}>
             <QuickInput onOpenDrawer={() => setDrawerOpen(true)} />
           </GridCard>
 
-          <GridCardcard={getCard('stats')} cw={cw} containerRef={containerRef} onUpdate={(p) => updateCard('stats', p)}>
+          <GridCard card={getCard('stats')} cw={cw} containerRef={containerRef} onUpdate={(p) => updateCard('stats', p)}>
             <div style={{ display: 'flex', justifyContent: 'space-around', padding: '4px 0' }}>
               <BigStat label={t.dash_statDone} value={totalCompleted} unit={t.dash_unitCount} />
               <div style={{ width: 1, background: 'var(--color-border)' }} />
@@ -114,7 +114,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
             </div>
           </GridCard>
 
-          <GridCardcard={getCard('tasks')} cw={cw} containerRef={containerRef} onUpdate={(p) => updateCard('tasks', p)} resizable title={t.dash_tasks}
+          <GridCard card={getCard('tasks')} cw={cw} containerRef={containerRef} onUpdate={(p) => updateCard('tasks', p)} resizable title={t.dash_tasks}
             titleExtra={<span style={{ fontSize: 12, color: 'var(--color-text-dim)' }}>{t.dash_pendingCount(doingTasks.length + todoTasks.length)}</span>}
           >
             <div style={{ overflow: 'hidden', height: '100%' }}>
@@ -152,11 +152,11 @@ export function Dashboard({ onNavigate }: DashboardProps) {
             </div>
           </GridCard>
 
-          <GridCardcard={getCard('character')} cw={cw} containerRef={containerRef} onUpdate={(p) => updateCard('character', p)} noShell>
+          <GridCard card={getCard('character')} cw={cw} containerRef={containerRef} onUpdate={(p) => updateCard('character', p)} noShell>
             <CharacterMiniCard onClickMilestone={() => onNavigate?.('milestone')} />
           </GridCard>
 
-          <GridCardcard={getCard('habits')} cw={cw} containerRef={containerRef} onUpdate={(p) => updateCard('habits', p)} resizable title={t.dash_habits}
+          <GridCard card={getCard('habits')} cw={cw} containerRef={containerRef} onUpdate={(p) => updateCard('habits', p)} resizable title={t.dash_habits}
             titleExtra={
               <div style={{ display: 'flex', gap: 4 }}>
                 <ActionBtn onClick={() => setHabitManageOpen(true)} title={t.dash_habitManage}>{t.dash_habitManage}</ActionBtn>
@@ -167,7 +167,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
             <div style={{ overflow: 'hidden', height: '100%' }}><HabitCard /></div>
           </GridCard>
 
-          <GridCardcard={getCard('growth')} cw={cw} containerRef={containerRef} onUpdate={(p) => updateCard('growth', p)} title={t.dash_growth}>
+          <GridCard card={getCard('growth')} cw={cw} containerRef={containerRef} onUpdate={(p) => updateCard('growth', p)} title={t.dash_growth}>
             <Heatmap />
           </GridCard>
 
