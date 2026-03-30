@@ -113,7 +113,7 @@ export function TaskList() {
         className="flex items-center gap-1 px-4 py-2 shrink-0 overflow-x-auto"
         style={{ borderBottom: '1px solid var(--color-border)' }}
       >
-        {[{ key: 'ALL', label: tr.tasklist_all }, ...getAreaCategories().map((c) => ({ key: c, label: c }))].map(({ key, label }) => {
+        {[{ key: 'ALL', label: tr.tasklist_all }, ...getAreaCategories().map((c) => ({ key: c, label: categoryDisplay(c, tr) }))].map(({ key, label }) => {
           const isActive = isCatActive(key)
           return (
             <button
