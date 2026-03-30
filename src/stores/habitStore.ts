@@ -8,12 +8,15 @@ import { calculateHabitXP } from '@/engines/xpEngine'
 
 interface HabitStore {
   habits: Habit[]
-  addHabit: (partial: Omit<Habit, 'id' | 'status' | 'isHidden' | 'timerStartedAt' | 'actualMinutes' | 'consecutiveCount' | 'totalCompletions' | 'toleranceCharges' | 'toleranceNextAt' | 'lastCompletedAt' | 'lastDueAt' | 'currentCycleCount' | 'createdAt' | 'updatedAt'>) => void
+  addHabit: (partial: Omit<Habit, 'id' | 'status' | 'isHidden' | 'deletedAt' | 'timerStartedAt' | 'actualMinutes' | 'consecutiveCount' | 'totalCompletions' | 'toleranceCharges' | 'toleranceNextAt' | 'lastCompletedAt' | 'lastDueAt' | 'currentCycleCount' | 'createdAt' | 'updatedAt'>) => void
   updateHabit: (id: string, patch: Partial<Habit>) => void
   deleteHabit: (id: string) => void
+  restoreHabit: (id: string) => void
+  permanentlyDeleteHabit: (id: string) => void
   pauseHabit: (id: string) => void
   resumeHabit: (id: string) => void
   archiveHabit: (id: string) => void
+  masterHabit: (id: string) => void
   hideHabit: (id: string) => void
   unhideHabit: (id: string) => void
   startHabitTimer: (id: string) => void
@@ -35,6 +38,7 @@ function makeDefaultHabit(partial: Parameters<HabitStore['addHabit']>[0]): Habit
     id: generateId(),
     status: 'active',
     isHidden: false,
+    deletedAt: null,
     timerStartedAt: null,
     actualMinutes: 0,
     consecutiveCount: 0,
@@ -68,6 +72,14 @@ export const useHabitStore = create<HabitStore>()(
       },
 
       deleteHabit: (id) => {
+        get().updateHabit(id, { deletedAt: new Date().toISOString() })
+      },
+
+      restoreHabit: (id) => {
+        get().updateHabit(id, { deletedAt: null })
+      },
+
+      permanentlyDeleteHabit: (id) => {
         set((s) => ({ habits: s.habits.filter((h) => h.id !== id) }))
       },
 
@@ -81,6 +93,10 @@ export const useHabitStore = create<HabitStore>()(
 
       archiveHabit: (id) => {
         get().updateHabit(id, { status: 'archived' })
+      },
+
+      masterHabit: (id) => {
+        get().updateHabit(id, { status: 'mastered' })
       },
 
       hideHabit: (id) => {
@@ -205,13 +221,13 @@ export const useHabitStore = create<HabitStore>()(
 
       getTodayHabits: () => {
         return get().habits.filter(
-          (h) => !h.isHidden && h.status === 'active' && isHabitDueToday(h)
+          (h) => !h.deletedAt && !h.isHidden && h.status === 'active' && isHabitDueToday(h)
         )
       },
 
       getHabitsByCategory: (category) => {
         return get().habits.filter(
-          (h) => !h.isHidden && h.status !== 'archived' && h.category === category
+          (h) => !h.deletedAt && !h.isHidden && h.status !== 'archived' && h.status !== 'mastered' && h.category === category
         )
       },
 
@@ -236,6 +252,7 @@ export const useHabitStore = create<HabitStore>()(
         state.habits = state.habits.map((h) => {
           const patched: Habit = {
             isHidden: h.isHidden ?? (h.status === 'archived'),
+            deletedAt: h.deletedAt ?? null,
             timerStartedAt: h.timerStartedAt ?? null,
             actualMinutes: h.actualMinutes ?? 0,
             ...h,

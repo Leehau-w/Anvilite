@@ -105,6 +105,16 @@ export const zh = {
   habit_toastHidden: '习惯已隐藏',
   habit_delete: '删除',
   habit_deleteConfirm: '再次点击确认删除',
+  habit_restore: '恢复',
+  habit_deletePerm: '永久删除',
+  habit_master: '完成并归档',
+  habits_mastered: '已养成',
+  habits_trashEmpty: '没有已删除的习惯',
+  habits_trashNote: '已删除的习惯可以恢复或永久删除',
+  habits_hiddenEmpty: '没有已隐藏的习惯',
+  habits_hiddenNote: '已隐藏的习惯不会出现在今日列表中',
+  habits_hiddenTooltip: '已隐藏',
+  habits_trashTooltip: '回收站',
 
   // ─── Task Item ────────────────────────────────────────────────────────────────
   task_overdue: '已过期',

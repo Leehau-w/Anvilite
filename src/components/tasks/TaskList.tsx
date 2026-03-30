@@ -502,133 +502,189 @@ function HabitsTab({
   onAdd: () => void
   onEdit: (h: Habit) => void
 }) {
-  const { habits, pauseHabit, resumeHabit, hideHabit, unhideHabit, deleteHabit } = useHabitStore()
+  const { habits, pauseHabit, resumeHabit, hideHabit, unhideHabit, deleteHabit, restoreHabit, permanentlyDeleteHabit } = useHabitStore()
   const tr = useT()
   const { showToast } = useToast()
-  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
-  const [showHidden, setShowHidden] = useState(false)
+  const [hiddenMode, setHiddenMode] = useState(false)
+  const [trashMode, setTrashMode] = useState(false)
 
-  const active = habits.filter((h) => !h.isHidden && (h.status === 'active' || h.status === 'completed_today'))
-  const paused = habits.filter((h) => !h.isHidden && h.status === 'paused')
-  const hidden = habits.filter((h) => h.isHidden)
-
-  function handleDelete(id: string) {
-    if (confirmDeleteId === id) {
-      deleteHabit(id)
-      setConfirmDeleteId(null)
-    } else {
-      setConfirmDeleteId(id)
-      setTimeout(() => setConfirmDeleteId(null), 3000)
-    }
-  }
+  const active = habits.filter((h) => !h.deletedAt && !h.isHidden && (h.status === 'active' || h.status === 'completed_today'))
+  const paused = habits.filter((h) => !h.deletedAt && !h.isHidden && h.status === 'paused')
+  const mastered = habits.filter((h) => !h.deletedAt && !h.isHidden && h.status === 'mastered')
+  const hidden = habits.filter((h) => !h.deletedAt && h.isHidden)
+  const deleted = habits.filter((h) => !!h.deletedAt).sort((a, b) => new Date(b.deletedAt!).getTime() - new Date(a.deletedAt!).getTime())
 
   function handleHide(id: string) {
     hideHabit(id)
     showToast(tr.habit_toastHidden)
   }
 
+  function handleDelete(id: string) {
+    deleteHabit(id)
+    showToast(tr.habit_toastHidden)
+  }
+
   return (
-    <div className="flex-1 overflow-y-auto px-4 py-3 flex flex-col gap-4">
-      {/* 添加按钮 */}
-      <button
-        onClick={onAdd}
-        style={{
-          alignSelf: 'flex-start',
-          fontSize: 12,
-          padding: '5px 14px',
-          borderRadius: 'var(--radius-full)',
-          border: '1px solid var(--color-accent)',
-          background: 'color-mix(in srgb, var(--color-accent) 10%, transparent)',
-          color: 'var(--color-accent)',
-          cursor: 'pointer',
-          fontWeight: 500,
-          transition: 'all 0.15s',
-        }}
+    <>
+      {/* 工具栏：添加 + 隐藏/回收站图标 */}
+      <div
+        className="flex items-center gap-1 px-4 py-2 shrink-0"
+        style={{ borderBottom: '1px solid var(--color-border)' }}
       >
-        {tr.habits_add}
-      </button>
+        <button
+          onClick={onAdd}
+          style={{
+            fontSize: 12, padding: '4px 14px', borderRadius: 'var(--radius-full)',
+            border: '1px solid var(--color-accent)', background: 'color-mix(in srgb, var(--color-accent) 10%, transparent)',
+            color: 'var(--color-accent)', cursor: 'pointer', fontWeight: 500, transition: 'all 0.15s',
+          }}
+        >
+          {tr.habits_add}
+        </button>
+        <div style={{ flex: 1 }} />
+        <button
+          onClick={() => { setHiddenMode((v) => !v); setTrashMode(false) }}
+          title={tr.habits_hiddenTooltip}
+          style={{
+            fontSize: 12, padding: '4px 10px', borderRadius: 'var(--radius-full)',
+            border: `1px solid ${hiddenMode ? 'var(--color-secondary)' : 'var(--color-border)'}`,
+            background: hiddenMode ? 'color-mix(in srgb, var(--color-secondary) 10%, transparent)' : 'transparent',
+            color: hiddenMode ? 'var(--color-secondary)' : 'var(--color-text-dim)',
+            cursor: 'pointer', whiteSpace: 'nowrap', transition: 'all 0.15s',
+            display: 'flex', alignItems: 'center', gap: 4, marginRight: 4,
+          }}
+        >
+          <EyeOffIcon />
+          {hidden.length > 0 && <span>{hidden.length}</span>}
+        </button>
+        <button
+          onClick={() => { setTrashMode((v) => !v); setHiddenMode(false) }}
+          title={tr.habits_trashTooltip}
+          style={{
+            fontSize: 12, padding: '4px 10px', borderRadius: 'var(--radius-full)',
+            border: `1px solid ${trashMode ? 'var(--color-danger)' : 'var(--color-border)'}`,
+            background: trashMode ? 'color-mix(in srgb, var(--color-danger) 10%, transparent)' : 'transparent',
+            color: trashMode ? 'var(--color-danger)' : 'var(--color-text-dim)',
+            cursor: 'pointer', whiteSpace: 'nowrap', transition: 'all 0.15s',
+            display: 'flex', alignItems: 'center', gap: 4,
+          }}
+        >
+          <TrashIcon />
+          {deleted.length > 0 && <span>{deleted.length}</span>}
+        </button>
+      </div>
 
-      {habits.length === 0 && (
-        <div style={{ textAlign: 'center', paddingTop: 48, color: 'var(--color-text-dim)', fontSize: 13 }}>
-          <div style={{ fontSize: 32, marginBottom: 8 }}>🌱</div>
-          {tr.habits_empty}
+      {hiddenMode ? (
+        /* 已隐藏习惯视图 — 与任务一致 */
+        <div className="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-3">
+          {hidden.length === 0 ? (
+            <div className="flex flex-col items-center justify-center flex-1" style={{ color: 'var(--color-text-dim)', fontSize: 13, gap: 8, paddingTop: 60 }}>
+              <span style={{ fontSize: 32 }}>👁️</span>
+              <span>{tr.habits_hiddenEmpty}</span>
+            </div>
+          ) : (
+            <>
+              <p style={{ fontSize: 11, color: 'var(--color-text-dim)', margin: 0 }}>{tr.habits_hiddenNote}</p>
+              <AnimatePresence mode="popLayout">
+                {hidden.map((h) => (
+                  <motion.div key={h.id} layout initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, x: '60%' }}
+                    style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', opacity: 0.8 }}
+                  >
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13, color: 'var(--color-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{h.title}</div>
+                      <div style={{ fontSize: 11, color: 'var(--color-text-dim)', marginTop: 2 }}>{categoryDisplay(h.category, tr)} · {getHabitRepeatLabel(h, tr)}</div>
+                    </div>
+                    <button onClick={() => unhideHabit(h.id)}
+                      style={{ fontSize: 11, padding: '3px 10px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-secondary)', background: 'transparent', color: 'var(--color-secondary)', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                    >{tr.habit_unhide}</button>
+                  </motion.div>
+                ))}
+              </AnimatePresence>
+            </>
+          )}
+        </div>
+      ) : trashMode ? (
+        /* 回收站视图 — 与任务一致 */
+        <div className="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-3">
+          {deleted.length === 0 ? (
+            <div className="flex flex-col items-center justify-center flex-1" style={{ color: 'var(--color-text-dim)', fontSize: 13, gap: 8, paddingTop: 60 }}>
+              <span style={{ fontSize: 32 }}>🗑️</span>
+              <span>{tr.habits_trashEmpty}</span>
+            </div>
+          ) : (
+            <>
+              <p style={{ fontSize: 11, color: 'var(--color-text-dim)', margin: 0 }}>{tr.habits_trashNote}</p>
+              <AnimatePresence mode="popLayout">
+                {deleted.map((h) => (
+                  <motion.div key={h.id} layout initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, x: '60%' }}
+                    style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', opacity: 0.75 }}
+                  >
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13, color: 'var(--color-text-dim)', textDecoration: 'line-through', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{h.title}</div>
+                      <div style={{ fontSize: 11, color: 'var(--color-text-dim)', marginTop: 2, opacity: 0.7 }}>
+                        {categoryDisplay(h.category, tr)} · {formatDeletedDate(h.deletedAt!)}
+                      </div>
+                    </div>
+                    <button onClick={() => restoreHabit(h.id)}
+                      style={{ fontSize: 11, padding: '3px 10px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', background: 'transparent', color: 'var(--color-text-dim)', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                    >{tr.habit_restore}</button>
+                    <button onClick={() => permanentlyDeleteHabit(h.id)}
+                      style={{ fontSize: 11, padding: '3px 10px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-danger)', background: 'transparent', color: 'var(--color-danger)', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                    >{tr.habit_deletePerm}</button>
+                  </motion.div>
+                ))}
+              </AnimatePresence>
+            </>
+          )}
+        </div>
+      ) : (
+        /* 正常习惯列表 */
+        <div className="flex-1 overflow-y-auto px-4 py-3 flex flex-col gap-4">
+          {habits.filter((h) => !h.deletedAt).length === 0 && (
+            <div style={{ textAlign: 'center', paddingTop: 48, color: 'var(--color-text-dim)', fontSize: 13 }}>
+              <div style={{ fontSize: 32, marginBottom: 8 }}>🌱</div>
+              {tr.habits_empty}
+            </div>
+          )}
+
+          {active.length > 0 && (
+            <HabitSection title={tr.habits_active} count={active.length}>
+              <AnimatePresence mode="popLayout">
+                {active.map((h) => (
+                  <HabitRow key={h.id} habit={h}
+                    onEdit={() => onEdit(h)} onPause={() => pauseHabit(h.id)}
+                    onHide={() => handleHide(h.id)} onDelete={() => handleDelete(h.id)}
+                  />
+                ))}
+              </AnimatePresence>
+            </HabitSection>
+          )}
+
+          {paused.length > 0 && (
+            <HabitSection title={tr.habits_paused} count={paused.length}>
+              <AnimatePresence mode="popLayout">
+                {paused.map((h) => (
+                  <HabitRow key={h.id} habit={h}
+                    onEdit={() => onEdit(h)} onResume={() => resumeHabit(h.id)}
+                    onHide={() => handleHide(h.id)} onDelete={() => handleDelete(h.id)}
+                  />
+                ))}
+              </AnimatePresence>
+            </HabitSection>
+          )}
+
+          {mastered.length > 0 && (
+            <HabitSection title={tr.habits_mastered} count={mastered.length}>
+              <AnimatePresence mode="popLayout">
+                {mastered.map((h) => (
+                  <HabitRow key={h.id} habit={h} onEdit={() => onEdit(h)} onDelete={() => handleDelete(h.id)} dim />
+                ))}
+              </AnimatePresence>
+            </HabitSection>
+          )}
         </div>
       )}
-
-      {active.length > 0 && (
-        <HabitSection title={tr.habits_active} count={active.length}>
-          <AnimatePresence mode="popLayout">
-            {active.map((h) => (
-              <HabitRow
-                key={h.id}
-                habit={h}
-                confirmDeleteId={confirmDeleteId}
-                onEdit={() => onEdit(h)}
-                onPause={() => pauseHabit(h.id)}
-                onHide={() => handleHide(h.id)}
-                onDelete={() => handleDelete(h.id)}
-              />
-            ))}
-          </AnimatePresence>
-        </HabitSection>
-      )}
-
-      {paused.length > 0 && (
-        <HabitSection title={tr.habits_paused} count={paused.length}>
-          <AnimatePresence mode="popLayout">
-            {paused.map((h) => (
-              <HabitRow
-                key={h.id}
-                habit={h}
-                confirmDeleteId={confirmDeleteId}
-                onEdit={() => onEdit(h)}
-                onResume={() => resumeHabit(h.id)}
-                onHide={() => handleHide(h.id)}
-                onDelete={() => handleDelete(h.id)}
-              />
-            ))}
-          </AnimatePresence>
-        </HabitSection>
-      )}
-
-      {hidden.length > 0 && (
-        <div>
-          <button
-            onClick={() => setShowHidden((v) => !v)}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600,
-              color: 'var(--color-text-dim)', background: 'none', border: 'none', cursor: 'pointer', padding: '4px 0',
-            }}
-          >
-            <span style={{ fontSize: 10, transform: showHidden ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s', display: 'inline-block' }}>▶</span>
-            {tr.habits_hidden(hidden.length)}
-          </button>
-          <AnimatePresence>
-            {showHidden && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
-                style={{ overflow: 'hidden', marginTop: 6 }}
-              >
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  {hidden.map((h) => (
-                    <HabitRow
-                      key={h.id}
-                      habit={h}
-                      confirmDeleteId={confirmDeleteId}
-                      onUnhide={() => unhideHabit(h.id)}
-                      onDelete={() => handleDelete(h.id)}
-                      dim
-                    />
-                  ))}
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
-      )}
-    </div>
+    </>
   )
 }
 
@@ -646,26 +702,21 @@ function HabitSection({ title, count, children }: { title: string; count: number
 
 function HabitRow({
   habit,
-  confirmDeleteId,
   onEdit,
   onPause,
   onResume,
   onHide,
-  onUnhide,
   onDelete,
   dim,
 }: {
   habit: Habit
-  confirmDeleteId: string | null
   onEdit?: () => void
   onPause?: () => void
   onResume?: () => void
   onHide?: () => void
-  onUnhide?: () => void
-  onDelete: () => void
+  onDelete?: () => void
   dim?: boolean
 }) {
-  const isPendingDelete = confirmDeleteId === habit.id
   const tr = useT()
   const repeatLabel = getHabitRepeatLabel(habit, tr)
 
@@ -705,14 +756,7 @@ function HabitRow({
         {onPause && <HabitIconBtn onClick={onPause} title={tr.habit_pause} color="var(--color-text-dim)">⏸</HabitIconBtn>}
         {onResume && <HabitIconBtn onClick={onResume} title={tr.habit_resume} color="var(--color-success)">▶</HabitIconBtn>}
         {onHide && <HabitIconBtn onClick={onHide} title={tr.habit_hide} color="var(--color-text-dim)">🙈</HabitIconBtn>}
-        {onUnhide && <HabitIconBtn onClick={onUnhide} title={tr.habit_unhide} color="var(--color-success)">👁</HabitIconBtn>}
-        <HabitIconBtn
-          onClick={onDelete}
-          title={isPendingDelete ? tr.habit_deleteConfirm : tr.habit_delete}
-          color={isPendingDelete ? '#dc2626' : 'var(--color-text-dim)'}
-        >
-          {isPendingDelete ? '!' : '✕'}
-        </HabitIconBtn>
+        {onDelete && <HabitIconBtn onClick={onDelete} title={tr.habit_delete} color="var(--color-text-dim)">✕</HabitIconBtn>}
       </div>
     </motion.div>
   )

@@ -16,8 +16,9 @@ export interface Habit {
   endDate: string | null
   reminderTime: string | null        // HH:mm
   description: string
-  status: 'active' | 'completed_today' | 'paused' | 'archived'
+  status: 'active' | 'completed_today' | 'paused' | 'archived' | 'mastered'
   isHidden: boolean
+  deletedAt: string | null
   timerStartedAt: string | null
   actualMinutes: number
   consecutiveCount: number

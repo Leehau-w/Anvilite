@@ -107,6 +107,16 @@ export const en: Translations = {
   habit_toastHidden: 'Habit hidden',
   habit_delete: 'Delete',
   habit_deleteConfirm: 'Click again to confirm',
+  habit_restore: 'Restore',
+  habit_deletePerm: 'Delete permanently',
+  habit_master: 'Mark as Mastered',
+  habits_mastered: 'Mastered',
+  habits_trashEmpty: 'No deleted habits',
+  habits_trashNote: 'Deleted habits can be restored or permanently removed',
+  habits_hiddenEmpty: 'No hidden habits',
+  habits_hiddenNote: 'Hidden habits won\'t appear in today\'s list',
+  habits_hiddenTooltip: 'Hidden',
+  habits_trashTooltip: 'Trash',
 
   // ─── Task Item ────────────────────────────────────────────────────────────────
   task_overdue: 'Overdue',
