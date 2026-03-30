@@ -51,6 +51,7 @@ export const zh = {
   dash_habitManage: '管理',
   dash_addHabit: '添加习惯',
   dash_growth: '成长趋势',
+  dash_resetLayout: '重置布局',
 
   // ─── Task List ────────────────────────────────────────────────────────────────
   tasklist_tabTasks: '任务',

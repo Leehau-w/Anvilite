@@ -53,6 +53,7 @@ export const en: Translations = {
   dash_habitManage: 'Manage',
   dash_addHabit: 'Add Habit',
   dash_growth: 'Growth Trend',
+  dash_resetLayout: 'Reset Layout',
 
   // ─── Task List ────────────────────────────────────────────────────────────────
   tasklist_tabTasks: 'Tasks',
