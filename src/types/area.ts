@@ -24,31 +24,31 @@ export interface AreaTemplateInfo {
 export const AREA_TEMPLATES: Record<AreaTemplateId, AreaTemplateInfo> = {
   home: {
     name: '家园',
-    category: '家园',
+    category: 'home',
     description: '生活与日常',
     prosperityEmojis: ['🪨', '⛺', '🏡', '🏠', '🏰', '✨'],
   },
   arena: {
     name: '竞技场',
-    category: '竞技场',
+    category: 'arena',
     description: '运动与健身',
     prosperityEmojis: ['🌿', '🥊', '⚔️', '🏟️', '🛡️', '⚡'],
   },
   library: {
     name: '藏书阁',
-    category: '藏书阁',
+    category: 'library',
     description: '学习与阅读',
     prosperityEmojis: ['🗿', '📖', '📚', '🏛️', '🔭', '⭐'],
   },
   workshop: {
     name: '灵感工坊',
-    category: '灵感工坊',
+    category: 'workshop',
     description: '兴趣与创造',
     prosperityEmojis: ['🕸️', '🔨', '🎨', '🏗️', '🎭', '💫'],
   },
   forge: {
     name: '锻造坊',
-    category: '锻造坊',
+    category: 'forge',
     description: '工作与效率',
     prosperityEmojis: ['🔩', '🔥', '⚙️', '🏭', '⚒️', '💎'],
   },

@@ -317,6 +317,7 @@ export const en: Translations = {
   areaName_library: 'Library Tower',
   areaName_workshop: 'Workshop',
   areaName_forge: 'Forge',
+  areaName_other: 'Other',
   areaName_archive: 'Archives',
 
   // ─── Titles ───────────────────────────────────────────────────────────────

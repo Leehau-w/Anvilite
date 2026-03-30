@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { Habit } from '@/types/habit'
 import { generateId } from '@/utils/id'
+import { migrateCategory } from '@/utils/area'
 import { isHabitDueToday, calculateNewStreak, calculateToleranceUpdate } from '@/engines/habitEngine'
 import { calculateHabitXP } from '@/engines/xpEngine'
 
@@ -238,7 +239,7 @@ export const useHabitStore = create<HabitStore>()(
             timerStartedAt: h.timerStartedAt ?? null,
             actualMinutes: h.actualMinutes ?? 0,
             ...h,
-            category: h.category === '书阁高塔' ? '藏书阁' : h.category,
+            category: migrateCategory(h.category),
             // migrate archived → paused + hidden
             status: h.status === 'archived' ? 'paused' : h.status,
           }

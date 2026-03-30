@@ -3,6 +3,7 @@ import { persist } from 'zustand/middleware'
 import type { Task } from '@/types/task'
 import { generateId } from '@/utils/id'
 import { getTomorrowString } from '@/utils/time'
+import { migrateCategory } from '@/utils/area'
 
 interface TaskStore {
   tasks: Task[]
@@ -34,7 +35,7 @@ function makeDefaultTask(partial: Partial<Task> & { title: string }): Task {
   return {
     id: generateId(),
     title: partial.title,
-    category: partial.category ?? '其他',
+    category: partial.category ?? 'other',
     difficulty: partial.difficulty ?? 3,
     priority: partial.priority ?? 'medium',
     dueDate: partial.dueDate !== undefined ? partial.dueDate : getTomorrowString(),
@@ -60,7 +61,7 @@ export const useTaskStore = create<TaskStore>()(
   persist(
     (set, get) => ({
       tasks: [],
-      lastCategory: '其他',
+      lastCategory: 'other',
 
       addTask: (partial) => {
         const task = makeDefaultTask(partial)
@@ -235,9 +236,11 @@ export const useTaskStore = create<TaskStore>()(
       name: 'anvilite-tasks',
       onRehydrateStorage: () => (state) => {
         if (!state) return
-        state.tasks = state.tasks.map((t) =>
-          t.category === '书阁高塔' ? { ...t, category: '藏书阁' } : t
-        )
+        state.tasks = state.tasks.map((t) => ({
+          ...t,
+          category: migrateCategory(t.category),
+        }))
+        state.lastCategory = migrateCategory(state.lastCategory)
       },
     }
   )

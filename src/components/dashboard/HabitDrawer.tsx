@@ -49,7 +49,7 @@ export function HabitDrawer({ open, onClose, editHabit, defaultCategory }: Habit
     const isMonthlyFixed = editHabit?.repeatType === 'monthly_fixed'
     return {
       title: editHabit?.title ?? '',
-      category: editHabit?.category ?? defaultCategory ?? (cats[0] ?? '其他'),
+      category: editHabit?.category ?? defaultCategory ?? (cats[0] ?? 'other'),
       difficulty: editHabit?.difficulty ?? 3,
       repeatType: isMonthlyFixed ? 'monthly' : (editHabit?.repeatType ?? 'daily') as UIRepeatType,
       weeklyMode: editHabit?.weeklyMode ?? 'strict',

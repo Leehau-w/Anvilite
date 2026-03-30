@@ -4,6 +4,7 @@ import { Drawer } from '@/components/ui/Drawer'
 import { useHabitStore } from '@/stores/habitStore'
 import { useToast } from '@/components/feedback/Toast'
 import { useT } from '@/i18n'
+import { categoryDisplay } from '@/utils/area'
 import type { Habit } from '@/types/habit'
 
 interface HabitManageModalProps {
@@ -226,7 +227,7 @@ function HabitRow({
           {habit.title}
         </div>
         <div style={{ fontSize: 12, color: 'var(--color-text-dim)', marginTop: 2, display: 'flex', gap: 6 }}>
-          <span>{habit.category}</span>
+          <span>{categoryDisplay(habit.category, tr)}</span>
           <span>·</span>
           <span>{repeatLabel}</span>
           {habit.consecutiveCount > 0 && (

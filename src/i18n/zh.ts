@@ -315,6 +315,7 @@ export const zh = {
   areaName_library: '藏书阁',
   areaName_workshop: '灵感工坊',
   areaName_forge: '锻造坊',
+  areaName_other: '其他',
   areaName_archive: '档案馆',
 
   // ─── Titles ───────────────────────────────────────────────────────────────

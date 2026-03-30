@@ -1,6 +1,8 @@
 import React from 'react'
+import { useT } from '@/i18n'
+import { categoryDisplay } from '@/utils/area'
 
-const DEFAULT_CATEGORIES = ['家园', '竞技场', '藏书阁', '灵感工坊', '锻造坊', '其他']
+const DEFAULT_CATEGORIES = ['home', 'arena', 'library', 'workshop', 'forge', 'other']
 
 interface CategorySelectProps {
   value: string
@@ -9,6 +11,7 @@ interface CategorySelectProps {
 }
 
 export function CategorySelect({ value, onChange, categories = DEFAULT_CATEGORIES }: CategorySelectProps) {
+  const t = useT()
   return (
     <div className="flex flex-wrap gap-1">
       {categories.map((cat) => {
@@ -33,7 +36,7 @@ export function CategorySelect({ value, onChange, categories = DEFAULT_CATEGORIE
               fontWeight: isActive ? 500 : 400,
             }}
           >
-            {cat}
+            {categoryDisplay(cat, t)}
           </button>
         )
       })}

@@ -3,6 +3,7 @@ import { persist } from 'zustand/middleware'
 import type { Area, AreaTemplateId } from '@/types/area'
 import { AREA_TEMPLATES } from '@/types/area'
 import { generateId } from '@/utils/id'
+import { migrateCategory } from '@/utils/area'
 
 export const CANVAS_W = 1600
 export const CANVAS_H = 1000
@@ -10,11 +11,11 @@ export const CANVAS_H = 1000
 function createDefaultAreas(): Area[] {
   const now = new Date().toISOString()
   return [
-    { id: 'area-home', templateId: 'home', name: '家园', category: '家园', position: { x: 700, y: 360 }, isPreset: true, canDelete: false, canMove: false, createdAt: now },
-    { id: 'area-arena', templateId: 'arena', name: '竞技场', category: '竞技场', position: { x: 260, y: 190 }, isPreset: true, canDelete: true, canMove: false, createdAt: now },
-    { id: 'area-library', templateId: 'library', name: '藏书阁', category: '藏书阁', position: { x: 1060, y: 140 }, isPreset: true, canDelete: true, canMove: false, createdAt: now },
-    { id: 'area-workshop', templateId: 'workshop', name: '灵感工坊', category: '灵感工坊', position: { x: 280, y: 520 }, isPreset: true, canDelete: true, canMove: false, createdAt: now },
-    { id: 'area-forge', templateId: 'forge', name: '锻造坊', category: '锻造坊', position: { x: 920, y: 580 }, isPreset: true, canDelete: true, canMove: false, createdAt: now },
+    { id: 'area-home', templateId: 'home', name: '家园', category: 'home', position: { x: 700, y: 360 }, isPreset: true, canDelete: false, canMove: false, createdAt: now },
+    { id: 'area-arena', templateId: 'arena', name: '竞技场', category: 'arena', position: { x: 260, y: 190 }, isPreset: true, canDelete: true, canMove: false, createdAt: now },
+    { id: 'area-library', templateId: 'library', name: '藏书阁', category: 'library', position: { x: 1060, y: 140 }, isPreset: true, canDelete: true, canMove: false, createdAt: now },
+    { id: 'area-workshop', templateId: 'workshop', name: '灵感工坊', category: 'workshop', position: { x: 280, y: 520 }, isPreset: true, canDelete: true, canMove: false, createdAt: now },
+    { id: 'area-forge', templateId: 'forge', name: '锻造坊', category: 'forge', position: { x: 920, y: 580 }, isPreset: true, canDelete: true, canMove: false, createdAt: now },
     { id: 'area-milestone', templateId: 'milestone', name: '档案馆', category: '_milestone', position: { x: 1220, y: 700 }, isPreset: true, canDelete: false, canMove: false, createdAt: now },
   ]
 }
@@ -45,8 +46,7 @@ export const useAreaStore = create<AreaStore>()(
         const cats = get()
           .areas.filter((a) => a.category !== '_milestone')
           .map((a) => a.category)
-        // 确保"其他"始终存在
-        if (!cats.includes('其他')) cats.push('其他')
+        if (!cats.includes('other')) cats.push('other')
         return cats
       },
 
@@ -95,14 +95,14 @@ export const useAreaStore = create<AreaStore>()(
       // 迁移：将旧名称"里程碑殿堂"更新为"档案馆"
       onRehydrateStorage: () => (state) => {
         if (!state) return
+        // Migrate all area categories to English keys
+        state.areas = state.areas.map((a) => ({
+          ...a,
+          category: a.category === '_milestone' ? '_milestone' : migrateCategory(a.category),
+        }))
         const milestone = state.areas.find((a) => a.id === 'area-milestone')
         if (milestone && milestone.name === '里程碑殿堂') {
           milestone.name = '档案馆'
-        }
-        const library = state.areas.find((a) => a.id === 'area-library')
-        if (library && library.name === '书阁高塔') {
-          library.name = '藏书阁'
-          library.category = '藏书阁'
         }
       },
     }

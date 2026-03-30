@@ -16,11 +16,11 @@ const STATUS_ICONS: Record<string, { icon: string; key: keyof Translations }> = 
 }
 
 const CATEGORY_STATUS: Record<string, { icon: string; key: keyof Translations }> = {
-  '藏书阁': { icon: '📚', key: 'charCard_catStatus_library' },
-  '锻造坊':   { icon: '💼', key: 'charCard_catStatus_forge' },
-  '竞技场':   { icon: '🏃', key: 'charCard_catStatus_arena' },
-  '灵感工坊': { icon: '✨', key: 'charCard_catStatus_workshop' },
-  '家园':     { icon: '🏠', key: 'charCard_catStatus_home' },
+  library:  { icon: '📚', key: 'charCard_catStatus_library' },
+  forge:    { icon: '💼', key: 'charCard_catStatus_forge' },
+  arena:    { icon: '🏃', key: 'charCard_catStatus_arena' },
+  workshop: { icon: '✨', key: 'charCard_catStatus_workshop' },
+  home:     { icon: '🏠', key: 'charCard_catStatus_home' },
 }
 
 const TITLE_THRESHOLDS = [1, 6, 11, 16, 21, 31, 41, 51] as const
