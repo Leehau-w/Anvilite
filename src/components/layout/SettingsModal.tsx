@@ -1,0 +1,434 @@
+import React, { useState } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { useSettingsStore } from '@/stores/settingsStore'
+import { useCharacterStore } from '@/stores/characterStore'
+import { useToast } from '@/components/feedback/Toast'
+import { THEMES } from '@/types/settings'
+import { useT } from '@/i18n'
+
+interface SettingsModalProps {
+  open: boolean
+  onClose: () => void
+}
+
+/** 各主题的矿石解锁价格（dawn-white 为 0 = 免费） */
+const THEME_ORE_COST: Record<string, number> = {
+  'dawn-white':    0,
+  'mint-paper':   200,
+  'parchment':    200,
+  'slate-cloud':  200,
+  'forge-purple': 500,
+  'ore-cyan':     500,
+  'flame-cast':   500,
+  'jade-forest':  500,
+}
+
+const THEME_COLORS: Record<string, { bg: string; accent: string }> = {
+  'dawn-white':    { bg: '#faf8f5', accent: '#e8600a' },
+  'mint-paper':    { bg: '#f3faf6', accent: '#0d9462' },
+  'parchment':     { bg: '#f8f2e8', accent: '#a13820' },
+  'slate-cloud':   { bg: '#f4f5f7', accent: '#2563eb' },
+  'forge-purple':  { bg: '#0c0a1a', accent: '#a78bfa' },
+  'ore-cyan':      { bg: '#0a1218', accent: '#22d3ee' },
+  'flame-cast':    { bg: '#111010', accent: '#f97316' },
+  'jade-forest':   { bg: '#0a120e', accent: '#34d399' },
+}
+
+export function SettingsModal({ open, onClose }: SettingsModalProps) {
+  const { settings, setTheme, setLanguage, unlockTheme } = useSettingsStore()
+  const { character, setName, spendOre } = useCharacterStore()
+  const { showToast } = useToast()
+  const t = useT()
+  const [nameInput, setNameInput] = useState(character.name)
+  const [confirmTheme, setConfirmTheme] = useState<string | null>(null)
+
+  function handleNameSave() {
+    if (nameInput.trim()) setName(nameInput.trim())
+  }
+
+  function handleThemeClick(themeId: string) {
+    if (settings.unlockedThemes.includes(themeId)) {
+      setTheme(themeId)
+      return
+    }
+    // 未解锁：弹出确认
+    setConfirmTheme(themeId)
+  }
+
+  function handleBuyTheme(themeId: string) {
+    const cost = THEME_ORE_COST[themeId] ?? 0
+    if (cost === 0) {
+      unlockTheme(themeId)
+      setTheme(themeId)
+      setConfirmTheme(null)
+      return
+    }
+    const ok = spendOre(cost)
+    if (!ok) {
+      showToast(t.settings_toastNoOre(cost - character.ore))
+      setConfirmTheme(null)
+      return
+    }
+    unlockTheme(themeId)
+    setTheme(themeId)
+    setConfirmTheme(null)
+    showToast(t.settings_toastUnlocked(THEMES.find((th) => th.id === themeId)?.name ?? themeId))
+  }
+
+  const confirmThemeInfo = confirmTheme ? THEMES.find((t) => t.id === confirmTheme) : null
+  const confirmCost = confirmTheme ? (THEME_ORE_COST[confirmTheme] ?? 0) : 0
+  const canAfford = character.ore >= confirmCost
+
+  return (
+    <AnimatePresence>
+      {open && (
+        <>
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={onClose}
+            style={{
+              position: 'fixed',
+              inset: 0,
+              background: 'rgba(0,0,0,0.3)',
+              backdropFilter: 'blur(4px)',
+              zIndex: 500,
+            }}
+          />
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            transition={{ duration: 0.2 }}
+            style={{
+              position: 'fixed',
+              top: '50%',
+              left: '50%',
+              x: '-50%',
+              y: '-50%',
+              width: 440,
+              maxHeight: '80vh',
+              background: 'var(--color-surface)',
+              borderRadius: 'var(--radius-xl)',
+              border: '1px solid var(--color-border)',
+              boxShadow: 'var(--shadow-lg)',
+              zIndex: 501,
+              overflow: 'hidden',
+              display: 'flex',
+              flexDirection: 'column',
+            }}
+          >
+            {/* 标题栏 */}
+            <div
+              style={{
+                height: 52,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '0 20px',
+                borderBottom: '1px solid var(--color-border)',
+                flexShrink: 0,
+              }}
+            >
+              <span style={{ fontSize: 16, fontWeight: 600 }}>{t.settings_title}</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                {/* 矿石余额 */}
+                <span style={{ fontSize: 12, color: 'var(--color-text-dim)', fontFamily: 'var(--font-num)' }}>
+                  ⛏ {character.ore.toLocaleString()}
+                </span>
+                <button
+                  onClick={onClose}
+                  style={{
+                    width: 28, height: 28, borderRadius: 'var(--radius-md)',
+                    background: 'none', border: 'none', cursor: 'pointer',
+                    color: 'var(--color-text-dim)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            <div style={{ overflowY: 'auto', flex: 1, padding: 20, display: 'flex', flexDirection: 'column', gap: 24 }}>
+              {/* 角色名 */}
+              <section>
+                <SectionTitle>{t.settings_char}</SectionTitle>
+                <input
+                  value={nameInput}
+                  onChange={(e) => setNameInput(e.target.value)}
+                  onBlur={handleNameSave}
+                  onKeyDown={(e) => e.key === 'Enter' && handleNameSave()}
+                  placeholder={t.settings_charName}
+                  style={{
+                    width: '100%', height: 36, padding: '0 12px',
+                    borderRadius: 'var(--radius-md)',
+                    border: '1px solid var(--color-border)',
+                    background: 'var(--color-bg)',
+                    color: 'var(--color-text)',
+                    fontSize: 14, outline: 'none',
+                    boxSizing: 'border-box',
+                  }}
+                />
+              </section>
+
+              {/* 主题 */}
+              <section>
+                <SectionTitle>{t.settings_theme}</SectionTitle>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  {(['light', 'dark'] as const).map((mode) => (
+                    <div key={mode}>
+                      <p style={{ fontSize: 11, color: 'var(--color-text-dim)', marginBottom: 8 }}>
+                        {mode === 'light' ? t.settings_light : t.settings_dark}
+                      </p>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                        {THEMES.filter((t) => t.dark === (mode === 'dark')).map((theme) => {
+                          const isUnlocked = settings.unlockedThemes.includes(theme.id)
+                          const cost = THEME_ORE_COST[theme.id] ?? 0
+                          return (
+                            <ThemeButton
+                              key={theme.id}
+                              theme={theme}
+                              isActive={settings.theme === theme.id}
+                              isUnlocked={isUnlocked}
+                              cost={cost}
+                              onClick={() => handleThemeClick(theme.id)}
+                            />
+                          )
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+
+              {/* 语言 */}
+              <section>
+                <SectionTitle>{t.settings_language}</SectionTitle>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  {(['zh', 'en'] as const).map((lang) => (
+                    <button
+                      key={lang}
+                      onClick={() => setLanguage(lang)}
+                      style={{
+                        padding: '6px 16px',
+                        borderRadius: 'var(--radius-md)',
+                        border: `1px solid ${settings.language === lang ? 'var(--color-accent)' : 'var(--color-border)'}`,
+                        background: settings.language === lang ? 'color-mix(in srgb, var(--color-accent) 12%, transparent)' : 'transparent',
+                        color: settings.language === lang ? 'var(--color-accent)' : 'var(--color-text-dim)',
+                        cursor: 'pointer',
+                        fontSize: 13,
+                      }}
+                    >
+                      {lang === 'zh' ? '中文' : 'English'}
+                    </button>
+                  ))}
+                </div>
+              </section>
+            </div>
+          </motion.div>
+
+          {/* 购买主题确认弹窗 */}
+          <AnimatePresence>
+            {confirmTheme && confirmThemeInfo && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                style={{
+                  position: 'fixed', inset: 0, zIndex: 600,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}
+                onClick={() => setConfirmTheme(null)}
+              >
+                <motion.div
+                  initial={{ scale: 0.9, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  exit={{ scale: 0.9, opacity: 0 }}
+                  onClick={(e) => e.stopPropagation()}
+                  style={{
+                    width: 300,
+                    background: 'var(--color-surface)',
+                    borderRadius: 'var(--radius-xl)',
+                    border: '1px solid var(--color-border)',
+                    padding: 20,
+                    boxShadow: '0 8px 32px rgba(0,0,0,0.25)',
+                  }}
+                >
+                  {/* 主题预览色块 */}
+                  <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 12 }}>
+                    <div
+                      style={{
+                        width: 64,
+                        height: 40,
+                        borderRadius: 'var(--radius-md)',
+                        background: THEME_COLORS[confirmTheme]?.bg ?? '#fff',
+                        border: '1px solid rgba(0,0,0,0.12)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      <div
+                        style={{
+                          width: 22,
+                          height: 10,
+                          borderRadius: 5,
+                          background: THEME_COLORS[confirmTheme]?.accent ?? '#666',
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  <div style={{ textAlign: 'center', marginBottom: 16 }}>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--color-text)', marginBottom: 4 }}>
+                      {t.settings_unlockTitle(confirmThemeInfo.name)}
+                    </div>
+                    <div style={{ fontSize: 13, color: 'var(--color-text-dim)' }}>
+                      {t.settings_unlockCost(confirmCost)}
+                    </div>
+                    {!canAfford && (
+                      <div style={{ fontSize: 11, color: '#dc2626', marginTop: 4 }}>
+                        {t.settings_insufficientOre(character.ore)}
+                      </div>
+                    )}
+                  </div>
+
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button
+                      onClick={() => setConfirmTheme(null)}
+                      style={{
+                        flex: 1, height: 34, borderRadius: 'var(--radius-md)',
+                        border: '1px solid var(--color-border)', background: 'transparent',
+                        color: 'var(--color-text-dim)', fontSize: 13, cursor: 'pointer',
+                      }}
+                    >
+                      {t.settings_cancel}
+                    </button>
+                    <button
+                      onClick={() => handleBuyTheme(confirmTheme)}
+                      disabled={!canAfford}
+                      style={{
+                        flex: 2, height: 34, borderRadius: 'var(--radius-md)',
+                        border: 'none',
+                        background: canAfford ? 'var(--color-accent)' : 'var(--color-border)',
+                        color: canAfford ? 'white' : 'var(--color-text-dim)',
+                        fontSize: 13, fontWeight: 600,
+                        cursor: canAfford ? 'pointer' : 'not-allowed',
+                      }}
+                    >
+                      {t.settings_confirmBuy(confirmCost)}
+                    </button>
+                  </div>
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </>
+      )}
+    </AnimatePresence>
+  )
+}
+
+function SectionTitle({ children }: { children: React.ReactNode }) {
+  return (
+    <p style={{
+      fontSize: 12, fontWeight: 600, color: 'var(--color-text-dim)',
+      marginBottom: 10, letterSpacing: '0.04em', textTransform: 'uppercase',
+    }}>
+      {children}
+    </p>
+  )
+}
+
+function ThemeButton({
+  theme,
+  isActive,
+  isUnlocked,
+  cost,
+  onClick,
+}: {
+  theme: { id: string; name: string }
+  isActive: boolean
+  isUnlocked: boolean
+  cost: number
+  onClick: () => void
+}) {
+  const colors = THEME_COLORS[theme.id] ?? { bg: '#fff', accent: '#666' }
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: 4,
+        background: 'none',
+        border: 'none',
+        cursor: 'pointer',
+        padding: 4,
+        position: 'relative',
+      }}
+    >
+      <div
+        style={{
+          width: 52,
+          height: 34,
+          borderRadius: 'var(--radius-md)',
+          background: colors.bg,
+          border: `2px solid ${isActive ? colors.accent : isUnlocked ? 'rgba(0,0,0,0.12)' : 'transparent'}`,
+          boxShadow: isActive ? `0 0 0 2px ${colors.accent}40` : 'inset 0 0 0 1px rgba(0,0,0,0.1)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          opacity: isUnlocked ? 1 : 0.55,
+          transition: 'all 0.15s',
+          position: 'relative',
+          overflow: 'hidden',
+        }}
+      >
+        <div
+          style={{
+            width: 18,
+            height: 9,
+            borderRadius: 4,
+            background: colors.accent,
+          }}
+        />
+        {/* 未解锁蒙层 */}
+        {!isUnlocked && (
+          <div
+            style={{
+              position: 'absolute', inset: 0,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              background: 'rgba(0,0,0,0.15)',
+              fontSize: 12,
+            }}
+          >
+            🔒
+          </div>
+        )}
+      </div>
+      <span style={{ fontSize: 11, color: 'var(--color-text-dim)', whiteSpace: 'nowrap' }}>
+        {theme.name}
+      </span>
+      {/* 价格标签 */}
+      {!isUnlocked && cost > 0 && (
+        <span style={{
+          fontSize: 9,
+          color: 'var(--color-secondary)',
+          fontFamily: 'var(--font-num)',
+          lineHeight: 1,
+        }}>
+          {cost} ⛏
+        </span>
+      )}
+      {isUnlocked && cost > 0 && (
+        <span style={{ fontSize: 9, color: 'var(--color-success)', lineHeight: 1 }}>✓</span>
+      )}
+    </button>
+  )
+}

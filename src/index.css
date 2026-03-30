@@ -1,0 +1,223 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* 晨光白主题（默认） */
+  --color-bg: #faf8f5;
+  --color-surface: #ffffff;
+  --color-surface-hover: #f5f2ed;
+  --color-border: #e6e0d6;
+  --color-text: #2c2520;
+  --color-text-dim: #8c8078;
+  --color-accent: #e8600a;
+  --color-accent-hover: #f5780e;
+  --color-secondary: #8b5cf6;
+  --color-success: #16a34a;
+  --color-danger: #dc2626;
+  --color-warning: #d97706;
+  --color-xp: #d97706;
+
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 12px;
+  --spacing-lg: 16px;
+  --spacing-xl: 24px;
+  --spacing-2xl: 32px;
+
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-full: 9999px;
+
+  --font-zh: 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --font-en: 'Inter', var(--font-zh);
+  --font-num: 'Inter', monospace;
+
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.08);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.10);
+  --shadow-lg: 0 8px 24px rgba(0,0,0,0.12);
+}
+
+/* 锻铁紫 */
+[data-theme="forge-purple"] {
+  --color-bg: #0c0a1a;
+  --color-surface: #16132b;
+  --color-surface-hover: #1e1b38;
+  --color-border: #2a2548;
+  --color-text: #e8e4f0;
+  --color-text-dim: #8b82a8;
+  --color-accent: #a78bfa;
+  --color-accent-hover: #b89cfb;
+  --color-secondary: #f59e0b;
+  --color-success: #34d399;
+  --color-danger: #f87171;
+  --color-warning: #fbbf24;
+  --color-xp: #fbbf24;
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.3);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.4);
+  --shadow-lg: 0 8px 24px rgba(0,0,0,0.5);
+}
+
+/* 矿石青 */
+[data-theme="ore-cyan"] {
+  --color-bg: #0a1218;
+  --color-surface: #111d28;
+  --color-surface-hover: #182838;
+  --color-border: #1e3448;
+  --color-text: #dce8f0;
+  --color-text-dim: #7a96ad;
+  --color-accent: #22d3ee;
+  --color-accent-hover: #38e0f8;
+  --color-secondary: #a78bfa;
+  --color-success: #34d399;
+  --color-danger: #f87171;
+  --color-warning: #fbbf24;
+  --color-xp: #22d3ee;
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.3);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.4);
+  --shadow-lg: 0 8px 24px rgba(0,0,0,0.5);
+}
+
+/* 烈焰铸 */
+[data-theme="flame-cast"] {
+  --color-bg: #111010;
+  --color-surface: #1c1917;
+  --color-surface-hover: #272420;
+  --color-border: #3d3530;
+  --color-text: #f5f0eb;
+  --color-text-dim: #a8998a;
+  --color-accent: #f97316;
+  --color-accent-hover: #fb8b30;
+  --color-secondary: #ef4444;
+  --color-success: #4ade80;
+  --color-danger: #f87171;
+  --color-warning: #fbbf24;
+  --color-xp: #fbbf24;
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.3);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.4);
+  --shadow-lg: 0 8px 24px rgba(0,0,0,0.5);
+}
+
+/* 翠林绿 */
+[data-theme="jade-forest"] {
+  --color-bg: #0a120e;
+  --color-surface: #12201a;
+  --color-surface-hover: #1a2e22;
+  --color-border: #254035;
+  --color-text: #e0efe8;
+  --color-text-dim: #7faa96;
+  --color-accent: #34d399;
+  --color-accent-hover: #4ae3a8;
+  --color-secondary: #fbbf24;
+  --color-success: #4ade80;
+  --color-danger: #f87171;
+  --color-warning: #fbbf24;
+  --color-xp: #fbbf24;
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.3);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.4);
+  --shadow-lg: 0 8px 24px rgba(0,0,0,0.5);
+}
+
+/* 薄荷纸 */
+[data-theme="mint-paper"] {
+  --color-bg: #f3faf6;
+  --color-surface: #ffffff;
+  --color-surface-hover: #e8f5ef;
+  --color-border: #d0e6da;
+  --color-text: #1a2e24;
+  --color-text-dim: #6a8f7c;
+  --color-accent: #0d9462;
+  --color-accent-hover: #0fa870;
+  --color-secondary: #e8600a;
+  --color-success: #16a34a;
+  --color-danger: #dc2626;
+  --color-warning: #d97706;
+  --color-xp: #d97706;
+}
+
+/* 羊皮卷 */
+[data-theme="parchment"] {
+  --color-bg: #f8f2e8;
+  --color-surface: #fefcf5;
+  --color-surface-hover: #f5ede0;
+  --color-border: #ddd2bc;
+  --color-text: #3d2e1e;
+  --color-text-dim: #8c7a64;
+  --color-accent: #a13820;
+  --color-accent-hover: #b54525;
+  --color-secondary: #b8860b;
+  --color-success: #3a7d44;
+  --color-danger: #a13820;
+  --color-warning: #b8860b;
+  --color-xp: #b8860b;
+}
+
+/* 云石灰 */
+[data-theme="slate-cloud"] {
+  --color-bg: #f4f5f7;
+  --color-surface: #ffffff;
+  --color-surface-hover: #ebedf0;
+  --color-border: #d5d8de;
+  --color-text: #1e2530;
+  --color-text-dim: #727d8f;
+  --color-accent: #2563eb;
+  --color-accent-hover: #3b74f8;
+  --color-secondary: #7c3aed;
+  --color-success: #16a34a;
+  --color-danger: #dc2626;
+  --color-warning: #d97706;
+  --color-xp: #d97706;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-zh);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: var(--radius-full);
+}
+
+/* 淬火重铸称号流光动画 */
+@keyframes prestige-shimmer {
+  0%   { background-position: -200% center; }
+  100% { background-position:  200% center; }
+}
+
+.prestige-title {
+  background: linear-gradient(
+    90deg,
+    var(--color-accent) 0%,
+    var(--color-xp) 30%,
+    var(--color-accent-hover) 50%,
+    var(--color-xp) 70%,
+    var(--color-accent) 100%
+  );
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: prestige-shimmer 2.5s linear infinite;
+}
