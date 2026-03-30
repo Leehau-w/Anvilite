@@ -497,21 +497,21 @@ interface MonthBlock {
 }
 
 const EVENT_SYMBOL_COLORS: Record<string, string> = {
-  '甲': 'var(--color-accent)',
-  '乙': 'var(--color-xp)',
-  '丙': 'var(--color-secondary)',
-  '丁': 'var(--color-success)',
+  '⬆': 'var(--color-accent)',
+  '⭐': 'var(--color-xp)',
+  '🏆': 'var(--color-secondary)',
+  '🏘': 'var(--color-success)',
 }
 
 type EventSymbolConfig = Record<string, { symbol: string; label: string; color: string }>
 
 function getEventSymbolConfig(t: ReturnType<typeof useT>): EventSymbolConfig {
   return {
-    level_up:         { symbol: '甲', label: t.archive_eventLevelUp,   color: 'var(--color-accent)' },
-    milestone:        { symbol: '乙', label: t.archive_eventMilestone, color: 'var(--color-xp)' },
-    custom_milestone: { symbol: '乙', label: t.archive_eventMilestone, color: 'var(--color-xp)' },
-    badge_earned:     { symbol: '丙', label: t.archive_eventBadge,     color: 'var(--color-secondary)' },
-    area_level_up:    { symbol: '丁', label: t.archive_eventAreaUp,    color: 'var(--color-success)' },
+    level_up:         { symbol: '⬆', label: t.archive_eventLevelUp,   color: 'var(--color-accent)' },
+    milestone:        { symbol: '⭐', label: t.archive_eventMilestone, color: 'var(--color-xp)' },
+    custom_milestone: { symbol: '⭐', label: t.archive_eventMilestone, color: 'var(--color-xp)' },
+    badge_earned:     { symbol: '🏆', label: t.archive_eventBadge,     color: 'var(--color-secondary)' },
+    area_level_up:    { symbol: '🏘', label: t.archive_eventAreaUp,    color: 'var(--color-success)' },
   }
 }
 
@@ -658,10 +658,10 @@ function MonthBlockCard({
   )
 
   const summaryParts: string[] = []
-  if (block.levelUps > 0) summaryParts.push(`甲×${block.levelUps}`)
-  if (block.milestones > 0) summaryParts.push(`乙×${block.milestones}`)
-  if (block.badges > 0) summaryParts.push(`丙×${block.badges}`)
-  if (block.areaLevelUps > 0) summaryParts.push(`丁×${block.areaLevelUps}`)
+  if (block.levelUps > 0) summaryParts.push(`⬆×${block.levelUps}`)
+  if (block.milestones > 0) summaryParts.push(`⭐×${block.milestones}`)
+  if (block.badges > 0) summaryParts.push(`🏆×${block.badges}`)
+  if (block.areaLevelUps > 0) summaryParts.push(`🏘×${block.areaLevelUps}`)
 
   return (
     <motion.div
