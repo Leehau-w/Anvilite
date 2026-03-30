@@ -12,6 +12,7 @@ import { getAreaSkillXP, skillXPToLevel } from '@/engines/prosperityEngine'
 import { PrestigeModal } from '@/components/feedback/PrestigeModal'
 import { SkillRadarChart, type SkillDimension } from './SkillRadarChart'
 import { useT } from '@/i18n'
+import { getAreaDisplayName } from '@/utils/area'
 import {
   STATIC_BADGE_DEFS,
   BADGE_CATEGORY_ORDER,
@@ -96,12 +97,15 @@ export function MilestoneHall() {
   const skillDimensions = useMemo<SkillDimension[]>(() => {
     return areas
       .filter((a) => a.category !== '_milestone')
-      .map((a) => ({
-        name: a.name.length > 4 ? a.name.slice(0, 4) : a.name,
-        value: skillXPToLevel(getAreaSkillXP(tasks, a.category)),
-        emoji: a.emoji,
-      }))
-  }, [areas, tasks])
+      .map((a) => {
+        const displayName = getAreaDisplayName(a, t)
+        return {
+          name: displayName.length > 4 ? displayName.slice(0, 4) : displayName,
+          value: skillXPToLevel(getAreaSkillXP(tasks, a.category)),
+          emoji: a.emoji,
+        }
+      })
+  }, [areas, tasks, t])
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--color-bg)', overflow: 'hidden' }}>
