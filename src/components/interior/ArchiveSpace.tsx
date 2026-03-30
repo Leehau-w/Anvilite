@@ -537,7 +537,7 @@ function groupByMonth(events: GrowthEvent[]): MonthBlock[] {
       const [y, m] = key.split('-')
       return {
         key,
-        label: `${y}年${parseInt(m)}月`,
+        label: `${y}-${m}`,  // resolved to i18n in component
         events: evs,
         levelUps: evs.filter((e) => e.type === 'level_up').length,
         milestones: evs.filter((e) => e.isMilestone || e.type === 'milestone' || e.type === 'custom_milestone').length,
@@ -574,8 +574,8 @@ function ScrollTimeline() {
     return (
       <div style={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'var(--color-text-dim)', gap: 12 }}>
         <span style={{ fontSize: 40 }}>📜</span>
-        <span style={{ fontSize: 14 }}>时光卷轴还是空白的</span>
-        <span style={{ fontSize: 12 }}>完成任务和习惯，让故事慢慢展开</span>
+        <span style={{ fontSize: 14 }}>{t.archive_scrollEmpty1}</span>
+        <span style={{ fontSize: 12 }}>{t.archive_scrollEmpty2}</span>
       </div>
     )
   }
@@ -593,7 +593,7 @@ function ScrollTimeline() {
           </div>
         ))}
         <span style={{ fontSize: 11, color: 'var(--color-text-dim)', marginLeft: 'auto', fontStyle: 'italic' }}>
-          悬停展开，点击锁定
+          {t.archive_scrollHint}
         </span>
       </div>
 
@@ -652,6 +652,9 @@ function MonthBlockCard({
   onHoverEnd: () => void
   onClick: () => void
 }) {
+  const t = useT()
+  const [y, m] = block.key.split('-')
+  const monthLabel = t.archive_monthLabel(y, parseInt(m))
   const topEvents = useMemo(
     () => [...block.events].sort((a, b) => eventWeight(b) - eventWeight(a)).slice(0, isActive ? 8 : 3),
     [block.events, isActive]
@@ -722,9 +725,9 @@ function MonthBlockCard({
           {/* 月份标题 */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
             <span style={{ fontSize: 12, fontWeight: 700, color: isActive ? 'var(--color-accent)' : 'var(--color-text)' }}>
-              {block.label}
+              {monthLabel}
             </span>
-            {isLocked && <span style={{ fontSize: 9, color: 'var(--color-accent)', opacity: 0.7 }}>锁定</span>}
+            {isLocked && <span style={{ fontSize: 9, color: 'var(--color-accent)', opacity: 0.7 }}>{t.archive_scrollLocked}</span>}
           </div>
 
           {/* Top 事件 */}
@@ -743,13 +746,13 @@ function MonthBlockCard({
                     flex: 1,
                   }}
                 >
-                  {e.title.replace(/^(任务完成：|习惯完成：|里程碑：)/, '')}
+                  {e.title.replace(/^.+[：:]\s*/, '')}
                 </span>
               </div>
             ))}
             {!isActive && block.events.length > 3 && (
               <span style={{ fontSize: 10, color: 'var(--color-text-dim)', opacity: 0.6 }}>
-                +{block.events.length - 3} 更多
+                {t.archive_scrollMore(block.events.length - 3)}
               </span>
             )}
           </div>

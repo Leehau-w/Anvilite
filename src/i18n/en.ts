@@ -407,6 +407,12 @@ export const en: Translations = {
   archive_eventMilestone: 'Milestone',
   archive_eventBadge: 'Badge',
   archive_eventAreaUp: 'Area Upgrade',
+  archive_scrollEmpty1: 'The scroll is still blank',
+  archive_scrollEmpty2: 'Complete tasks and habits to unfold your story',
+  archive_scrollHint: 'Hover to expand, click to lock',
+  archive_scrollLocked: 'Locked',
+  archive_scrollMore: (n: number) => `+${n} more`,
+  archive_monthLabel: (year: string, month: number) => `${year}-${String(month).padStart(2, '0')}`,
 
   // ─── Streak Milestone Popup ───────────────────────────────────────────────
   streakPopup_bonus10: '+10% bonus unlocked',

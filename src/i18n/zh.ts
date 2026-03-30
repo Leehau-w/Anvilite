@@ -405,6 +405,12 @@ export const zh = {
   archive_eventMilestone: '里程碑',
   archive_eventBadge: '徽章',
   archive_eventAreaUp: '区域升级',
+  archive_scrollEmpty1: '时光卷轴还是空白的',
+  archive_scrollEmpty2: '完成任务和习惯，让故事慢慢展开',
+  archive_scrollHint: '悬停展开，点击锁定',
+  archive_scrollLocked: '锁定',
+  archive_scrollMore: (n: number) => `+${n} 更多`,
+  archive_monthLabel: (year: string, month: number) => `${year}年${month}月`,
 
   // ─── Streak Milestone Popup ───────────────────────────────────────────────
   streakPopup_bonus10: '+10% 加成解锁',
