@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import type { AreaTemplateId } from '@/types/area'
 import { AREA_TEMPLATES } from '@/types/area'
+import { useT } from '@/i18n'
 
 const ADDABLE_TEMPLATES: AreaTemplateId[] = [
   'spring', 'council', 'expedition', 'observatory', 'garden', 'plaza',
@@ -15,6 +16,7 @@ interface AddAreaModalProps {
 }
 
 export function AddAreaModal({ usedTemplateIds, areaCount, onAdd, onClose }: AddAreaModalProps) {
+  const t = useT()
   const [customName, setCustomName] = useState('')
   const [showCustom, setShowCustom] = useState(false)
 
@@ -64,7 +66,7 @@ export function AddAreaModal({ usedTemplateIds, areaCount, onAdd, onClose }: Add
             borderBottom: '1px solid var(--color-border)',
           }}
         >
-          <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--color-text)' }}>添加新区域</span>
+          <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--color-text)' }}>{t.addArea_title}</span>
           <button
             onClick={onClose}
             style={{ background: 'none', border: 'none', fontSize: 18, color: 'var(--color-text-dim)', cursor: 'pointer', lineHeight: 1 }}
@@ -77,14 +79,14 @@ export function AddAreaModal({ usedTemplateIds, areaCount, onAdd, onClose }: Add
         <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 16 }}>
           {atLimit ? (
             <p style={{ fontSize: 13, color: 'var(--color-danger)', textAlign: 'center', margin: 0 }}>
-              已达区域上限（12个）
+              {t.addArea_limitReached}
             </p>
           ) : (
             <>
               {/* 模板网格 */}
               <div>
                 <p style={{ fontSize: 12, color: 'var(--color-text-dim)', margin: '0 0 10px 0' }}>
-                  选择模板区域
+                  {t.addArea_selectTemplate}
                 </p>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
                   {ADDABLE_TEMPLATES.map((id) => {
@@ -124,7 +126,7 @@ export function AddAreaModal({ usedTemplateIds, areaCount, onAdd, onClose }: Add
               {/* 分隔线 */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <div style={{ flex: 1, height: 1, background: 'var(--color-border)' }} />
-                <span style={{ fontSize: 11, color: 'var(--color-text-dim)' }}>或</span>
+                <span style={{ fontSize: 11, color: 'var(--color-text-dim)' }}>{t.addArea_or}</span>
                 <div style={{ flex: 1, height: 1, background: 'var(--color-border)' }} />
               </div>
 
@@ -141,7 +143,7 @@ export function AddAreaModal({ usedTemplateIds, areaCount, onAdd, onClose }: Add
                   onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--color-accent)'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--color-accent)' }}
                   onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--color-border)'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--color-text-dim)' }}
                 >
-                  + 创建空白区域
+                  {t.addArea_createBlank}
                 </button>
               ) : (
                 <div style={{ display: 'flex', gap: 8 }}>
@@ -150,7 +152,7 @@ export function AddAreaModal({ usedTemplateIds, areaCount, onAdd, onClose }: Add
                     value={customName}
                     onChange={(e) => setCustomName(e.target.value)}
                     onKeyDown={(e) => { if (e.key === 'Enter') handleAddCustom(); if (e.key === 'Escape') setShowCustom(false) }}
-                    placeholder="输入区域名称..."
+                    placeholder={t.addArea_namePlaceholder}
                     style={{
                       flex: 1, height: 36, padding: '0 12px',
                       borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)',
@@ -168,7 +170,7 @@ export function AddAreaModal({ usedTemplateIds, areaCount, onAdd, onClose }: Add
                       opacity: customName.trim() ? 1 : 0.5,
                     }}
                   >
-                    创建
+                    {t.addArea_create}
                   </button>
                 </div>
               )}
@@ -184,7 +186,7 @@ export function AddAreaModal({ usedTemplateIds, areaCount, onAdd, onClose }: Add
             fontSize: 11, color: 'var(--color-text-dim)', textAlign: 'center',
           }}
         >
-          已使用 {areaCount}/12 个区域
+          {t.addArea_usage(areaCount)}
         </div>
       </motion.div>
     </div>

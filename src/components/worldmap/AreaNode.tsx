@@ -122,7 +122,7 @@ export function AreaNode({
               <button
                 onClick={(e) => { e.stopPropagation(); onEdit() }}
                 style={editBtnStyle('var(--color-secondary)')}
-                title="改名"
+                title={t.area_rename}
               >
                 ✏️
               </button>
@@ -131,7 +131,7 @@ export function AreaNode({
               <button
                 onClick={(e) => { e.stopPropagation(); onDelete() }}
                 style={editBtnStyle('var(--color-danger)')}
-                title="删除"
+                title={t.area_delete}
               >
                 ✕
               </button>

@@ -224,8 +224,6 @@ export function TaskItem({ task, compact, onEdit }: TaskItemProps) {
         done={isDone}
         confirming={confirmHigh}
         onComplete={handleComplete}
-        isDoing={isDoing}
-        onToggleDoing={handleStatusToggle}
         compact={compact}
       />
 
@@ -492,8 +490,6 @@ interface CheckButtonProps {
   done: boolean
   confirming: boolean
   onComplete: () => void
-  isDoing: boolean
-  onToggleDoing: (e: React.MouseEvent) => void
   compact?: boolean
 }
 

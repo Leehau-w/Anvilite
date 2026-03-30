@@ -75,13 +75,13 @@ export function TopBar({ onSettingsClick }: TopBarProps) {
 
         <div style={{ width: 1, height: 16, background: 'var(--color-border)', margin: '0 2px' }} />
 
-        <WinBtn onClick={() => window.electronAPI?.minimize()} title="最小化">
+        <WinBtn onClick={() => window.electronAPI?.minimize()} title={t.topbar_minimize}>
           <svg width="10" height="2" viewBox="0 0 10 2" fill="currentColor"><rect width="10" height="2" rx="1"/></svg>
         </WinBtn>
-        <WinBtn onClick={() => window.electronAPI?.maximize()} title="最大化/还原">
+        <WinBtn onClick={() => window.electronAPI?.maximize()} title={t.topbar_maximize}>
           <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.2"><rect x="0.6" y="0.6" width="8.8" height="8.8" rx="1.2"/></svg>
         </WinBtn>
-        <WinBtn onClick={() => window.electronAPI?.close()} title="关闭" danger>
+        <WinBtn onClick={() => window.electronAPI?.close()} title={t.topbar_close} danger>
           <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.4">
             <line x1="1" y1="1" x2="9" y2="9"/><line x1="9" y1="1" x2="1" y2="9"/>
           </svg>

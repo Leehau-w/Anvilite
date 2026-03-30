@@ -1,12 +1,13 @@
 import React from 'react'
 import type { TaskDifficulty } from '@/types/task'
+import { useT } from '@/i18n'
 
-const DIFFICULTY_LABELS: Record<TaskDifficulty, string> = {
-  1: '轻松',
-  2: '简单',
-  3: '适中',
-  4: '困难',
-  5: '极难',
+const DIFFICULTY_KEYS: Record<TaskDifficulty, 'difficulty_1' | 'difficulty_2' | 'difficulty_3' | 'difficulty_4' | 'difficulty_5'> = {
+  1: 'difficulty_1',
+  2: 'difficulty_2',
+  3: 'difficulty_3',
+  4: 'difficulty_4',
+  5: 'difficulty_5',
 }
 
 interface StarRatingProps {
@@ -16,6 +17,7 @@ interface StarRatingProps {
 }
 
 export function StarRating({ value, onChange, readonly }: StarRatingProps) {
+  const t = useT()
   return (
     <div className="flex items-center gap-1">
       {([1, 2, 3, 4, 5] as TaskDifficulty[]).map((star) => (
@@ -40,7 +42,7 @@ export function StarRating({ value, onChange, readonly }: StarRatingProps) {
       ))}
       {!readonly && (
         <span style={{ fontSize: 11, color: 'var(--color-text-dim)', marginLeft: 4 }}>
-          {DIFFICULTY_LABELS[value]}
+          {t[DIFFICULTY_KEYS[value]]}
         </span>
       )}
     </div>

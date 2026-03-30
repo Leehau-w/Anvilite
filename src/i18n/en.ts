@@ -5,6 +5,20 @@ export const en: Translations = {
   // ─── App ─────────────────────────────────────────────────────────────────────
   app_subtitle: 'Forge',
   topbar_settings: 'Settings',
+  topbar_minimize: 'Minimize',
+  topbar_maximize: 'Maximize/Restore',
+  topbar_close: 'Close',
+
+  // ─── Priority & Difficulty ──────────────────────────────────────────────────
+  priority_urgent: 'Urgent',
+  priority_high: 'High',
+  priority_medium: 'Medium',
+  priority_low: 'Low',
+  difficulty_1: 'Easy',
+  difficulty_2: 'Simple',
+  difficulty_3: 'Moderate',
+  difficulty_4: 'Hard',
+  difficulty_5: 'Extreme',
 
   // ─── Sidebar ─────────────────────────────────────────────────────────────────
   sidebar_dashboard: 'Dashboard',
@@ -286,6 +300,8 @@ export const en: Translations = {
   worldmap_deleteConfirm: 'Delete',
   worldmap_levelUpToast: (name: string, levelName: string) => `${name} upgraded to "${levelName}"!`,
   worldmap_levelUpEvent: (name: string, levelName: string) => `${name} upgraded to ${levelName}`,
+  area_rename: 'Rename',
+  area_delete: 'Delete',
 
   // ─── Area Info Bar ────────────────────────────────────────────────────────
   areaInfo_tasks: 'Tasks',
@@ -399,6 +415,19 @@ export const en: Translations = {
   streakPopup_streakLabel: (n: number) => `${n}-day streak bonus`,
   streakPopup_dismiss: 'Click anywhere to continue',
 
+  // ─── Prestige Modal ───────────────────────────────────────────────────────
+  prestige_heading: 'Moment of Decision',
+  prestige_desc: 'You have reached Legend Lv.51 and may begin the path of Reforging',
+  prestige_title: 'Reforge · Exclusive Perks',
+  prestige_perk1: '🌟 Prestige star icons shown before level',
+  prestige_perk2: '✨ Character title gains a shimmering glow effect',
+  prestige_perk3: '🏰 Mythic Prosperity: unlock tier-7 area effects',
+  prestige_perk4: '🔥 Origin Flame: ultra-rare exclusive badge',
+  prestige_warning: '⚠️ Level resets to Lv.1; ore, decorations, themes & prosperity are fully kept',
+  prestige_currentLevel: (stars: string, n: number) => `Currently reforged ${stars} × ${n}`,
+  prestige_cancel: 'Stay as is',
+  prestige_confirm: '🔥 Reforge',
+
   // ─── Timeline ─────────────────────────────────────────────────────────────
   timeline_eventTaskComplete: 'Task Done',
   timeline_eventHabitComplete: 'Habit Done',
@@ -428,4 +457,14 @@ export const en: Translations = {
   timeline_dateLabel: (month: number, day: number, dow: string) => `${dow} ${month}/${day}`,
   timeline_monthLabel: (year: string, month: number) => `${year}-${String(month).padStart(2, '0')}`,
   timeline_dow: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as string[],
+
+  // ─── Add Area Modal ───────────────────────────────────────────────────────
+  addArea_title: 'Add New Area',
+  addArea_limitReached: 'Area limit reached (12)',
+  addArea_selectTemplate: 'Select template area',
+  addArea_or: 'or',
+  addArea_createBlank: '+ Create blank area',
+  addArea_namePlaceholder: 'Enter area name...',
+  addArea_create: 'Create',
+  addArea_usage: (n: number) => `${n}/12 areas used`,
 }

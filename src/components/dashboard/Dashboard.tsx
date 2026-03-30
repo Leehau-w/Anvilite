@@ -100,11 +100,11 @@ export function Dashboard({ onNavigate }: DashboardProps) {
       <div style={{ flex: 1, overflow: 'auto', padding: '0 24px 16px' }}>
         <div ref={containerRef} style={{ position: 'relative', height: gh, minHeight: gh }}>
 
-          <GridCard id="quickAdd" card={getCard('quickAdd')} cw={cw} containerRef={containerRef} onUpdate={(p) => updateCard('quickAdd', p)} title={t.dash_quickAdd}>
+          <GridCardcard={getCard('quickAdd')} cw={cw} containerRef={containerRef} onUpdate={(p) => updateCard('quickAdd', p)} title={t.dash_quickAdd}>
             <QuickInput onOpenDrawer={() => setDrawerOpen(true)} />
           </GridCard>
 
-          <GridCard id="stats" card={getCard('stats')} cw={cw} containerRef={containerRef} onUpdate={(p) => updateCard('stats', p)}>
+          <GridCardcard={getCard('stats')} cw={cw} containerRef={containerRef} onUpdate={(p) => updateCard('stats', p)}>
             <div style={{ display: 'flex', justifyContent: 'space-around', padding: '4px 0' }}>
               <BigStat label={t.dash_statDone} value={totalCompleted} unit={t.dash_unitCount} />
               <div style={{ width: 1, background: 'var(--color-border)' }} />
@@ -114,7 +114,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
             </div>
           </GridCard>
 
-          <GridCard id="tasks" card={getCard('tasks')} cw={cw} containerRef={containerRef} onUpdate={(p) => updateCard('tasks', p)} resizable title={t.dash_tasks}
+          <GridCardcard={getCard('tasks')} cw={cw} containerRef={containerRef} onUpdate={(p) => updateCard('tasks', p)} resizable title={t.dash_tasks}
             titleExtra={<span style={{ fontSize: 12, color: 'var(--color-text-dim)' }}>{t.dash_pendingCount(doingTasks.length + todoTasks.length)}</span>}
           >
             <div style={{ overflow: 'hidden', height: '100%' }}>
@@ -152,11 +152,11 @@ export function Dashboard({ onNavigate }: DashboardProps) {
             </div>
           </GridCard>
 
-          <GridCard id="character" card={getCard('character')} cw={cw} containerRef={containerRef} onUpdate={(p) => updateCard('character', p)} noShell>
+          <GridCardcard={getCard('character')} cw={cw} containerRef={containerRef} onUpdate={(p) => updateCard('character', p)} noShell>
             <CharacterMiniCard onClickMilestone={() => onNavigate?.('milestone')} />
           </GridCard>
 
-          <GridCard id="habits" card={getCard('habits')} cw={cw} containerRef={containerRef} onUpdate={(p) => updateCard('habits', p)} resizable title={t.dash_habits}
+          <GridCardcard={getCard('habits')} cw={cw} containerRef={containerRef} onUpdate={(p) => updateCard('habits', p)} resizable title={t.dash_habits}
             titleExtra={
               <div style={{ display: 'flex', gap: 4 }}>
                 <ActionBtn onClick={() => setHabitManageOpen(true)} title={t.dash_habitManage}>{t.dash_habitManage}</ActionBtn>
@@ -167,7 +167,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
             <div style={{ overflow: 'hidden', height: '100%' }}><HabitCard /></div>
           </GridCard>
 
-          <GridCard id="growth" card={getCard('growth')} cw={cw} containerRef={containerRef} onUpdate={(p) => updateCard('growth', p)} title={t.dash_growth}>
+          <GridCardcard={getCard('growth')} cw={cw} containerRef={containerRef} onUpdate={(p) => updateCard('growth', p)} title={t.dash_growth}>
             <Heatmap />
           </GridCard>
 
@@ -184,7 +184,6 @@ export function Dashboard({ onNavigate }: DashboardProps) {
 // ─── GridCard: draggable + resizable card with live grid snap ─────────────────
 
 interface GridCardProps {
-  id: CardId
   card: CardLayout
   cw: number
   containerRef: React.RefObject<HTMLDivElement | null>
@@ -198,7 +197,7 @@ interface GridCardProps {
   children: React.ReactNode
 }
 
-function GridCard({ id, card, cw, containerRef, onUpdate, resizable, noShell, locked, title, titleExtra, children }: GridCardProps) {
+function GridCard({ card, cw, containerRef, onUpdate, resizable, noShell, locked, title, titleExtra, children }: GridCardProps) {
   const [isDragging, setIsDragging] = useState(false)
   const [isResizing, setIsResizing] = useState(false)
   const [resizeDelta, setResizeDelta] = useState({ dw: 0, dh: 0 })

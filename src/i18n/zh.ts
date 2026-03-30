@@ -3,6 +3,20 @@ export const zh = {
   // ─── App ─────────────────────────────────────────────────────────────────────
   app_subtitle: '锻石',
   topbar_settings: '设置',
+  topbar_minimize: '最小化',
+  topbar_maximize: '最大化/还原',
+  topbar_close: '关闭',
+
+  // ─── Priority & Difficulty ──────────────────────────────────────────────────
+  priority_urgent: '紧急',
+  priority_high: '高',
+  priority_medium: '中',
+  priority_low: '低',
+  difficulty_1: '轻松',
+  difficulty_2: '简单',
+  difficulty_3: '适中',
+  difficulty_4: '困难',
+  difficulty_5: '极难',
 
   // ─── Sidebar ─────────────────────────────────────────────────────────────────
   sidebar_dashboard: '仪表盘',
@@ -284,6 +298,8 @@ export const zh = {
   worldmap_deleteConfirm: '确认删除',
   worldmap_levelUpToast: (name: string, levelName: string) => `${name} 升级为「${levelName}」！`,
   worldmap_levelUpEvent: (name: string, levelName: string) => `${name} 升级为${levelName}`,
+  area_rename: '改名',
+  area_delete: '删除',
 
   // ─── Area Info Bar ────────────────────────────────────────────────────────
   areaInfo_tasks: '任务',
@@ -397,6 +413,19 @@ export const zh = {
   streakPopup_streakLabel: (n: number) => `${n} 连续加成`,
   streakPopup_dismiss: '点击任意位置继续',
 
+  // ─── Prestige Modal ───────────────────────────────────────────────────────
+  prestige_heading: '抉择时刻',
+  prestige_desc: '你已达到传奇 Lv.51，可以开启淬火重铸之路',
+  prestige_title: '淬火重铸 · 专属特权',
+  prestige_perk1: '🌟 等级显示前置转生星级图标',
+  prestige_perk2: '✨ 角色称号获得动态流光效果',
+  prestige_perk3: '🏰 神话繁荣：解锁第七级区域特效',
+  prestige_perk4: '🔥 起源之火：极稀有专属徽章',
+  prestige_warning: '⚠️ 等级将重置为 Lv.1，矿石·装饰·主题·繁荣度完整保留',
+  prestige_currentLevel: (stars: string, n: number) => `当前已转生 ${stars} × ${n}`,
+  prestige_cancel: '维持现状',
+  prestige_confirm: '🔥 淬火重铸',
+
   // ─── Timeline ─────────────────────────────────────────────────────────────
   timeline_eventTaskComplete: '任务完成',
   timeline_eventHabitComplete: '习惯完成',
@@ -426,6 +455,16 @@ export const zh = {
   timeline_dateLabel: (month: number, day: number, dow: string) => `${month}月${day}日 周${dow}`,
   timeline_monthLabel: (year: string, month: number) => `${year}年${month}月`,
   timeline_dow: ['日', '一', '二', '三', '四', '五', '六'] as string[],
+
+  // ─── Add Area Modal ───────────────────────────────────────────────────────
+  addArea_title: '添加新区域',
+  addArea_limitReached: '已达区域上限（12个）',
+  addArea_selectTemplate: '选择模板区域',
+  addArea_or: '或',
+  addArea_createBlank: '+ 创建空白区域',
+  addArea_namePlaceholder: '输入区域名称...',
+  addArea_create: '创建',
+  addArea_usage: (n: number) => `已使用 ${n}/12 个区域`,
 }
 
 export type Translations = typeof zh
