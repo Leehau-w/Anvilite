@@ -1,13 +1,25 @@
 import React from 'react'
 import { useCharacterStore } from '@/stores/characterStore'
-import { getTitle } from '@/engines/levelEngine'
 import { AnimatedXPBar } from '@/components/feedback/AnimatedXPBar'
 import { useT } from '@/i18n'
 
+const TITLE_THRESHOLDS = [1, 6, 11, 16, 21, 31, 41, 51] as const
+function getTitleIndex(level: number): number {
+  for (let i = TITLE_THRESHOLDS.length - 1; i >= 0; i--) {
+    if (level >= TITLE_THRESHOLDS[i]) return i
+  }
+  return 0
+}
+
 export function StatusBar() {
   const { character } = useCharacterStore()
-  const title = getTitle(character.level, character.titlePreset, character.customTitles)
   const t = useT()
+  const idx = getTitleIndex(character.level)
+  const title = character.titlePreset === 'rpg'
+    ? t.titles_rpg[idx]
+    : (character.titlePreset === 'custom' && character.customTitles?.[idx])
+      ? character.customTitles[idx]
+      : t.titles_forge[idx]
 
   return (
     <footer
