@@ -11,17 +11,17 @@ export interface CardLayout {
   rowSpan: number
 }
 
-export const COLS = 12
-export const ROW_H = 88   // px per row
-export const GAP = 12     // px gap between cells
+export const COLS = 24
+export const ROW_H = 44    // px per row
+export const GAP = 8       // px gap between cells
 
 export const DEFAULT_LAYOUT: CardLayout[] = [
-  { id: 'quickAdd',  col: 0, row: 0, colSpan: 8, rowSpan: 1 },
-  { id: 'stats',     col: 8, row: 0, colSpan: 4, rowSpan: 1 },
-  { id: 'tasks',     col: 0, row: 1, colSpan: 8, rowSpan: 4 },
-  { id: 'character', col: 8, row: 1, colSpan: 4, rowSpan: 2 },
-  { id: 'habits',    col: 8, row: 3, colSpan: 4, rowSpan: 2 },
-  { id: 'growth',    col: 8, row: 5, colSpan: 4, rowSpan: 2 },
+  { id: 'quickAdd',  col: 0,  row: 0,  colSpan: 16, rowSpan: 2 },
+  { id: 'stats',     col: 16, row: 0,  colSpan: 8,  rowSpan: 2 },
+  { id: 'tasks',     col: 0,  row: 2,  colSpan: 8,  rowSpan: 8 },
+  { id: 'habits',    col: 8,  row: 2,  colSpan: 8,  rowSpan: 8 },
+  { id: 'character', col: 16, row: 2,  colSpan: 8,  rowSpan: 3 },
+  { id: 'growth',    col: 16, row: 5,  colSpan: 8,  rowSpan: 5 },
 ]
 
 interface DashboardStore {
@@ -42,9 +42,9 @@ export const useDashboardStore = create<DashboardStore>()(
     }),
     {
       name: 'anvilite-dashboard',
+      version: 2,
       onRehydrateStorage: () => (state) => {
         if (!state) return
-        // Ensure all default cards exist (handles new card additions)
         const ids = new Set(state.layout.map((c) => c.id))
         const missing = DEFAULT_LAYOUT.filter((c) => !ids.has(c.id))
         if (missing.length) state.layout = [...state.layout, ...missing]
@@ -55,22 +55,27 @@ export const useDashboardStore = create<DashboardStore>()(
 
 // ─── Grid math helpers ────────────────────────────────────────────────────────
 
+/** Column width in pixels for a given container width */
+function colWidth(cw: number) {
+  return (cw - GAP * (COLS + 1)) / COLS
+}
+
 /** Compute pixel rect from card grid position */
 export function gridRect(card: CardLayout, cw: number) {
-  const colW = (cw - GAP * (COLS + 1)) / COLS
+  const cW = colWidth(cw)
   return {
-    x: GAP + card.col * (colW + GAP),
+    x: GAP + card.col * (cW + GAP),
     y: GAP + card.row * (ROW_H + GAP),
-    w: card.colSpan * colW + (card.colSpan - 1) * GAP,
+    w: card.colSpan * cW + (card.colSpan - 1) * GAP,
     h: card.rowSpan * ROW_H + (card.rowSpan - 1) * GAP,
   }
 }
 
 /** Snap pixel position to nearest grid col/row */
 export function snapPos(px: number, py: number, cw: number) {
-  const colW = (cw - GAP * (COLS + 1)) / COLS
+  const cW = colWidth(cw)
   return {
-    col: Math.max(0, Math.min(COLS - 1, Math.round((px - GAP) / (colW + GAP)))),
+    col: Math.max(0, Math.min(COLS - 1, Math.round((px - GAP) / (cW + GAP)))),
     row: Math.max(0, Math.round((py - GAP) / (ROW_H + GAP))),
   }
 }
@@ -81,14 +86,14 @@ export function snapSpan(
   dh: number,
   card: CardLayout,
   cw: number,
-  minColSpan = 2,
-  minRowSpan = 1,
+  minColSpan = 4,
+  minRowSpan = 2,
 ) {
-  const colW = (cw - GAP * (COLS + 1)) / COLS
+  const cW = colWidth(cw)
   const curRect = gridRect(card, cw)
   const colSpan = Math.max(
     minColSpan,
-    Math.min(COLS - card.col, Math.round((curRect.w + dw + GAP) / (colW + GAP))),
+    Math.min(COLS - card.col, Math.round((curRect.w + dw + GAP) / (cW + GAP))),
   )
   const rowSpan = Math.max(
     minRowSpan,

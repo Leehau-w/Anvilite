@@ -184,16 +184,23 @@ function HabitItem({
         )}
       </div>
 
-      {/* 连续次数 / 计时显示 */}
+      {/* 计时显示（计时中 or 暂停后累计） */}
       {isTiming ? (
         <span style={{ fontSize: 11, color: 'var(--color-accent)', fontFamily: 'var(--font-num)', fontWeight: 600, whiteSpace: 'nowrap' }}>
           ⏱ {formatTimer(elapsed)}
         </span>
-      ) : habit.consecutiveCount > 0 ? (
+      ) : (habit.actualMinutes ?? 0) > 0 ? (
+        <span style={{ fontSize: 11, color: 'var(--color-text-dim)', fontFamily: 'var(--font-num)', fontWeight: 600, whiteSpace: 'nowrap' }}>
+          ⏱ {formatTimer((habit.actualMinutes ?? 0) * 60)}
+        </span>
+      ) : null}
+
+      {/* 连续次数 */}
+      {!isTiming && habit.consecutiveCount > 0 && (
         <span style={{ fontSize: 11, color: 'var(--color-xp)', fontFamily: 'var(--font-num)', fontWeight: 600, whiteSpace: 'nowrap' }}>
           🔥{habit.consecutiveCount}
         </span>
-      ) : null}
+      )}
 
       {/* 计时开始/暂停 */}
       <button

@@ -404,6 +404,7 @@ export function TaskItem({ task, compact, onEdit }: TaskItemProps) {
         </span>
       )}
 
+      {/* 计时显示（compact：计时中 or 暂停后累计） */}
       {compact && isDoing && task.timerStartedAt && (
         <span
           style={{
@@ -417,9 +418,22 @@ export function TaskItem({ task, compact, onEdit }: TaskItemProps) {
           ⏱{formatTimer(elapsed)}
         </span>
       )}
+      {compact && !isDoing && !isDone && task.actualMinutes > 0 && (
+        <span
+          style={{
+            fontSize: 11,
+            color: 'var(--color-text-dim)',
+            fontFamily: 'var(--font-num)',
+            fontWeight: 600,
+            flexShrink: 0,
+          }}
+        >
+          ⏱{formatTimer(task.actualMinutes * 60)}
+        </span>
+      )}
 
-      {/* 计时器控制按钮（非compact，非已完成） */}
-      {!isDone && !compact && (
+      {/* 计时器控制按钮（非已完成） */}
+      {!isDone && (
         <button
           onClick={handleStatusToggle}
           title={isDoing ? t.task_timerPause : t.task_timerStart}
