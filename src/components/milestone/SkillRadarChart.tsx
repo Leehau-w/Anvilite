@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import { motion } from 'framer-motion'
+import { useT } from '@/i18n'
 
 export interface SkillDimension {
   name: string       // 区域名称（短版，最多4字）
@@ -252,6 +253,8 @@ function BarChart({ dimensions, size }: Required<SkillRadarChartProps>) {
 // ── 主导出 ────────────────────────────────────────────────────────────────────
 
 export function SkillRadarChart({ dimensions, size = 200 }: SkillRadarChartProps) {
+  const t = useT()
+
   if (dimensions.length === 0) {
     return (
       <div
@@ -265,7 +268,7 @@ export function SkillRadarChart({ dimensions, size = 200 }: SkillRadarChartProps
           color: 'var(--color-text-dim)',
         }}
       >
-        激活区域后显示能力图
+        {t.radar_empty}
       </div>
     )
   }

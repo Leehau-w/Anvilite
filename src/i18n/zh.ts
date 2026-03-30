@@ -317,6 +317,23 @@ export const zh = {
   areaName_forge: '锻造坊',
   areaName_other: '其他',
   areaName_archive: '档案馆',
+  areaDesc_home: '生活与日常',
+  areaDesc_arena: '运动与健身',
+  areaDesc_library: '学习与阅读',
+  areaDesc_workshop: '兴趣与创造',
+  areaDesc_forge: '工作与效率',
+  areaName_spring: '泉水',
+  areaName_council: '议事厅',
+  areaName_expedition: '远征大厅',
+  areaName_observatory: '观测站',
+  areaName_garden: '植物园',
+  areaName_plaza: '广场',
+  areaDesc_spring: '恢复·冥想·自我关怀',
+  areaDesc_council: '目标规划·复盘管理',
+  areaDesc_expedition: '中长期项目·挑战',
+  areaDesc_observatory: '数据追踪·记账·反思',
+  areaDesc_garden: '情绪打卡·耐心培养',
+  areaDesc_plaza: '碎片化习惯·轻度日常',
 
   // ─── Titles ───────────────────────────────────────────────────────────────
   titles_forge: ['破壳', '熔炼', '锤炼', '锋芒', '极意', '铸魂', '锻石', '不朽'],
@@ -462,6 +479,19 @@ export const zh = {
   timeline_dateLabel: (month: number, day: number, dow: string) => `${month}月${day}日 周${dow}`,
   timeline_monthLabel: (year: string, month: number) => `${year}年${month}月`,
   timeline_dow: ['日', '一', '二', '三', '四', '五', '六'] as string[],
+
+  // ─── Theme Names ────────────────────────────────────────────────────────────
+  theme_name_dawn: '晨光白',
+  theme_name_mint: '薄荷纸',
+  theme_name_parchment: '羊皮卷',
+  theme_name_slate: '云石灰',
+  theme_name_forge: '锻铁紫',
+  theme_name_ore: '矿石青',
+  theme_name_flame: '烈焰铸',
+  theme_name_jade: '翠林绿',
+
+  // ─── Skill Radar Chart ────────────────────────────────────────────────────────
+  radar_empty: '激活区域后显示能力图',
 
   // ─── Add Area Modal ───────────────────────────────────────────────────────
   addArea_title: '添加新区域',

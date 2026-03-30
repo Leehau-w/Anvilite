@@ -5,6 +5,7 @@ import { AREA_TEMPLATES } from '@/types/area'
 import { useT } from '@/i18n'
 
 const ADDABLE_TEMPLATES: AreaTemplateId[] = [
+  'home', 'arena', 'library', 'workshop', 'forge',
   'spring', 'council', 'expedition', 'observatory', 'garden', 'plaza',
 ]
 
@@ -23,7 +24,7 @@ export function AddAreaModal({ usedTemplateIds, areaCount, onAdd, onClose }: Add
   const atLimit = areaCount >= 12
 
   function handleSelectTemplate(id: AreaTemplateId) {
-    if (usedTemplateIds.includes(id) || atLimit) return
+    if (atLimit) return
     onAdd(id)
     onClose()
   }
@@ -91,32 +92,31 @@ export function AddAreaModal({ usedTemplateIds, areaCount, onAdd, onClose }: Add
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
                   {ADDABLE_TEMPLATES.map((id) => {
                     const tpl = AREA_TEMPLATES[id]
-                    const used = usedTemplateIds.includes(id)
                     return (
                       <button
                         key={id}
                         onClick={() => handleSelectTemplate(id)}
-                        disabled={used}
+                        disabled={atLimit}
                         style={{
                           display: 'flex', flexDirection: 'column', alignItems: 'center',
                           gap: 4, padding: '10px 8px',
                           borderRadius: 'var(--radius-md)',
                           border: '1px solid var(--color-border)',
-                          background: used ? 'var(--color-surface-hover)' : 'transparent',
-                          opacity: used ? 0.45 : 1,
-                          cursor: used ? 'not-allowed' : 'pointer',
+                          background: 'transparent',
+                          opacity: atLimit ? 0.45 : 1,
+                          cursor: atLimit ? 'not-allowed' : 'pointer',
                           transition: 'all 0.15s',
                         }}
                         onMouseEnter={(e) => {
-                          if (!used) (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--color-accent)'
+                          if (!atLimit) (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--color-accent)'
                         }}
                         onMouseLeave={(e) => {
-                          if (!used) (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--color-border)'
+                          if (!atLimit) (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--color-border)'
                         }}
                       >
                         <span style={{ fontSize: 24 }}>{tpl.prosperityEmojis[0]}</span>
-                        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text)' }}>{tpl.name}</span>
-                        <span style={{ fontSize: 10, color: 'var(--color-text-dim)', textAlign: 'center' }}>{tpl.description}</span>
+                        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text)' }}>{(t[`areaName_${id}` as keyof typeof t] as string) ?? tpl.name}</span>
+                        <span style={{ fontSize: 10, color: 'var(--color-text-dim)', textAlign: 'center' }}>{(t[`areaDesc_${id}` as keyof typeof t] as string) ?? tpl.description}</span>
                       </button>
                     )
                   })}

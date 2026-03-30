@@ -319,6 +319,23 @@ export const en: Translations = {
   areaName_forge: 'Forge',
   areaName_other: 'Other',
   areaName_archive: 'Archives',
+  areaDesc_home: 'Life & Daily',
+  areaDesc_arena: 'Sports & Fitness',
+  areaDesc_library: 'Study & Reading',
+  areaDesc_workshop: 'Hobbies & Creation',
+  areaDesc_forge: 'Work & Productivity',
+  areaName_spring: 'Spring',
+  areaName_council: 'Council Hall',
+  areaName_expedition: 'Expedition Hall',
+  areaName_observatory: 'Observatory',
+  areaName_garden: 'Garden',
+  areaName_plaza: 'Plaza',
+  areaDesc_spring: 'Recovery & Meditation',
+  areaDesc_council: 'Planning & Review',
+  areaDesc_expedition: 'Long-term Projects',
+  areaDesc_observatory: 'Data Tracking & Reflection',
+  areaDesc_garden: 'Mood Check-in & Patience',
+  areaDesc_plaza: 'Quick Habits & Light Dailies',
 
   // ─── Titles ───────────────────────────────────────────────────────────────
   titles_forge: ['Hatchling', 'Smelting', 'Tempering', 'Sharpened', 'Mastery', 'Soul-forge', 'Anvilite', 'Immortal'],
@@ -464,6 +481,19 @@ export const en: Translations = {
   timeline_dateLabel: (month: number, day: number, dow: string) => `${dow} ${month}/${day}`,
   timeline_monthLabel: (year: string, month: number) => `${year}-${String(month).padStart(2, '0')}`,
   timeline_dow: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as string[],
+
+  // ─── Theme Names ────────────────────────────────────────────────────────────
+  theme_name_dawn: 'Dawn White',
+  theme_name_mint: 'Mint Paper',
+  theme_name_parchment: 'Parchment',
+  theme_name_slate: 'Slate Cloud',
+  theme_name_forge: 'Forge Purple',
+  theme_name_ore: 'Ore Cyan',
+  theme_name_flame: 'Flame Cast',
+  theme_name_jade: 'Jade Forest',
+
+  // ─── Skill Radar Chart ────────────────────────────────────────────────────────
+  radar_empty: 'Activate areas to display the ability chart',
 
   // ─── Add Area Modal ───────────────────────────────────────────────────────
   addArea_title: 'Add New Area',

@@ -5,6 +5,19 @@ import { useCharacterStore } from '@/stores/characterStore'
 import { useToast } from '@/components/feedback/Toast'
 import { THEMES } from '@/types/settings'
 import { useT } from '@/i18n'
+import type { Translations } from '@/i18n/zh'
+
+/** Map theme id → i18n key */
+const THEME_NAME_KEY: Record<string, keyof Translations> = {
+  'dawn-white':    'theme_name_dawn',
+  'mint-paper':    'theme_name_mint',
+  'parchment':     'theme_name_parchment',
+  'slate-cloud':   'theme_name_slate',
+  'forge-purple':  'theme_name_forge',
+  'ore-cyan':      'theme_name_ore',
+  'flame-cast':    'theme_name_flame',
+  'jade-forest':   'theme_name_jade',
+}
 
 interface SettingsModalProps {
   open: boolean
@@ -72,7 +85,8 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
     unlockTheme(themeId)
     setTheme(themeId)
     setConfirmTheme(null)
-    showToast(t.settings_toastUnlocked(THEMES.find((th) => th.id === themeId)?.name ?? themeId))
+    const nameKey = THEME_NAME_KEY[themeId]
+    showToast(t.settings_toastUnlocked(nameKey ? (t[nameKey] as string) : themeId))
   }
 
   const confirmThemeInfo = confirmTheme ? THEMES.find((t) => t.id === confirmTheme) : null
@@ -185,13 +199,15 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
                         {mode === 'light' ? t.settings_light : t.settings_dark}
                       </p>
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                        {THEMES.filter((t) => t.dark === (mode === 'dark')).map((theme) => {
+                        {THEMES.filter((th) => th.dark === (mode === 'dark')).map((theme) => {
                           const isUnlocked = settings.unlockedThemes.includes(theme.id)
                           const cost = THEME_ORE_COST[theme.id] ?? 0
+                          const nameKey = THEME_NAME_KEY[theme.id]
+                          const displayName = nameKey ? (t[nameKey] as string) : theme.name
                           return (
                             <ThemeButton
                               key={theme.id}
-                              theme={theme}
+                              theme={{ id: theme.id, name: displayName }}
                               isActive={settings.theme === theme.id}
                               isUnlocked={isUnlocked}
                               cost={cost}
@@ -285,7 +301,7 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
 
                   <div style={{ textAlign: 'center', marginBottom: 16 }}>
                     <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--color-text)', marginBottom: 4 }}>
-                      {t.settings_unlockTitle(confirmThemeInfo.name)}
+                      {t.settings_unlockTitle((THEME_NAME_KEY[confirmTheme] ? (t[THEME_NAME_KEY[confirmTheme]] as string) : confirmThemeInfo.name))}
                     </div>
                     <div style={{ fontSize: 13, color: 'var(--color-text-dim)' }}>
                       {t.settings_unlockCost(confirmCost)}
