@@ -102,7 +102,7 @@ export function MilestoneHall() {
       .map((a) => {
         const displayName = getAreaDisplayName(a, t)
         return {
-          name: displayName.length > 4 ? displayName.slice(0, 4) : displayName,
+          name: displayName,
           value: skillXPToLevel(getAreaSkillXP(tasks, a.category)),
           emoji: a.emoji,
         }

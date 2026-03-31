@@ -33,8 +33,8 @@ function RadarChart({ dimensions, size }: Required<SkillRadarChartProps>) {
 
   const cx = size / 2
   const cy = size / 2
-  const maxR = size * 0.38          // 留出标签空间
-  const labelR = size * 0.47        // 标签半径
+  const maxR = size * 0.34          // 留出标签空间
+  const labelR = size * 0.48        // 标签半径
   const n = dimensions.length
   const maxVal = Math.max(1, ...dimensions.map((d) => d.value))
   // 最大刻度：取 maxVal 上取整到 5 的倍数，至少 5
@@ -151,8 +151,6 @@ function RadarChart({ dimensions, size }: Required<SkillRadarChartProps>) {
         const lp = polar(cx, cy, labelR, a)
         const d = dimensions[i]
         const isHovered = hoveredIdx === i
-        // 截断名称
-        const label = d.name.length > 4 ? d.name.slice(0, 4) : d.name
         return (
           <text
             key={i}
@@ -160,15 +158,15 @@ function RadarChart({ dimensions, size }: Required<SkillRadarChartProps>) {
             y={lp.y}
             textAnchor="middle"
             dominantBaseline="middle"
-            fontSize={isHovered ? 10 : 9}
-            fontFamily="var(--font-zh)"
+            fontSize={isHovered ? 10 : 8}
+            fontFamily="var(--font-en)"
             fontWeight={isHovered ? 600 : 400}
             fill={isHovered ? 'var(--color-accent)' : 'var(--color-text-dim)'}
             style={{ cursor: 'default', transition: 'font-size 0.15s, fill 0.15s' }}
             onMouseEnter={() => setHoveredIdx(i)}
             onMouseLeave={() => setHoveredIdx(null)}
           >
-            {label}
+            {d.name}
           </text>
         )
       })}
