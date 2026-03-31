@@ -659,7 +659,7 @@ function MonthBlockCard({
     () => [...block.events].sort((a, b) => eventWeight(b) - eventWeight(a)),
     [block.events]
   )
-  const topEvents = isLocked ? sortedEvents : isActive ? sortedEvents.slice(0, 8) : sortedEvents.slice(0, 3)
+  const topEvents = isLocked ? sortedEvents : isActive ? sortedEvents.slice(0, 12) : sortedEvents.slice(0, 3)
 
   const summaryParts: string[] = []
   if (block.levelUps > 0) summaryParts.push(`⬆×${block.levelUps}`)
@@ -669,7 +669,7 @@ function MonthBlockCard({
 
   return (
     <motion.div
-      animate={{ width: isActive ? 260 : 160, opacity: 1 }}
+      animate={{ width: isActive ? 300 : 160, opacity: 1 }}
       initial={{ width: 160, opacity: 0 }}
       transition={{ duration: 0.3, ease: 'easeOut' }}
       onMouseEnter={onHover}
@@ -705,8 +705,9 @@ function MonthBlockCard({
           flex: 1,
           display: 'flex',
           flexDirection: 'column',
-          justifyContent: 'flex-end',
-          paddingBottom: 20,
+          justifyContent: 'flex-start',
+          paddingTop: 4,
+          paddingBottom: 10,
           gap: 4,
           overflow: isLocked ? 'visible' : 'hidden',
         }}
@@ -735,7 +736,7 @@ function MonthBlockCard({
           <div
             style={{
               display: 'flex', flexDirection: 'column', gap: 4,
-              maxHeight: isLocked ? 200 : 'none',
+              maxHeight: isLocked ? 300 : 'none',
               overflowY: isLocked ? 'auto' : 'hidden',
             }}
             onClick={(e) => { if (isLocked) e.stopPropagation() }}
