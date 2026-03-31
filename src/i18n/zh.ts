@@ -305,6 +305,8 @@ export const zh = {
   milestone_createCancel: '取消',
   milestone_createConfirm: '刻碑 ✓',
   milestone_eventTitle: (title: string) => `里程碑：${title}`,
+  milestone_editTitle: '编辑里程碑',
+  milestone_editSave: '保存',
 
   // ─── World Map ────────────────────────────────────────────────────────────
   worldmap_resetView: '重置视角',

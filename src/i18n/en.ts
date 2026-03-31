@@ -307,6 +307,8 @@ export const en: Translations = {
   milestone_createCancel: 'Cancel',
   milestone_createConfirm: 'Engrave ✓',
   milestone_eventTitle: (title: string) => `Milestone: ${title}`,
+  milestone_editTitle: 'Edit Milestone',
+  milestone_editSave: 'Save',
 
   // ─── World Map ────────────────────────────────────────────────────────────
   worldmap_resetView: 'Reset View',

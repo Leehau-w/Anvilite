@@ -717,7 +717,7 @@ function HabitsTab({
             <HabitSection title={tr.habits_mastered} count={mastered.length}>
               <AnimatePresence mode="popLayout">
                 {mastered.map((h) => (
-                  <HabitRow key={h.id} habit={h} onEdit={() => onEdit(h)} onDelete={() => handleDelete(h.id)} dim />
+                  <HabitRow key={h.id} habit={h} onEdit={() => onEdit(h)} onDelete={() => handleDelete(h.id)} onInscribe={() => handleInscribe(h)} dim />
                 ))}
               </AnimatePresence>
             </HabitSection>

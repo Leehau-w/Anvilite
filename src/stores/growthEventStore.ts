@@ -8,6 +8,7 @@ interface GrowthEventStore {
   addEvent: (event: Omit<GrowthEvent, 'id' | 'timestamp'>) => void
   removeEvent: (id: string) => void
   markMilestone: (id: string, description?: string) => void
+  updateEventDetails: (id: string, patch: Partial<GrowthEvent['details']>) => void
 }
 
 export const useGrowthEventStore = create<GrowthEventStore>()(
@@ -38,6 +39,14 @@ export const useGrowthEventStore = create<GrowthEventStore>()(
                   details: { ...e.details, description: description ?? e.details.description },
                 }
               : e
+          ),
+        }))
+      },
+
+      updateEventDetails: (id, patch) => {
+        set((s) => ({
+          events: s.events.map((e) =>
+            e.id === id ? { ...e, details: { ...e.details, ...patch } } : e
           ),
         }))
       },

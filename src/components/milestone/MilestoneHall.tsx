@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useCharacterStore } from '@/stores/characterStore'
 import { useGrowthEventStore } from '@/stores/growthEventStore'
+import type { GrowthEvent } from '@/types/growthEvent'
 import { useTaskStore } from '@/stores/taskStore'
 import { useHabitStore } from '@/stores/habitStore'
 import { useAreaStore } from '@/stores/areaStore'
@@ -37,7 +38,7 @@ function getTitleIndex(level: number): number {
 
 export function MilestoneHall() {
   const { character, setTitlePreset } = useCharacterStore()
-  const { events, markMilestone } = useGrowthEventStore()
+  const { events, markMilestone, updateEventDetails } = useGrowthEventStore()
   const { tasks } = useTaskStore()
   const { habits } = useHabitStore()
   const { areas } = useAreaStore()
@@ -45,6 +46,7 @@ export function MilestoneHall() {
   const t = useT()
   const lang = useSettingsStore((s) => s.settings.language)
   const [createModal, setCreateModal] = useState(false)
+  const [editingMilestone, setEditingMilestone] = useState<GrowthEvent | null>(null)
   const [prestigeModalOpen, setPrestigeModalOpen] = useState(false)
   const canPrestige = character.level >= 51
   const prestigeLevel = character.prestigeLevel ?? 0
@@ -381,12 +383,17 @@ export function MilestoneHall() {
               milestones.map((e) => (
                 <div
                   key={e.id}
+                  onClick={() => setEditingMilestone(e)}
                   style={{
                     background: 'color-mix(in srgb, var(--color-accent) 8%, var(--color-surface))',
                     border: '1px solid color-mix(in srgb, var(--color-accent) 25%, transparent)',
                     borderRadius: 'var(--radius-lg)',
                     padding: '14px 16px',
+                    cursor: 'pointer',
+                    transition: 'box-shadow 0.15s',
                   }}
+                  onMouseEnter={(el) => { el.currentTarget.style.boxShadow = '0 2px 12px color-mix(in srgb, var(--color-accent) 15%, transparent)' }}
+                  onMouseLeave={(el) => { el.currentTarget.style.boxShadow = 'none' }}
                 >
                   <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
                     <span style={{ fontSize: 18 }}>⭐</span>
@@ -520,6 +527,18 @@ export function MilestoneHall() {
             isMilestone: true,
           })
           setCreateModal(false)
+        }}
+      />
+
+      {/* 编辑里程碑 Modal */}
+      <EditMilestoneModal
+        event={editingMilestone}
+        onClose={() => setEditingMilestone(null)}
+        onSave={(desc) => {
+          if (editingMilestone) {
+            updateEventDetails(editingMilestone.id, { description: desc })
+            setEditingMilestone(null)
+          }
         }}
       />
 
@@ -775,6 +794,88 @@ function CreateMilestoneModal({
                   {t.milestone_createConfirm}
                 </button>
               </div>
+            </div>
+          </motion.div>
+        </>
+      )}
+    </AnimatePresence>
+  )
+}
+
+function EditMilestoneModal({
+  event,
+  onClose,
+  onSave,
+}: {
+  event: GrowthEvent | null
+  onClose: () => void
+  onSave: (description: string) => void
+}) {
+  const [desc, setDesc] = useState('')
+  const t = useT()
+
+  React.useEffect(() => {
+    if (event) setDesc(event.details.description ?? '')
+  }, [event])
+
+  return (
+    <AnimatePresence>
+      {event && (
+        <>
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            onClick={onClose}
+            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.3)', zIndex: 500 }}
+          />
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
+            transition={{ duration: 0.2 }}
+            style={{
+              position: 'fixed', left: '50%', top: '50%', transform: 'translate(-50%, -50%)',
+              width: 340, background: 'var(--color-surface)', borderRadius: 'var(--radius-xl)',
+              border: '1px solid var(--color-border)', padding: 24, zIndex: 501, boxShadow: 'var(--shadow-lg)',
+            }}
+          >
+            <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 8 }}>{t.milestone_editTitle}</h3>
+            <div style={{ fontSize: 14, color: 'var(--color-accent)', fontWeight: 600, marginBottom: 12 }}>
+              ⭐ {event.title.replace(/^.+[：:]\s*/, '')}
+            </div>
+
+            {event.details.sourceType === 'habit' && event.details.durationDays != null && (
+              <div style={{ fontSize: 12, color: 'var(--color-text-dim)', marginBottom: 8, display: 'flex', gap: 8 }}>
+                <span>{t.habit_durationLabel(event.details.durationDays)}</span>
+                {event.details.consecutiveCount != null && <span>🔥{event.details.consecutiveCount}</span>}
+                {event.details.totalCompletions != null && <span>×{event.details.totalCompletions}</span>}
+              </div>
+            )}
+
+            {event.details.sourceType === 'task' && (
+              <div style={{ fontSize: 12, color: 'var(--color-text-dim)', marginBottom: 8, display: 'flex', gap: 8 }}>
+                {event.details.xpGained != null && <span>+{event.details.xpGained} XP</span>}
+                {event.details.actualMinutes != null && event.details.actualMinutes > 0 && <span>⏱{event.details.actualMinutes}m</span>}
+              </div>
+            )}
+
+            <textarea
+              autoFocus
+              value={desc}
+              onChange={(e) => setDesc(e.target.value)}
+              placeholder={t.milestone_createNotesPlaceholder}
+              rows={3}
+              style={{
+                width: '100%', padding: '8px 12px', borderRadius: 'var(--radius-md)',
+                border: '1px solid var(--color-border)', background: 'var(--color-bg)',
+                color: 'var(--color-text)', fontSize: 13, resize: 'none', outline: 'none',
+                fontFamily: 'var(--font-zh)', boxSizing: 'border-box',
+              }}
+            />
+            <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+              <button onClick={onClose}
+                style={{ flex: 1, height: 36, borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', background: 'transparent', color: 'var(--color-text-dim)', cursor: 'pointer', fontSize: 13 }}
+              >{t.milestone_createCancel}</button>
+              <button onClick={() => onSave(desc.trim())}
+                style={{ flex: 2, height: 36, borderRadius: 'var(--radius-md)', border: 'none', background: 'var(--color-accent)', color: 'white', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}
+              >{t.milestone_editSave}</button>
             </div>
           </motion.div>
         </>
