@@ -24,7 +24,7 @@ export function AddAreaModal({ usedTemplateIds, areaCount, onAdd, onClose }: Add
   const atLimit = areaCount >= 12
 
   function handleSelectTemplate(id: AreaTemplateId) {
-    if (atLimit) return
+    if (atLimit || usedTemplateIds.includes(id)) return
     onAdd(id)
     onClose()
   }
@@ -92,26 +92,28 @@ export function AddAreaModal({ usedTemplateIds, areaCount, onAdd, onClose }: Add
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
                   {ADDABLE_TEMPLATES.map((id) => {
                     const tpl = AREA_TEMPLATES[id]
+                    const used = usedTemplateIds.includes(id)
+                    const disabled = atLimit || used
                     return (
                       <button
                         key={id}
                         onClick={() => handleSelectTemplate(id)}
-                        disabled={atLimit}
+                        disabled={disabled}
                         style={{
                           display: 'flex', flexDirection: 'column', alignItems: 'center',
                           gap: 4, padding: '10px 8px',
                           borderRadius: 'var(--radius-md)',
                           border: '1px solid var(--color-border)',
-                          background: 'transparent',
-                          opacity: atLimit ? 0.45 : 1,
-                          cursor: atLimit ? 'not-allowed' : 'pointer',
+                          background: used ? 'var(--color-surface-hover)' : 'transparent',
+                          opacity: disabled ? 0.45 : 1,
+                          cursor: disabled ? 'not-allowed' : 'pointer',
                           transition: 'all 0.15s',
                         }}
                         onMouseEnter={(e) => {
-                          if (!atLimit) (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--color-accent)'
+                          if (!disabled) (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--color-accent)'
                         }}
                         onMouseLeave={(e) => {
-                          if (!atLimit) (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--color-border)'
+                          if (!disabled) (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--color-border)'
                         }}
                       >
                         <span style={{ fontSize: 24 }}>{tpl.prosperityEmojis[0]}</span>

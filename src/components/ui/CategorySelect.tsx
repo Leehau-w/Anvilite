@@ -1,6 +1,7 @@
 import React from 'react'
 import { useT } from '@/i18n'
-import { categoryDisplay } from '@/utils/area'
+import { useAreaStore } from '@/stores/areaStore'
+import { getAreaDisplayName, categoryDisplay } from '@/utils/area'
 
 const DEFAULT_CATEGORIES = ['home', 'arena', 'library', 'workshop', 'forge', 'other']
 
@@ -12,6 +13,14 @@ interface CategorySelectProps {
 
 export function CategorySelect({ value, onChange, categories = DEFAULT_CATEGORIES }: CategorySelectProps) {
   const t = useT()
+  const areas = useAreaStore((s) => s.areas)
+
+  function label(cat: string): string {
+    const area = areas.find((a) => a.category === cat)
+    if (area) return getAreaDisplayName(area, t)
+    return categoryDisplay(cat, t)
+  }
+
   return (
     <div className="flex flex-wrap gap-1">
       {categories.map((cat) => {
@@ -36,7 +45,7 @@ export function CategorySelect({ value, onChange, categories = DEFAULT_CATEGORIE
               fontWeight: isActive ? 500 : 400,
             }}
           >
-            {categoryDisplay(cat, t)}
+            {label(cat)}
           </button>
         )
       })}

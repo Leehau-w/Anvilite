@@ -12,13 +12,16 @@ import { useToast } from '@/components/feedback/Toast'
 import type { Task } from '@/types/task'
 import type { Habit } from '@/types/habit'
 import { useT } from '@/i18n'
-import { categoryDisplay } from '@/utils/area'
+import { categoryDisplay, getAreaDisplayName } from '@/utils/area'
 
 
 export function TaskList() {
   const { tasks, restoreTask, permanentlyDeleteTask, updateTask } = useTaskStore()
   const getAreaCategories = useAreaStore((s) => s.getAreaCategories)
+  const areas = useAreaStore((s) => s.areas)
   const tr = useT()
+
+  const catLabel = (cat: string) => resolveCatLabel(cat, areas, tr)
   const [mainTab, setMainTab] = useState<'tasks' | 'habits'>('tasks')
   const [activeCategory, setActiveCategory] = useState('ALL')
   const [drawerOpen, setDrawerOpen] = useState(false)
@@ -114,7 +117,7 @@ export function TaskList() {
         className="flex items-center gap-1 px-4 py-2 shrink-0 overflow-x-auto"
         style={{ borderBottom: '1px solid var(--color-border)' }}
       >
-        {[{ key: 'ALL', label: tr.tasklist_all }, ...getAreaCategories().map((c) => ({ key: c, label: categoryDisplay(c, tr) }))].map(({ key, label }) => {
+        {[{ key: 'ALL', label: tr.tasklist_all }, ...getAreaCategories().map((c) => ({ key: c, label: catLabel(c) }))].map(({ key, label }) => {
           const isActive = isCatActive(key)
           return (
             <button
@@ -239,7 +242,7 @@ export function TaskList() {
                         {task.title}
                       </div>
                       <div style={{ fontSize: 11, color: 'var(--color-text-dim)', marginTop: 2 }}>
-                        {categoryDisplay(task.category, tr)}
+                        {catLabel(task.category)}
                         {task.status === 'done' && task.xpReward > 0 && (
                           <span style={{ marginLeft: 6, color: 'var(--color-success)' }}>
                             +{task.xpReward} XP
@@ -320,7 +323,7 @@ export function TaskList() {
                         {task.title}
                       </div>
                       <div style={{ fontSize: 11, color: 'var(--color-text-dim)', marginTop: 2, opacity: 0.7 }}>
-                        {categoryDisplay(task.category, tr)} · {tr.tasklist_deletedOn(formatDeletedDate(task.deletedAt!))}
+                        {catLabel(task.category)} · {tr.tasklist_deletedOn(formatDeletedDate(task.deletedAt!))}
                       </div>
                     </div>
                     <button
@@ -494,6 +497,13 @@ function formatDeletedDate(iso: string): string {
   return `${d.getMonth() + 1}/${d.getDate()}`
 }
 
+/** Resolve category key → display name using area data (user rename > i18n > raw key) */
+function resolveCatLabel(cat: string, areas: ReturnType<typeof useAreaStore>['areas'], t: ReturnType<typeof useT>): string {
+  const area = areas.find((a) => a.category === cat)
+  if (area) return getAreaDisplayName(area, t)
+  return categoryDisplay(cat, t)
+}
+
 // ─── 习惯页签 ──────────────────────────────────────────────────────────────────
 
 function HabitsTab({
@@ -505,7 +515,9 @@ function HabitsTab({
 }) {
   const { habits, pauseHabit, resumeHabit, hideHabit, unhideHabit, deleteHabit, restoreHabit, permanentlyDeleteHabit, masterHabit } = useHabitStore()
   const { addEvent } = useGrowthEventStore()
+  const areas = useAreaStore((s) => s.areas)
   const tr = useT()
+  const catLabel = (cat: string) => resolveCatLabel(cat, areas, tr)
   const { showToast } = useToast()
   const [hiddenMode, setHiddenMode] = useState(false)
   const [trashMode, setTrashMode] = useState(false)
@@ -630,7 +642,7 @@ function HabitsTab({
                   >
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 13, color: 'var(--color-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{h.title}</div>
-                      <div style={{ fontSize: 11, color: 'var(--color-text-dim)', marginTop: 2 }}>{categoryDisplay(h.category, tr)} · {getHabitRepeatLabel(h, tr)}</div>
+                      <div style={{ fontSize: 11, color: 'var(--color-text-dim)', marginTop: 2 }}>{catLabel(h.category)} · {getHabitRepeatLabel(h, tr)}</div>
                     </div>
                     <button onClick={() => unhideHabit(h.id)}
                       style={{ fontSize: 11, padding: '3px 10px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-secondary)', background: 'transparent', color: 'var(--color-secondary)', cursor: 'pointer', whiteSpace: 'nowrap' }}
@@ -660,7 +672,7 @@ function HabitsTab({
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 13, color: 'var(--color-text-dim)', textDecoration: 'line-through', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{h.title}</div>
                       <div style={{ fontSize: 11, color: 'var(--color-text-dim)', marginTop: 2, opacity: 0.7 }}>
-                        {categoryDisplay(h.category, tr)} · {formatDeletedDate(h.deletedAt!)}
+                        {catLabel(h.category)} · {formatDeletedDate(h.deletedAt!)}
                       </div>
                     </div>
                     <button onClick={() => restoreHabit(h.id)}
@@ -762,6 +774,8 @@ function HabitRow({
   dim?: boolean
 }) {
   const tr = useT()
+  const areas = useAreaStore((s) => s.areas)
+  const catLabel = (cat: string) => resolveCatLabel(cat, areas, tr)
   const repeatLabel = getHabitRepeatLabel(habit, tr)
 
   return (
@@ -787,7 +801,7 @@ function HabitRow({
           {habit.title}
         </div>
         <div style={{ fontSize: 11, color: 'var(--color-text-dim)', marginTop: 2, display: 'flex', gap: 6 }}>
-          <span>{categoryDisplay(habit.category, tr)}</span>
+          <span>{catLabel(habit.category)}</span>
           <span>·</span>
           <span>{repeatLabel}</span>
           {habit.consecutiveCount > 0 && (
