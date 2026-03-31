@@ -401,6 +401,21 @@ export function MilestoneHall() {
                       <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--color-accent)', marginBottom: 2 }}>
                         {e.title.replace(/^.+[：:]\s*/, '')}
                       </div>
+                      {/* 习惯坚持时长 */}
+                      {e.details.sourceType === 'habit' && e.details.durationDays != null && (
+                        <div style={{ fontSize: 11, color: 'var(--color-xp)', marginBottom: 4, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                          <span>{t.habit_durationLabel(e.details.durationDays)}</span>
+                          {e.details.consecutiveCount != null && e.details.consecutiveCount > 0 && <span>🔥{e.details.consecutiveCount}</span>}
+                          {e.details.totalCompletions != null && <span>×{e.details.totalCompletions}</span>}
+                        </div>
+                      )}
+                      {/* 任务数据 */}
+                      {e.details.sourceType === 'task' && (
+                        <div style={{ fontSize: 11, color: 'var(--color-success)', marginBottom: 4, display: 'flex', gap: 8 }}>
+                          {e.details.xpGained != null && <span>+{e.details.xpGained} XP</span>}
+                          {e.details.actualMinutes != null && e.details.actualMinutes > 0 && <span>⏱{e.details.actualMinutes}m</span>}
+                        </div>
+                      )}
                       {e.details.description && (
                         <div style={{ fontSize: 12, color: 'var(--color-text)', fontStyle: 'italic', marginBottom: 4 }}>
                           "{e.details.description}"
@@ -537,6 +552,13 @@ export function MilestoneHall() {
         onSave={(desc) => {
           if (editingMilestone) {
             updateEventDetails(editingMilestone.id, { description: desc })
+            setEditingMilestone(null)
+          }
+        }}
+        onDelete={() => {
+          if (editingMilestone) {
+            const { removeEvent } = useGrowthEventStore.getState()
+            removeEvent(editingMilestone.id)
             setEditingMilestone(null)
           }
         }}
@@ -806,10 +828,12 @@ function EditMilestoneModal({
   event,
   onClose,
   onSave,
+  onDelete,
 }: {
   event: GrowthEvent | null
   onClose: () => void
   onSave: (description: string) => void
+  onDelete: () => void
 }) {
   const [desc, setDesc] = useState('')
   const t = useT()
@@ -870,6 +894,10 @@ function EditMilestoneModal({
               }}
             />
             <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+              <button onClick={onDelete}
+                style={{ width: 36, height: 36, borderRadius: 'var(--radius-md)', border: '1px solid var(--color-danger)', background: 'transparent', color: 'var(--color-danger)', cursor: 'pointer', fontSize: 13, flexShrink: 0 }}
+                title={t.habit_deletePerm}
+              >✕</button>
               <button onClick={onClose}
                 style={{ flex: 1, height: 36, borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', background: 'transparent', color: 'var(--color-text-dim)', cursor: 'pointer', fontSize: 13 }}
               >{t.milestone_createCancel}</button>

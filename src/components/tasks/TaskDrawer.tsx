@@ -5,8 +5,10 @@ import { CategorySelect } from '@/components/ui/CategorySelect'
 import type { Task, TaskDifficulty, TaskPriority } from '@/types/task'
 import { useTaskStore } from '@/stores/taskStore'
 import { useAreaStore } from '@/stores/areaStore'
+import { useGrowthEventStore } from '@/stores/growthEventStore'
 import { getTomorrowString } from '@/utils/time'
 import { useT } from '@/i18n'
+import { useToast } from '@/components/feedback/Toast'
 
 interface TaskDrawerProps {
   open: boolean
@@ -29,6 +31,8 @@ type FormData = {
 
 export function TaskDrawer({ open, onClose, editTask, initialCategory }: TaskDrawerProps) {
   const { addTask, updateTask, lastCategory } = useTaskStore()
+  const { addEvent } = useGrowthEventStore()
+  const { showToast } = useToast()
   const getAreaCategories = useAreaStore((s) => s.getAreaCategories)
   const t = useT()
 
@@ -256,6 +260,36 @@ export function TaskDrawer({ open, onClose, editTask, initialCategory }: TaskDra
             }}
           />
         </div>
+
+        {/* 铭刻为里程碑（编辑已完成/进行中任务时显示） */}
+        {editTask && (editTask.status === 'done' || editTask.status === 'doing') && (
+          <button
+            type="button"
+            onClick={() => {
+              addEvent({
+                type: 'custom_milestone',
+                title: editTask.title,
+                details: {
+                  sourceType: 'task',
+                  xpGained: editTask.xpReward,
+                  actualMinutes: editTask.actualMinutes,
+                  categoryName: editTask.category,
+                  difficulty: editTask.difficulty,
+                },
+                isMilestone: true,
+              })
+              showToast(`⭐ ${editTask.title}`)
+              handleClose()
+            }}
+            style={{
+              width: '100%', height: 36, borderRadius: 'var(--radius-md)',
+              border: '1px solid var(--color-xp)', background: 'color-mix(in srgb, var(--color-xp) 10%, transparent)',
+              color: 'var(--color-xp)', cursor: 'pointer', fontSize: 13, fontWeight: 600,
+            }}
+          >
+            ⭐ {t.task_inscribe}
+          </button>
+        )}
 
         {/* 按钮 */}
         <div className="flex gap-2 mt-2">

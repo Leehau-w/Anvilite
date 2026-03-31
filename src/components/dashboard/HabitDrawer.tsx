@@ -5,6 +5,8 @@ import { CategorySelect } from '@/components/ui/CategorySelect'
 import type { Habit } from '@/types/habit'
 import { useHabitStore } from '@/stores/habitStore'
 import { useAreaStore } from '@/stores/areaStore'
+import { useGrowthEventStore } from '@/stores/growthEventStore'
+import { useToast } from '@/components/feedback/Toast'
 import { useT } from '@/i18n'
 
 interface HabitDrawerProps {
@@ -41,6 +43,8 @@ const REPEAT_OPTIONS: UIRepeatType[] = ['daily', 'weekdays', 'weekly', 'biweekly
 
 export function HabitDrawer({ open, onClose, editHabit, defaultCategory }: HabitDrawerProps) {
   const { addHabit, updateHabit } = useHabitStore()
+  const { addEvent } = useGrowthEventStore()
+  const { showToast } = useToast()
   const getAreaCategories = useAreaStore((s) => s.getAreaCategories)
   const t = useT()
 
@@ -348,6 +352,38 @@ export function HabitDrawer({ open, onClose, editHabit, defaultCategory }: Habit
             }}
           />
         </Field>
+
+        {/* 铭刻为里程碑（编辑现有习惯时显示） */}
+        {editHabit && (
+          <button
+            type="button"
+            onClick={() => {
+              const days = Math.floor((Date.now() - new Date(editHabit.createdAt).getTime()) / 86400000)
+              addEvent({
+                type: 'custom_milestone',
+                title: editHabit.title,
+                details: {
+                  sourceType: 'habit',
+                  categoryName: editHabit.category,
+                  difficulty: editHabit.difficulty,
+                  consecutiveCount: editHabit.consecutiveCount,
+                  totalCompletions: editHabit.totalCompletions,
+                  durationDays: days,
+                },
+                isMilestone: true,
+              })
+              showToast(`⭐ ${editHabit.title}`)
+              onClose()
+            }}
+            style={{
+              width: '100%', height: 36, borderRadius: 'var(--radius-md)',
+              border: '1px solid var(--color-xp)', background: 'color-mix(in srgb, var(--color-xp) 10%, transparent)',
+              color: 'var(--color-xp)', cursor: 'pointer', fontSize: 13, fontWeight: 600,
+            }}
+          >
+            ⭐ {t.habit_inscribe}
+          </button>
+        )}
 
         {/* 按钮 */}
         <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
