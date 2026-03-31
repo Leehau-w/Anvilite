@@ -611,7 +611,7 @@ function ScrollTimeline() {
       >
         {/* 时间轴线 */}
         <div style={{ position: 'relative', display: 'flex', alignItems: 'center', minWidth: months.length * 180 }}>
-          <div style={{ position: 'absolute', top: '50%', left: 0, right: 0, height: 2, background: 'var(--color-border)', transform: 'translateY(-50%)', zIndex: 0 }} />
+          <div style={{ position: 'absolute', top: '35%', left: 0, right: 0, height: 2, background: 'var(--color-border)', transform: 'translateY(-50%)', zIndex: 0 }} />
 
           {months.map((block, idx) => (
             <MonthBlockCard
@@ -655,10 +655,11 @@ function MonthBlockCard({
   const t = useT()
   const [y, m] = block.key.split('-')
   const monthLabel = t.archive_monthLabel(y, parseInt(m))
-  const topEvents = useMemo(
-    () => [...block.events].sort((a, b) => eventWeight(b) - eventWeight(a)).slice(0, isActive ? 8 : 3),
-    [block.events, isActive]
+  const sortedEvents = useMemo(
+    () => [...block.events].sort((a, b) => eventWeight(b) - eventWeight(a)),
+    [block.events]
   )
+  const topEvents = isLocked ? sortedEvents : isActive ? sortedEvents.slice(0, 8) : sortedEvents.slice(0, 3)
 
   const summaryParts: string[] = []
   if (block.levelUps > 0) summaryParts.push(`⬆×${block.levelUps}`)
@@ -687,7 +688,7 @@ function MonthBlockCard({
     >
       {/* 连接点 */}
       <div style={{
-        position: 'absolute', left: '50%', top: '50%',
+        position: 'absolute', left: '50%', top: '35%',
         transform: 'translate(-50%, -50%)',
         width: 10, height: 10,
         borderRadius: '50%',
@@ -707,7 +708,7 @@ function MonthBlockCard({
           justifyContent: 'flex-end',
           paddingBottom: 20,
           gap: 4,
-          overflow: 'hidden',
+          overflow: isLocked ? 'visible' : 'hidden',
         }}
       >
         <div
@@ -731,7 +732,14 @@ function MonthBlockCard({
           </div>
 
           {/* Top 事件 */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <div
+            style={{
+              display: 'flex', flexDirection: 'column', gap: 4,
+              maxHeight: isLocked ? 200 : 'none',
+              overflowY: isLocked ? 'auto' : 'hidden',
+            }}
+            onClick={(e) => { if (isLocked) e.stopPropagation() }}
+          >
             {topEvents.map((e) => (
               <div key={e.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 5 }}>
                 <span style={{ fontSize: 11, flexShrink: 0, marginTop: 1 }}>{getEventIcon(e)}</span>
@@ -750,7 +758,7 @@ function MonthBlockCard({
                 </span>
               </div>
             ))}
-            {!isActive && block.events.length > 3 && (
+            {!isActive && !isLocked && block.events.length > 3 && (
               <span style={{ fontSize: 10, color: 'var(--color-text-dim)', opacity: 0.6 }}>
                 {t.archive_scrollMore(block.events.length - 3)}
               </span>
