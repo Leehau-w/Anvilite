@@ -79,12 +79,20 @@ export function MilestoneHall() {
     const areaBadges: BadgeDef[] = []
     for (const area of areas) {
       if (area.category === '_milestone') continue
+      const areaDisplay = getAreaDisplayName(area, t)
       for (let lvl = 2; lvl <= 6; lvl++) {
-        areaBadges.push(makeAreaBadgeDef(area.category, lvl))
+        const base = makeAreaBadgeDef(area.category, lvl)
+        const prosName = (t[`badge_prosperity_name_${lvl}` as keyof typeof t] as string) ?? base.name
+        const prosDesc = (t[`badge_prosperity_desc_${lvl}` as keyof typeof t] as string) ?? base.description
+        areaBadges.push({
+          ...base,
+          name: `${areaDisplay}·${prosName}`,
+          description: `「${areaDisplay}」${prosDesc}`,
+        })
       }
     }
     return [...STATIC_BADGE_DEFS, ...areaBadges]
-  }, [areas])
+  }, [areas, t])
 
   const badgesByCategory = useMemo(() => {
     const map = new Map<BadgeCategory, BadgeDef[]>()
@@ -492,7 +500,7 @@ export function MilestoneHall() {
                       }}
                     >
                       <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text)', letterSpacing: '0.03em' }}>
-                        {cat}
+                        {(t[`badge_cat_${cat}` as keyof typeof t] as string) ?? cat}
                       </span>
                       <span
                         style={{
@@ -675,10 +683,10 @@ function BadgeTile({
             }}
           >
             <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--color-text)', marginBottom: 2 }}>
-              {def.name}
+              {(t[`badge_name_${def.id}` as keyof typeof t] as string) ?? def.name}
             </div>
             <div style={{ fontSize: 11, color: 'var(--color-text-dim)', lineHeight: 1.4 }}>
-              {def.description}
+              {(t[`badge_desc_${def.id}` as keyof typeof t] as string) ?? def.description}
             </div>
             {earned && dateStr && (
               <div style={{ fontSize: 10, color: 'var(--color-accent)', marginTop: 4 }}>
