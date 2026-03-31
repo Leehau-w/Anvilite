@@ -836,10 +836,11 @@ function EditMilestoneModal({
   onDelete: () => void
 }) {
   const [desc, setDesc] = useState('')
+  const [confirmDelete, setConfirmDelete] = useState(false)
   const t = useT()
 
   React.useEffect(() => {
-    if (event) setDesc(event.details.description ?? '')
+    if (event) { setDesc(event.details.description ?? ''); setConfirmDelete(false) }
   }, [event])
 
   return (
@@ -894,10 +895,18 @@ function EditMilestoneModal({
               }}
             />
             <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-              <button onClick={onDelete}
-                style={{ width: 36, height: 36, borderRadius: 'var(--radius-md)', border: '1px solid var(--color-danger)', background: 'transparent', color: 'var(--color-danger)', cursor: 'pointer', fontSize: 13, flexShrink: 0 }}
+              <button onClick={() => { if (confirmDelete) { onDelete() } else { setConfirmDelete(true); setTimeout(() => setConfirmDelete(false), 3000) } }}
+                style={{
+                  height: 36, borderRadius: 'var(--radius-md)', flexShrink: 0, cursor: 'pointer', fontSize: 12, fontWeight: confirmDelete ? 600 : 400,
+                  padding: confirmDelete ? '0 12px' : '0',
+                  width: confirmDelete ? 'auto' : 36,
+                  border: `1px solid var(--color-danger)`,
+                  background: confirmDelete ? 'var(--color-danger)' : 'transparent',
+                  color: confirmDelete ? 'white' : 'var(--color-danger)',
+                  transition: 'all 0.15s',
+                }}
                 title={t.habit_deletePerm}
-              >✕</button>
+              >{confirmDelete ? t.habit_deleteConfirm : '✕'}</button>
               <button onClick={onClose}
                 style={{ flex: 1, height: 36, borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', background: 'transparent', color: 'var(--color-text-dim)', cursor: 'pointer', fontSize: 13 }}
               >{t.milestone_createCancel}</button>
