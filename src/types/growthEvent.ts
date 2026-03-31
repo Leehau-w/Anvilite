@@ -24,6 +24,11 @@ export interface GrowthEvent {
     prosperityLevel?: number
     consecutiveCount?: number
     description?: string
+    // Milestone inscription data
+    sourceType?: 'task' | 'habit'
+    difficulty?: number
+    totalCompletions?: number
+    durationDays?: number  // days since creation
   }
   isMilestone: boolean
   timestamp: string

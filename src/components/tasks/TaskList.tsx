@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { useTaskStore } from '@/stores/taskStore'
 import { useAreaStore } from '@/stores/areaStore'
 import { useHabitStore } from '@/stores/habitStore'
+import { useGrowthEventStore } from '@/stores/growthEventStore'
 import { TaskItem } from './TaskItem'
 import { QuickInput } from './QuickInput'
 import { TaskDrawer } from './TaskDrawer'
@@ -502,7 +503,8 @@ function HabitsTab({
   onAdd: () => void
   onEdit: (h: Habit) => void
 }) {
-  const { habits, pauseHabit, resumeHabit, hideHabit, unhideHabit, deleteHabit, restoreHabit, permanentlyDeleteHabit } = useHabitStore()
+  const { habits, pauseHabit, resumeHabit, hideHabit, unhideHabit, deleteHabit, restoreHabit, permanentlyDeleteHabit, masterHabit } = useHabitStore()
+  const { addEvent } = useGrowthEventStore()
   const tr = useT()
   const { showToast } = useToast()
   const [hiddenMode, setHiddenMode] = useState(false)
@@ -521,7 +523,43 @@ function HabitsTab({
 
   function handleDelete(id: string) {
     deleteHabit(id)
-    showToast(tr.habit_toastHidden)
+  }
+
+  function handleMaster(habit: Habit) {
+    const days = Math.floor((Date.now() - new Date(habit.createdAt).getTime()) / 86400000)
+    addEvent({
+      type: 'custom_milestone',
+      title: habit.title,
+      details: {
+        sourceType: 'habit',
+        categoryName: habit.category,
+        difficulty: habit.difficulty,
+        consecutiveCount: habit.consecutiveCount,
+        totalCompletions: habit.totalCompletions,
+        durationDays: days,
+      },
+      isMilestone: true,
+    })
+    masterHabit(habit.id)
+    showToast(tr.habit_masterToast(habit.title))
+  }
+
+  function handleInscribe(habit: Habit) {
+    const days = Math.floor((Date.now() - new Date(habit.createdAt).getTime()) / 86400000)
+    addEvent({
+      type: 'custom_milestone',
+      title: habit.title,
+      details: {
+        sourceType: 'habit',
+        categoryName: habit.category,
+        difficulty: habit.difficulty,
+        consecutiveCount: habit.consecutiveCount,
+        totalCompletions: habit.totalCompletions,
+        durationDays: days,
+      },
+      isMilestone: true,
+    })
+    showToast(`⭐ ${habit.title}`)
   }
 
   return (
@@ -654,6 +692,7 @@ function HabitsTab({
                   <HabitRow key={h.id} habit={h}
                     onEdit={() => onEdit(h)} onPause={() => pauseHabit(h.id)}
                     onHide={() => handleHide(h.id)} onDelete={() => handleDelete(h.id)}
+                    onMaster={() => handleMaster(h)} onInscribe={() => handleInscribe(h)}
                   />
                 ))}
               </AnimatePresence>
@@ -667,6 +706,7 @@ function HabitsTab({
                   <HabitRow key={h.id} habit={h}
                     onEdit={() => onEdit(h)} onResume={() => resumeHabit(h.id)}
                     onHide={() => handleHide(h.id)} onDelete={() => handleDelete(h.id)}
+                    onMaster={() => handleMaster(h)} onInscribe={() => handleInscribe(h)}
                   />
                 ))}
               </AnimatePresence>
@@ -707,6 +747,8 @@ function HabitRow({
   onResume,
   onHide,
   onDelete,
+  onMaster,
+  onInscribe,
   dim,
 }: {
   habit: Habit
@@ -715,6 +757,8 @@ function HabitRow({
   onResume?: () => void
   onHide?: () => void
   onDelete?: () => void
+  onMaster?: () => void
+  onInscribe?: () => void
   dim?: boolean
 }) {
   const tr = useT()
@@ -755,6 +799,8 @@ function HabitRow({
         {onEdit && <HabitIconBtn onClick={onEdit} title={tr.habit_edit} color="var(--color-secondary)">✏️</HabitIconBtn>}
         {onPause && <HabitIconBtn onClick={onPause} title={tr.habit_pause} color="var(--color-text-dim)">⏸</HabitIconBtn>}
         {onResume && <HabitIconBtn onClick={onResume} title={tr.habit_resume} color="var(--color-success)">▶</HabitIconBtn>}
+        {onInscribe && <HabitIconBtn onClick={onInscribe} title={tr.habit_inscribe} color="var(--color-xp)">⭐</HabitIconBtn>}
+        {onMaster && <HabitIconBtn onClick={onMaster} title={tr.habit_master} color="var(--color-success)">✅</HabitIconBtn>}
         {onHide && <HabitIconBtn onClick={onHide} title={tr.habit_hide} color="var(--color-text-dim)">🙈</HabitIconBtn>}
         {onDelete && <HabitIconBtn onClick={onDelete} title={tr.habit_delete} color="var(--color-text-dim)">✕</HabitIconBtn>}
       </div>

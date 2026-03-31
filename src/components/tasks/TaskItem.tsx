@@ -146,6 +146,23 @@ export function TaskItem({ task, compact, onEdit }: TaskItemProps) {
     showToast(t.task_toastHidden)
   }
 
+  function handleInscribe(e: React.MouseEvent) {
+    e.stopPropagation()
+    addEvent({
+      type: 'custom_milestone',
+      title: task.title,
+      details: {
+        sourceType: 'task',
+        xpGained: task.xpReward,
+        actualMinutes: task.actualMinutes,
+        categoryName: task.category,
+        difficulty: task.difficulty,
+      },
+      isMilestone: true,
+    })
+    showToast(`⭐ ${task.title}`)
+  }
+
   function handleDeleteDone(e: React.MouseEvent) {
     e.stopPropagation()
     if (!deleteConfirm) {
@@ -349,6 +366,9 @@ export function TaskItem({ task, compact, onEdit }: TaskItemProps) {
                       ⏱
                     </ActionButton>
                   )}
+                  <ActionButton onClick={handleInscribe} color="var(--color-xp)">
+                    ⭐
+                  </ActionButton>
                   <ActionButton onClick={handleHide} color="var(--color-text-dim)">
                     {t.task_hide}
                   </ActionButton>

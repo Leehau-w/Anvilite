@@ -109,6 +109,24 @@ export const zh = {
   habit_deletePerm: '永久删除',
   habit_master: '完成并归档',
   habits_mastered: '已养成',
+  habit_inscribe: '铭刻为里程碑',
+  habit_masterTitle: (title: string) => `将「${title}」标记为已养成`,
+  habit_masterToast: (title: string) => `🎉 ${title} 已养成！`,
+  habit_durationLabel: (d: number) => {
+    const y = Math.floor(d / 365)
+    const m = Math.floor((d % 365) / 30)
+    const dd = d % 30
+    const parts: string[] = []
+    if (y > 0) parts.push(`${y}年`)
+    if (m > 0) parts.push(`${m}月`)
+    parts.push(`${dd}天`)
+    return `坚持 ${parts.join('')}`
+  },
+  task_inscribe: '铭刻为里程碑',
+  inscribe_addNote: '添加感想（选填）...',
+  inscribe_cancel: '取消',
+  inscribe_confirm: '铭刻 ⭐',
+  inscribe_autoMilestone: '同时铭刻为里程碑',
   habits_trashEmpty: '没有已删除的习惯',
   habits_trashNote: '已删除的习惯可以恢复或永久删除',
   habits_hiddenEmpty: '没有已隐藏的习惯',

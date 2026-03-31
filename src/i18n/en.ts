@@ -111,6 +111,24 @@ export const en: Translations = {
   habit_deletePerm: 'Delete permanently',
   habit_master: 'Mark as Mastered',
   habits_mastered: 'Mastered',
+  habit_inscribe: 'Inscribe as Milestone',
+  habit_masterTitle: (title: string) => `Mark "${title}" as Mastered`,
+  habit_masterToast: (title: string) => `🎉 ${title} mastered!`,
+  habit_durationLabel: (d: number) => {
+    const y = Math.floor(d / 365)
+    const m = Math.floor((d % 365) / 30)
+    const dd = d % 30
+    const parts: string[] = []
+    if (y > 0) parts.push(`${y}y`)
+    if (m > 0) parts.push(`${m}mo`)
+    parts.push(`${dd}d`)
+    return `Sustained ${parts.join(' ')}`
+  },
+  task_inscribe: 'Inscribe as Milestone',
+  inscribe_addNote: 'Add a note (optional)...',
+  inscribe_cancel: 'Cancel',
+  inscribe_confirm: 'Inscribe ⭐',
+  inscribe_autoMilestone: 'Also inscribe as milestone',
   habits_trashEmpty: 'No deleted habits',
   habits_trashNote: 'Deleted habits can be restored or permanently removed',
   habits_hiddenEmpty: 'No hidden habits',
