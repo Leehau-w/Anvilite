@@ -57,7 +57,7 @@ export function InteriorSpace({ area, prosperity, onExit }: InteriorSpaceProps) 
   // ── 区域数据 ──────────────────────────────────────────────────────
   const areaTasks = isMilestone
     ? []
-    : tasks.filter((t) => !t.deletedAt && !t.isHidden && t.category === area.category)
+    : tasks.filter((t) => !t.deletedAt && !t.isHidden && !t.parentId && t.category === area.category)
 
   const activeTasks = areaTasks.filter((t) => t.status === 'doing')
   const todoTasks = areaTasks.filter((t) => t.status === 'todo')
@@ -69,10 +69,10 @@ export function InteriorSpace({ area, prosperity, onExit }: InteriorSpaceProps) 
 
   const areaHabits = isMilestone
     ? []
-    : habits.filter((h) => h.status !== 'archived' && h.category === area.category)
+    : habits.filter((h) => h.status !== 'archived' && !h.parentId && h.category === area.category)
 
   const todayHabits = areaHabits.filter((h) => h.status === 'active')
-  const completedHabits = areaHabits.filter((h) => h.status === 'completed_today')
+  const completedHabits = habits.filter((h) => h.status === 'completed_today' && !h.parentId && h.category === area.category)
 
   const visibleHabits = showAllHabits ? areaHabits.filter((h) => h.status !== 'archived') : todayHabits
 
@@ -316,6 +316,7 @@ export function InteriorSpace({ area, prosperity, onExit }: InteriorSpaceProps) 
                             habit={habit}
                             onComplete={() => handleCompleteHabit(habit)}
                             onSkip={() => handleSkipHabit(habit)}
+                            onEdit={() => { setEditHabit(habit); setHabitDrawerOpen(true) }}
                           />
                         ))}
                       </AnimatePresence>
@@ -721,10 +722,12 @@ function InteriorHabitRow({
   habit,
   onComplete,
   onSkip,
+  onEdit,
 }: {
   habit: Habit
   onComplete: () => void
   onSkip: () => void
+  onEdit?: () => void
 }) {
   const t = useT()
   const isDone = habit.status === 'completed_today'
@@ -769,7 +772,7 @@ function InteriorHabitRow({
       </button>
 
       {/* 标题 */}
-      <div style={{ flex: 1, minWidth: 0 }}>
+      <div style={{ flex: 1, minWidth: 0, cursor: onEdit ? 'pointer' : 'default' }} onClick={onEdit}>
         <div
           style={{
             fontSize: 13,

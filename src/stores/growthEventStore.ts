@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { GrowthEvent } from '@/types/growthEvent'
+import { getStoragePrefix } from './accountManager'
 import { generateId } from '@/utils/id'
 
 interface GrowthEventStore {
@@ -51,6 +52,6 @@ export const useGrowthEventStore = create<GrowthEventStore>()(
         }))
       },
     }),
-    { name: 'anvilite-growth-events' }
+    { name: `${getStoragePrefix()}-growth-events` }
   )
 )

@@ -16,6 +16,9 @@ export interface Habit {
   endDate: string | null
   reminderTime: string | null        // HH:mm
   description: string
+  parentId: string | null
+  childIds: string[]
+  nestingLevel: number              // 0=根, 1=子, 2=孙（最多3层）
   status: 'active' | 'completed_today' | 'paused' | 'archived' | 'mastered'
   isHidden: boolean
   deletedAt: string | null
@@ -25,6 +28,7 @@ export interface Habit {
   totalCompletions: number
   toleranceCharges: number           // 0或1
   toleranceNextAt: number            // 下次获得容错所需连续次数
+  weeklyCompletionCount: number       // 本周已完成次数（仅 weekly flexible 使用）
   lastCompletedAt: string | null
   lastDueAt: string | null
   createdAt: string
@@ -33,15 +37,3 @@ export interface Habit {
 
 export type HabitRepeatType = Habit['repeatType']
 export type HabitStatus = Habit['status']
-
-export const REPEAT_TYPE_LABELS: Record<HabitRepeatType, string> = {
-  daily: '每天',
-  weekdays: '工作日',
-  weekly: '每周',
-  biweekly: '每两周',
-  monthly: '每月',
-  custom: '自定义',
-  monthly_fixed: '每月固定',
-}
-
-export const WEEKDAY_LABELS = ['', '周一', '周二', '周三', '周四', '周五', '周六', '周日']

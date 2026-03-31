@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import { getStoragePrefix } from './accountManager'
 
 export type CardId = 'quickAdd' | 'stats' | 'tasks' | 'character' | 'habits' | 'growth'
 
@@ -41,7 +42,7 @@ export const useDashboardStore = create<DashboardStore>()(
       resetLayout: () => set({ layout: DEFAULT_LAYOUT }),
     }),
     {
-      name: 'anvilite-dashboard',
+      name: `${getStoragePrefix()}-dashboard`,
       version: 2,
       onRehydrateStorage: () => (state) => {
         if (!state) return

@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { Character } from '@/types/character'
+import { getStoragePrefix } from './accountManager'
 import { applyXP, getTitle } from '@/engines/levelEngine'
 import { getTodayString } from '@/utils/time'
 import { useGrowthEventStore } from './growthEventStore'
@@ -145,6 +146,6 @@ export const useCharacterStore = create<CharacterStore>()(
         return getTitle(character.level, character.titlePreset, character.customTitles)
       },
     }),
-    { name: 'anvilite-character' }
+    { name: `${getStoragePrefix()}-character` }
   )
 )

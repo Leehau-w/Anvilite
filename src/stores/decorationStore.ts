@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import { getStoragePrefix } from './accountManager'
 
 interface DecorationStore {
   /** areaId → 已购买的 decorationId 列表 */
@@ -29,6 +30,6 @@ export const useDecorationStore = create<DecorationStore>()(
 
       getOwned: (areaId) => get().owned[areaId] ?? [],
     }),
-    { name: 'anvilite-decorations' }
+    { name: `${getStoragePrefix()}-decorations` }
   )
 )

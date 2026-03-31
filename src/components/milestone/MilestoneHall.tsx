@@ -144,7 +144,7 @@ export function MilestoneHall() {
         }}
       >
         {/* 左栏：角色 */}
-        <div style={{ width: 240, display: 'flex', flexDirection: 'column', gap: 12, overflow: 'auto' }}>
+        <div style={{ width: 280, paddingLeft: 4, display: 'flex', flexDirection: 'column', gap: 12, overflow: 'auto' }}>
           {/* 角色头像区 */}
           <div
             style={{

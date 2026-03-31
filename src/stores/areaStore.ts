@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { Area, AreaTemplateId } from '@/types/area'
+import { getStoragePrefix } from './accountManager'
 import { AREA_TEMPLATES } from '@/types/area'
 import { generateId } from '@/utils/id'
 import { migrateCategory } from '@/utils/area'
@@ -91,7 +92,7 @@ export const useAreaStore = create<AreaStore>()(
       },
     }),
     {
-      name: 'anvilite-areas',
+      name: `${getStoragePrefix()}-areas`,
       // 迁移：将旧名称"里程碑殿堂"更新为"档案馆"
       onRehydrateStorage: () => (state) => {
         if (!state) return

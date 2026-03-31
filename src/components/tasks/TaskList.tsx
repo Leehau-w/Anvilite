@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useRef } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useTaskStore } from '@/stores/taskStore'
 import { useAreaStore } from '@/stores/areaStore'
@@ -34,6 +34,7 @@ export function TaskList() {
   const visible = tasks.filter((task) => {
     if (task.deletedAt) return false
     if (task.isHidden) return false
+    if (task.parentId) return false  // 子任务在父任务内渲染
     if (activeCategory !== 'ALL' && task.category !== activeCategory) return false
     return true
   })
@@ -522,10 +523,10 @@ function HabitsTab({
   const [hiddenMode, setHiddenMode] = useState(false)
   const [trashMode, setTrashMode] = useState(false)
 
-  const active = habits.filter((h) => !h.deletedAt && !h.isHidden && (h.status === 'active' || h.status === 'completed_today'))
-  const paused = habits.filter((h) => !h.deletedAt && !h.isHidden && h.status === 'paused')
-  const mastered = habits.filter((h) => !h.deletedAt && !h.isHidden && h.status === 'mastered')
-  const hidden = habits.filter((h) => !h.deletedAt && h.isHidden)
+  const active = habits.filter((h) => !h.deletedAt && !h.isHidden && !h.parentId && (h.status === 'active' || h.status === 'completed_today'))
+  const paused = habits.filter((h) => !h.deletedAt && !h.isHidden && !h.parentId && h.status === 'paused')
+  const mastered = habits.filter((h) => !h.deletedAt && !h.isHidden && !h.parentId && h.status === 'mastered')
+  const hidden = habits.filter((h) => !h.deletedAt && !h.parentId && h.isHidden)
   const deleted = habits.filter((h) => !!h.deletedAt).sort((a, b) => new Date(b.deletedAt!).getTime() - new Date(a.deletedAt!).getTime())
 
   function handleHide(id: string) {
@@ -702,7 +703,7 @@ function HabitsTab({
               <AnimatePresence mode="popLayout">
                 {active.map((h) => (
                   <HabitRow key={h.id} habit={h}
-                    onEdit={() => onEdit(h)} onPause={() => pauseHabit(h.id)}
+                    onEdit={onEdit} onPause={() => pauseHabit(h.id)}
                     onHide={() => handleHide(h.id)} onDelete={() => handleDelete(h.id)}
                     onMaster={() => handleMaster(h)} onInscribe={() => handleInscribe(h)}
                   />
@@ -716,7 +717,7 @@ function HabitsTab({
               <AnimatePresence mode="popLayout">
                 {paused.map((h) => (
                   <HabitRow key={h.id} habit={h}
-                    onEdit={() => onEdit(h)} onResume={() => resumeHabit(h.id)}
+                    onEdit={onEdit} onResume={() => resumeHabit(h.id)}
                     onHide={() => handleHide(h.id)} onDelete={() => handleDelete(h.id)}
                     onMaster={() => handleMaster(h)} onInscribe={() => handleInscribe(h)}
                   />
@@ -729,7 +730,7 @@ function HabitsTab({
             <HabitSection title={tr.habits_mastered} count={mastered.length}>
               <AnimatePresence mode="popLayout">
                 {mastered.map((h) => (
-                  <HabitRow key={h.id} habit={h} onEdit={() => onEdit(h)} onDelete={() => handleDelete(h.id)} onInscribe={() => handleInscribe(h)} dim />
+                  <HabitRow key={h.id} habit={h} onEdit={onEdit} onDelete={() => handleDelete(h.id)} onInscribe={() => handleInscribe(h)} dim />
                 ))}
               </AnimatePresence>
             </HabitSection>
@@ -764,7 +765,7 @@ function HabitRow({
   dim,
 }: {
   habit: Habit
-  onEdit?: () => void
+  onEdit?: (habit: Habit) => void
   onPause?: () => void
   onResume?: () => void
   onHide?: () => void
@@ -775,67 +776,120 @@ function HabitRow({
 }) {
   const tr = useT()
   const areas = useAreaStore((s) => s.areas)
+  const allHabits = useHabitStore((s) => s.habits)
   const catLabel = (cat: string) => resolveCatLabel(cat, areas, tr)
   const repeatLabel = getHabitRepeatLabel(habit, tr)
+  const [hovered, setHovered] = useState(false)
+  const [deleteConfirm, setDeleteConfirm] = useState(false)
+  const deleteTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const children = allHabits.filter((c) => !c.deletedAt && !c.isHidden && (habit.childIds ?? []).includes(c.id))
+
+  function handleDeleteClick() {
+    if (!deleteConfirm) {
+      setDeleteConfirm(true)
+      if (deleteTimer.current) clearTimeout(deleteTimer.current)
+      deleteTimer.current = setTimeout(() => setDeleteConfirm(false), 3000)
+      return
+    }
+    setDeleteConfirm(false)
+    onDelete?.()
+  }
 
   return (
-    <motion.div
-      layout
-      initial={{ opacity: 0, y: -6 }}
-      animate={{ opacity: dim ? 0.6 : 1, y: 0 }}
-      exit={{ opacity: 0, height: 0 }}
-      style={{
-        display: 'flex', alignItems: 'center', gap: 8,
-        padding: '8px 10px',
-        background: 'var(--color-surface)',
-        borderRadius: 'var(--radius-md)',
-        border: '1px solid var(--color-border)',
-      }}
-    >
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{
-          fontSize: 13, color: dim ? 'var(--color-text-dim)' : 'var(--color-text)',
-          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-          textDecoration: dim ? 'line-through' : 'none',
-        }}>
-          {habit.title}
+    <div>
+      <motion.div
+        layout
+        initial={{ opacity: 0, y: -6 }}
+        animate={{ opacity: dim ? 0.6 : 1, y: 0 }}
+        exit={{ opacity: 0, height: 0 }}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => { setHovered(false); setDeleteConfirm(false) }}
+        style={{
+          padding: '10px 12px',
+          background: 'var(--color-surface)',
+          borderRadius: 'var(--radius-md)',
+          border: '1px solid var(--color-border)',
+          cursor: onEdit ? 'pointer' : 'default',
+        }}
+        whileHover={{ boxShadow: 'var(--shadow-md)' }}
+        onClick={() => onEdit?.(habit)}
+      >
+        {/* 标题行 */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          {children.length > 0 && (
+            <span style={{ fontSize: 10, color: 'var(--color-text-dim)', flexShrink: 0 }}>▶</span>
+          )}
+          <span style={{
+            fontSize: 14, color: dim ? 'var(--color-text-dim)' : 'var(--color-text)',
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1,
+            textDecoration: dim ? 'line-through' : 'none',
+          }}>
+            {habit.title}
+          </span>
         </div>
-        <div style={{ fontSize: 11, color: 'var(--color-text-dim)', marginTop: 2, display: 'flex', gap: 6 }}>
+        {/* 元信息行 */}
+        <div style={{ fontSize: 12, color: 'var(--color-text-dim)', marginTop: 4, display: 'flex', gap: 12 }}>
           <span>{catLabel(habit.category)}</span>
-          <span>·</span>
           <span>{repeatLabel}</span>
           {habit.consecutiveCount > 0 && (
-            <><span>·</span><span style={{ color: 'var(--color-xp)' }}>🔥{habit.consecutiveCount}</span></>
+            <span style={{ color: 'var(--color-xp)', fontFamily: 'var(--font-num)', fontWeight: 600 }}>🔥{habit.consecutiveCount}</span>
+          )}
+          {(habit.childIds ?? []).length > 0 && (
+            <span>{tr.task_subtasks((habit.childIds ?? []).length)}</span>
           )}
         </div>
-      </div>
-      <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
-        {onEdit && <HabitIconBtn onClick={onEdit} title={tr.habit_edit} color="var(--color-secondary)">✏️</HabitIconBtn>}
-        {onPause && <HabitIconBtn onClick={onPause} title={tr.habit_pause} color="var(--color-text-dim)">⏸</HabitIconBtn>}
-        {onResume && <HabitIconBtn onClick={onResume} title={tr.habit_resume} color="var(--color-success)">▶</HabitIconBtn>}
-        {onInscribe && <HabitIconBtn onClick={onInscribe} title={tr.habit_inscribe} color="var(--color-xp)">⭐</HabitIconBtn>}
-        {onMaster && <HabitIconBtn onClick={onMaster} title={tr.habit_master} color="var(--color-success)">✅</HabitIconBtn>}
-        {onHide && <HabitIconBtn onClick={onHide} title={tr.habit_hide} color="var(--color-text-dim)">🙈</HabitIconBtn>}
-        {onDelete && <HabitIconBtn onClick={onDelete} title={tr.habit_delete} color="var(--color-text-dim)">✕</HabitIconBtn>}
-      </div>
-    </motion.div>
+        {/* hover 操作栏（和 TaskItem 一致的文字按钮风格） */}
+        <AnimatePresence>
+          {hovered && (
+            <motion.div
+              initial={{ opacity: 0, x: -4 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -4 }}
+              transition={{ duration: 0.15 }}
+              style={{ display: 'flex', gap: 4, marginTop: 6 }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {onPause && <HabitTextBtn onClick={onPause}>{tr.habit_pause}</HabitTextBtn>}
+              {onResume && <HabitTextBtn onClick={onResume} color="var(--color-success)">{tr.habit_resume}</HabitTextBtn>}
+              {onInscribe && <HabitTextBtn onClick={onInscribe} color="var(--color-xp)">⭐ {tr.habit_inscribe}</HabitTextBtn>}
+              {onMaster && <HabitTextBtn onClick={onMaster} color="var(--color-success)">{tr.habit_master}</HabitTextBtn>}
+              {onHide && <HabitTextBtn onClick={onHide}>{tr.habit_hide}</HabitTextBtn>}
+              {onDelete && (
+                <HabitTextBtn
+                  onClick={handleDeleteClick}
+                  color={deleteConfirm ? 'var(--color-danger, #dc2626)' : undefined}
+                  borderColor={deleteConfirm ? 'var(--color-danger, #dc2626)' : undefined}
+                >
+                  {deleteConfirm ? tr.habit_deleteConfirm : tr.habit_delete}
+                </HabitTextBtn>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </motion.div>
+
+      {/* 子习惯 */}
+      {children.length > 0 && (
+        <div style={{ paddingLeft: 20, marginTop: 4, display: 'flex', flexDirection: 'column', gap: 4, borderLeft: '2px solid var(--color-border)', marginLeft: 8 }}>
+          {children.map((child) => (
+            <HabitRow key={child.id} habit={child} onEdit={onEdit} dim={dim} />
+          ))}
+        </div>
+      )}
+    </div>
   )
 }
 
-function HabitIconBtn({ children, onClick, title, color }: { children: React.ReactNode; onClick: () => void; title: string; color: string }) {
+function HabitTextBtn({ children, onClick, color, borderColor }: { children: React.ReactNode; onClick: () => void; color?: string; borderColor?: string }) {
   return (
     <button
       onClick={onClick}
-      title={title}
       style={{
-        width: 26, height: 26, borderRadius: 'var(--radius-sm)',
-        border: `1px solid ${color}`, background: 'transparent',
-        color, cursor: 'pointer', fontSize: 11,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        padding: 0, transition: 'opacity 0.15s', opacity: 0.7,
+        fontSize: 11, padding: '2px 8px', borderRadius: 'var(--radius-sm)',
+        border: `1px solid ${borderColor ?? 'var(--color-border)'}`, background: 'transparent',
+        color: color ?? 'var(--color-text-dim)', cursor: 'pointer', transition: 'all 0.15s', whiteSpace: 'nowrap',
       }}
-      onMouseEnter={(e) => { e.currentTarget.style.opacity = '1' }}
-      onMouseLeave={(e) => { e.currentTarget.style.opacity = '0.7' }}
     >
       {children}
     </button>

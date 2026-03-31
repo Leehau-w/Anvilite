@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import { AnimatePresence, motion } from 'framer-motion'
 import { Drawer } from '@/components/ui/Drawer'
 import { StarRating } from '@/components/ui/StarRating'
 import { CategorySelect } from '@/components/ui/CategorySelect'
@@ -42,11 +43,13 @@ const TODAY = new Date().toISOString().split('T')[0]
 const REPEAT_OPTIONS: UIRepeatType[] = ['daily', 'weekdays', 'weekly', 'biweekly', 'monthly', 'custom']
 
 export function HabitDrawer({ open, onClose, editHabit, defaultCategory }: HabitDrawerProps) {
-  const { addHabit, updateHabit } = useHabitStore()
+  const { addHabit, updateHabit, deleteHabit } = useHabitStore()
+  const allHabits = useHabitStore((s) => s.habits)
   const { addEvent } = useGrowthEventStore()
   const { showToast } = useToast()
   const getAreaCategories = useAreaStore((s) => s.getAreaCategories)
   const t = useT()
+  const [subHabitInput, setSubHabitInput] = useState('')
 
   function makeDefault(): FormData {
     const cats = getAreaCategories()
@@ -384,6 +387,115 @@ export function HabitDrawer({ open, onClose, editHabit, defaultCategory }: Habit
             ⭐ {t.habit_inscribe}
           </button>
         )}
+
+        {/* 子项管理（编辑时 + 层级 < 2） */}
+        {editHabit && (editHabit.nestingLevel ?? 0) < 2 && (() => {
+          const children = allHabits.filter((c) => !c.deletedAt && (editHabit.childIds ?? []).includes(c.id))
+          return (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <label style={{ fontSize: 12, color: 'var(--color-text-dim)' }}>{t.subtask_add}</label>
+              {children.length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <AnimatePresence>
+                    {children.map((child) => (
+                      <motion.div
+                        key={child.id}
+                        initial={{ opacity: 0, y: -8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, x: 40 }}
+                        style={{
+                          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                          padding: '6px 10px', borderRadius: 'var(--radius-sm)',
+                          border: '1px solid var(--color-border)', background: 'var(--color-bg)', fontSize: 13,
+                        }}
+                      >
+                        <span style={{ color: 'var(--color-text)' }}>{child.title}</span>
+                        <button
+                          type="button"
+                          onClick={() => deleteHabit(child.id)}
+                          style={{ background: 'none', border: 'none', color: 'var(--color-text-dim)', cursor: 'pointer', fontSize: 12, padding: '0 4px' }}
+                        >
+                          ✕
+                        </button>
+                      </motion.div>
+                    ))}
+                  </AnimatePresence>
+                </div>
+              )}
+              <div style={{ display: 'flex', gap: 6 }}>
+                <input
+                  value={subHabitInput}
+                  onChange={(e) => setSubHabitInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault()
+                      if (!subHabitInput.trim()) return
+                      addHabit({
+                        parentId: editHabit.id,
+                        title: subHabitInput.trim(),
+                        category: editHabit.category,
+                        difficulty: editHabit.difficulty,
+                        repeatType: editHabit.repeatType,
+                        customIntervalDays: editHabit.customIntervalDays,
+                        weeklyDays: editHabit.weeklyDays,
+                        weeklyMode: editHabit.weeklyMode,
+                        weeklyFlexibleCount: editHabit.weeklyFlexibleCount,
+                        monthlyDays: editHabit.monthlyDays,
+                        targetCount: editHabit.targetCount,
+                        startDate: editHabit.startDate,
+                        endDate: editHabit.endDate,
+                        reminderTime: editHabit.reminderTime,
+                        estimatedMinutes: editHabit.estimatedMinutes,
+                        description: '',
+                      })
+                      setSubHabitInput('')
+                    }
+                  }}
+                  placeholder={t.subtask_placeholder}
+                  style={{
+                    flex: 1, height: 32, padding: '0 10px', borderRadius: 'var(--radius-md)',
+                    border: '1px solid var(--color-border)', background: 'var(--color-bg)',
+                    color: 'var(--color-text)', fontSize: 13, outline: 'none',
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!subHabitInput.trim()) return
+                    addHabit({
+                      parentId: editHabit.id,
+                      title: subHabitInput.trim(),
+                      category: editHabit.category,
+                      difficulty: editHabit.difficulty,
+                      repeatType: editHabit.repeatType,
+                      customIntervalDays: editHabit.customIntervalDays,
+                      weeklyDays: editHabit.weeklyDays,
+                      weeklyMode: editHabit.weeklyMode,
+                      weeklyFlexibleCount: editHabit.weeklyFlexibleCount,
+                      monthlyDays: editHabit.monthlyDays,
+                      targetCount: editHabit.targetCount,
+                      startDate: editHabit.startDate,
+                      endDate: editHabit.endDate,
+                      reminderTime: editHabit.reminderTime,
+                      estimatedMinutes: editHabit.estimatedMinutes,
+                      description: '',
+                    })
+                    setSubHabitInput('')
+                  }}
+                  disabled={!subHabitInput.trim()}
+                  style={{
+                    height: 32, padding: '0 12px', borderRadius: 'var(--radius-md)', border: 'none',
+                    background: subHabitInput.trim() ? 'var(--color-accent)' : 'var(--color-border)',
+                    color: subHabitInput.trim() ? 'white' : 'var(--color-text-dim)',
+                    fontSize: 12, fontWeight: 600, cursor: subHabitInput.trim() ? 'pointer' : 'default',
+                  }}
+                >
+                  +
+                </button>
+              </div>
+            </div>
+          )
+        })()}
 
         {/* 按钮 */}
         <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>

@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { Habit } from '@/types/habit'
+import { getStoragePrefix } from './accountManager'
 import { generateId } from '@/utils/id'
 import { migrateCategory } from '@/utils/area'
 import { isHabitDueToday, calculateNewStreak, calculateToleranceUpdate } from '@/engines/habitEngine'
@@ -8,7 +9,7 @@ import { calculateHabitXP } from '@/engines/xpEngine'
 
 interface HabitStore {
   habits: Habit[]
-  addHabit: (partial: Omit<Habit, 'id' | 'status' | 'isHidden' | 'deletedAt' | 'timerStartedAt' | 'actualMinutes' | 'consecutiveCount' | 'totalCompletions' | 'toleranceCharges' | 'toleranceNextAt' | 'lastCompletedAt' | 'lastDueAt' | 'currentCycleCount' | 'createdAt' | 'updatedAt'>) => void
+  addHabit: (partial: Omit<Habit, 'id' | 'status' | 'isHidden' | 'deletedAt' | 'timerStartedAt' | 'actualMinutes' | 'consecutiveCount' | 'totalCompletions' | 'toleranceCharges' | 'toleranceNextAt' | 'weeklyCompletionCount' | 'lastCompletedAt' | 'lastDueAt' | 'currentCycleCount' | 'parentId' | 'childIds' | 'nestingLevel' | 'createdAt' | 'updatedAt'> & { parentId?: string | null }) => void
   updateHabit: (id: string, patch: Partial<Habit>) => void
   deleteHabit: (id: string) => void
   restoreHabit: (id: string) => void
@@ -31,11 +32,29 @@ interface HabitStore {
   getTodayStats: () => { completed: number; totalXP: number }
 }
 
+/** 收集习惯及其所有子孙 ID */
+function collectHabitDescendants(habits: Habit[], rootId: string): Set<string> {
+  const ids = new Set<string>([rootId])
+  const queue = [rootId]
+  while (queue.length > 0) {
+    const pid = queue.shift()!
+    const parent = habits.find((h) => h.id === pid)
+    if (!parent) continue
+    for (const cid of parent.childIds) {
+      if (!ids.has(cid)) { ids.add(cid); queue.push(cid) }
+    }
+  }
+  return ids
+}
+
 function makeDefaultHabit(partial: Parameters<HabitStore['addHabit']>[0]): Habit {
   const now = new Date().toISOString()
   return {
     ...partial,
     id: generateId(),
+    parentId: partial.parentId ?? null,
+    childIds: [],
+    nestingLevel: 0,
     status: 'active',
     isHidden: false,
     deletedAt: null,
@@ -45,6 +64,7 @@ function makeDefaultHabit(partial: Parameters<HabitStore['addHabit']>[0]): Habit
     totalCompletions: 0,
     toleranceCharges: 0,
     toleranceNextAt: 0,
+    weeklyCompletionCount: 0,
     currentCycleCount: 0,
     lastCompletedAt: null,
     lastDueAt: null,
@@ -60,6 +80,18 @@ export const useHabitStore = create<HabitStore>()(
 
       addHabit: (partial) => {
         const habit = makeDefaultHabit(partial)
+        if (habit.parentId) {
+          const parent = get().habits.find((h) => h.id === habit.parentId)
+          if (!parent || parent.nestingLevel >= 2) return // 超过 3 层
+          habit.nestingLevel = parent.nestingLevel + 1
+          if (!partial.category) habit.category = parent.category
+          set((s) => ({
+            habits: [habit, ...s.habits.map((h) =>
+              h.id === habit.parentId ? { ...h, childIds: [...h.childIds, habit.id], updatedAt: new Date().toISOString() } : h
+            )],
+          }))
+          return
+        }
         set((s) => ({ habits: [...s.habits, habit] }))
       },
 
@@ -72,7 +104,11 @@ export const useHabitStore = create<HabitStore>()(
       },
 
       deleteHabit: (id) => {
-        get().updateHabit(id, { deletedAt: new Date().toISOString() })
+        const now = new Date().toISOString()
+        const ids = collectHabitDescendants(get().habits, id)
+        set((s) => ({
+          habits: s.habits.map((h) => ids.has(h.id) ? { ...h, deletedAt: now, updatedAt: now } : h),
+        }))
       },
 
       restoreHabit: (id) => {
@@ -80,7 +116,8 @@ export const useHabitStore = create<HabitStore>()(
       },
 
       permanentlyDeleteHabit: (id) => {
-        set((s) => ({ habits: s.habits.filter((h) => h.id !== id) }))
+        const ids = collectHabitDescendants(get().habits, id)
+        set((s) => ({ habits: s.habits.filter((h) => !ids.has(h.id)) }))
       },
 
       pauseHabit: (id) => {
@@ -146,6 +183,18 @@ export const useHabitStore = create<HabitStore>()(
         const tolerance = calculateToleranceUpdate(habit, 'complete')
         const { xp, ore } = calculateHabitXP(habit.difficulty, newStreak, habit.repeatType)
 
+        // 每周弹性习惯：累计本周完成次数
+        let newWeeklyCount = habit.weeklyCompletionCount ?? 0
+        if (habit.repeatType === 'weekly' && habit.weeklyMode === 'flexible') {
+          const today = new Date()
+          const dow = today.getDay() === 0 ? 7 : today.getDay()
+          const monday = new Date(today)
+          monday.setDate(today.getDate() - (dow - 1))
+          monday.setHours(0, 0, 0, 0)
+          const lastDone = habit.lastCompletedAt ? new Date(habit.lastCompletedAt) : null
+          newWeeklyCount = (!lastDone || lastDone < monday) ? 1 : newWeeklyCount + 1
+        }
+
         set((s) => ({
           habits: s.habits.map((h) =>
             h.id === id
@@ -156,6 +205,7 @@ export const useHabitStore = create<HabitStore>()(
                   totalCompletions: h.totalCompletions + 1,
                   toleranceCharges: tolerance.charges,
                   toleranceNextAt: tolerance.nextAt,
+                  weeklyCompletionCount: newWeeklyCount,
                   currentCycleCount: 0,
                   lastCompletedAt: now,
                   lastDueAt: now,
@@ -221,7 +271,7 @@ export const useHabitStore = create<HabitStore>()(
 
       getTodayHabits: () => {
         return get().habits.filter(
-          (h) => !h.deletedAt && !h.isHidden && h.status === 'active' && isHabitDueToday(h)
+          (h) => !h.deletedAt && !h.isHidden && !h.parentId && h.status === 'active' && isHabitDueToday(h)
         )
       },
 
@@ -246,19 +296,40 @@ export const useHabitStore = create<HabitStore>()(
       },
     }),
     {
-      name: 'anvilite-habits',
+      name: `${getStoragePrefix()}-habits`,
       onRehydrateStorage: () => (state) => {
         if (!state) return
+        const now = new Date()
+        const today = now.toISOString().split('T')[0]
+        // 本周一 00:00
+        const dow = now.getDay() === 0 ? 7 : now.getDay()
+        const monday = new Date(now)
+        monday.setDate(now.getDate() - (dow - 1))
+        monday.setHours(0, 0, 0, 0)
+
         state.habits = state.habits.map((h) => {
+          // completed_today → active if completed on a previous day
+          const staleCompleted =
+            h.status === 'completed_today' &&
+            (!h.lastCompletedAt || !h.lastCompletedAt.startsWith(today))
+          // 跨周重置 weeklyCompletionCount
+          const weeklyCount = h.weeklyCompletionCount ?? 0
+          const weeklyStale = weeklyCount > 0 &&
+            (!h.lastCompletedAt || new Date(h.lastCompletedAt) < monday)
           const patched: Habit = {
             isHidden: h.isHidden ?? (h.status === 'archived'),
             deletedAt: h.deletedAt ?? null,
             timerStartedAt: h.timerStartedAt ?? null,
             actualMinutes: h.actualMinutes ?? 0,
+            weeklyCompletionCount: 0,
+            parentId: null,
+            childIds: [],
+            nestingLevel: 0,
             ...h,
             category: migrateCategory(h.category),
-            // migrate archived → paused + hidden
-            status: h.status === 'archived' ? 'paused' : h.status,
+            // migrate archived → paused + hidden; reset stale completed_today → active
+            status: h.status === 'archived' ? 'paused' : staleCompleted ? 'active' : h.status,
+            weeklyCompletionCount: weeklyStale ? 0 : weeklyCount,
           }
           return patched
         })

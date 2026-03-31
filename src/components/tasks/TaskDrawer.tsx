@@ -9,6 +9,7 @@ import { useGrowthEventStore } from '@/stores/growthEventStore'
 import { getTomorrowString } from '@/utils/time'
 import { useT } from '@/i18n'
 import { useToast } from '@/components/feedback/Toast'
+import { AnimatePresence, motion } from 'framer-motion'
 
 interface TaskDrawerProps {
   open: boolean
@@ -30,11 +31,13 @@ type FormData = {
 
 
 export function TaskDrawer({ open, onClose, editTask, initialCategory }: TaskDrawerProps) {
-  const { addTask, updateTask, lastCategory } = useTaskStore()
+  const { addTask, updateTask, deleteTask, lastCategory } = useTaskStore()
+  const allTasks = useTaskStore((s) => s.tasks)
   const { addEvent } = useGrowthEventStore()
   const { showToast } = useToast()
   const getAreaCategories = useAreaStore((s) => s.getAreaCategories)
   const t = useT()
+  const [subtaskInput, setSubtaskInput] = useState('')
 
   const defaultForm: FormData = {
     title: editTask?.title ?? '',
@@ -260,6 +263,95 @@ export function TaskDrawer({ open, onClose, editTask, initialCategory }: TaskDra
             }}
           />
         </div>
+
+        {/* 子项管理（编辑时 + 层级 < 2） */}
+        {editTask && editTask.nestingLevel < 2 && (() => {
+          const children = allTasks.filter((c) => !c.deletedAt && editTask.childIds.includes(c.id))
+          return (
+            <div className="flex flex-col gap-1.5">
+              <label style={{ fontSize: 12, color: 'var(--color-text-dim)' }}>{t.subtask_add}</label>
+              {/* 已有子项 */}
+              {children.length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <AnimatePresence>
+                    {children.map((child) => (
+                      <motion.div
+                        key={child.id}
+                        initial={{ opacity: 0, y: -8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, x: 40 }}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          padding: '6px 10px',
+                          borderRadius: 'var(--radius-sm)',
+                          border: '1px solid var(--color-border)',
+                          background: 'var(--color-bg)',
+                          fontSize: 13,
+                        }}
+                      >
+                        <span style={{ color: child.status === 'done' ? 'var(--color-text-dim)' : 'var(--color-text)', textDecoration: child.status === 'done' ? 'line-through' : 'none' }}>
+                          {child.title}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => deleteTask(child.id)}
+                          style={{ background: 'none', border: 'none', color: 'var(--color-text-dim)', cursor: 'pointer', fontSize: 12, padding: '0 4px' }}
+                        >
+                          ✕
+                        </button>
+                      </motion.div>
+                    ))}
+                  </AnimatePresence>
+                </div>
+              )}
+              {/* 添加新子项 */}
+              <div style={{ display: 'flex', gap: 6 }}>
+                <input
+                  value={subtaskInput}
+                  onChange={(e) => setSubtaskInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault()
+                      if (!subtaskInput.trim()) return
+                      addTask({ title: subtaskInput.trim(), parentId: editTask.id, category: editTask.category, difficulty: editTask.difficulty })
+                      setSubtaskInput('')
+                    }
+                  }}
+                  placeholder={t.subtask_placeholder}
+                  style={{
+                    flex: 1, height: 32, padding: '0 10px',
+                    borderRadius: 'var(--radius-md)',
+                    border: '1px solid var(--color-border)',
+                    background: 'var(--color-bg)',
+                    color: 'var(--color-text)',
+                    fontSize: 13, outline: 'none',
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!subtaskInput.trim()) return
+                    addTask({ title: subtaskInput.trim(), parentId: editTask.id, category: editTask.category, difficulty: editTask.difficulty })
+                    setSubtaskInput('')
+                  }}
+                  disabled={!subtaskInput.trim()}
+                  style={{
+                    height: 32, padding: '0 12px',
+                    borderRadius: 'var(--radius-md)',
+                    border: 'none',
+                    background: subtaskInput.trim() ? 'var(--color-accent)' : 'var(--color-border)',
+                    color: subtaskInput.trim() ? 'white' : 'var(--color-text-dim)',
+                    fontSize: 12, fontWeight: 600, cursor: subtaskInput.trim() ? 'pointer' : 'default',
+                  }}
+                >
+                  +
+                </button>
+              </div>
+            </div>
+          )
+        })()}
 
         {/* 铭刻为里程碑（编辑已完成/进行中任务时显示） */}
         {editTask && (editTask.status === 'done' || editTask.status === 'doing') && (

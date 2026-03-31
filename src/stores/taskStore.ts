@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { Task } from '@/types/task'
+import { getStoragePrefix } from './accountManager'
 import { generateId } from '@/utils/id'
 import { getTomorrowString } from '@/utils/time'
 import { migrateCategory } from '@/utils/area'
@@ -57,6 +58,21 @@ function makeDefaultTask(partial: Partial<Task> & { title: string }): Task {
   }
 }
 
+/** 收集任务及其所有子孙 ID */
+function collectDescendants(tasks: Task[], rootId: string): Set<string> {
+  const ids = new Set<string>([rootId])
+  const queue = [rootId]
+  while (queue.length > 0) {
+    const pid = queue.shift()!
+    const parent = tasks.find((t) => t.id === pid)
+    if (!parent) continue
+    for (const cid of parent.childIds) {
+      if (!ids.has(cid)) { ids.add(cid); queue.push(cid) }
+    }
+  }
+  return ids
+}
+
 export const useTaskStore = create<TaskStore>()(
   persist(
     (set, get) => ({
@@ -65,6 +81,19 @@ export const useTaskStore = create<TaskStore>()(
 
       addTask: (partial) => {
         const task = makeDefaultTask(partial)
+        if (task.parentId) {
+          const parent = get().tasks.find((t) => t.id === task.parentId)
+          if (!parent || parent.nestingLevel >= 2) return task // 超过 3 层限制
+          task.nestingLevel = parent.nestingLevel + 1
+          if (!partial.category) task.category = parent.category
+          set((s) => ({
+            tasks: [task, ...s.tasks.map((t) =>
+              t.id === task.parentId ? { ...t, childIds: [...t.childIds, task.id], updatedAt: new Date().toISOString() } : t
+            )],
+            lastCategory: task.category,
+          }))
+          return task
+        }
         set((s) => ({
           tasks: [task, ...s.tasks],
           lastCategory: task.category,
@@ -81,11 +110,11 @@ export const useTaskStore = create<TaskStore>()(
       },
 
       deleteTask: (id) => {
+        const now = new Date().toISOString()
+        const ids = collectDescendants(get().tasks, id)
         set((s) => ({
           tasks: s.tasks.map((t) =>
-            t.id === id
-              ? { ...t, deletedAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
-              : t
+            ids.has(t.id) ? { ...t, deletedAt: now, updatedAt: now } : t
           ),
         }))
       },
@@ -99,7 +128,8 @@ export const useTaskStore = create<TaskStore>()(
       },
 
       permanentlyDeleteTask: (id) => {
-        set((s) => ({ tasks: s.tasks.filter((t) => t.id !== id) }))
+        const ids = collectDescendants(get().tasks, id)
+        set((s) => ({ tasks: s.tasks.filter((t) => !ids.has(t.id)) }))
       },
 
       hideTask: (id) => {
@@ -233,7 +263,7 @@ export const useTaskStore = create<TaskStore>()(
       },
     }),
     {
-      name: 'anvilite-tasks',
+      name: `${getStoragePrefix()}-tasks`,
       onRehydrateStorage: () => (state) => {
         if (!state) return
         state.tasks = state.tasks.map((t) => ({

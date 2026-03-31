@@ -16,6 +16,12 @@ interface DecoShopProps {
   onClose: () => void
 }
 
+function decoT(deco: DecorationDef, t: ReturnType<typeof useT>, field: 'name' | 'desc'): string {
+  const dict = t as Record<string, unknown>
+  const key = `deco_${field}_${deco.id}`
+  return typeof dict[key] === 'string' ? dict[key] as string : field === 'name' ? deco.name : deco.description
+}
+
 export function DecoShop({ area, prosperity, onClose }: DecoShopProps) {
   const t = useT()
   const { character, spendOre } = useCharacterStore()
@@ -42,7 +48,7 @@ export function DecoShop({ area, prosperity, onClose }: DecoShopProps) {
     }
     buy(area.id, deco.id)
     setConfirmDeco(null)
-    showToast(t.decoShop_purchased(deco.name))
+    showToast(t.decoShop_purchased(decoT(deco, t, 'name')))
   }
 
   return (
@@ -57,6 +63,15 @@ export function DecoShop({ area, prosperity, onClose }: DecoShopProps) {
       />
 
       {/* 弹窗 */}
+      <div
+        style={{
+          position: 'fixed',
+          top: '50%',
+          left: '50%',
+          transform: 'translate(-50%, -50%)',
+          zIndex: 801,
+        }}
+      >
       <motion.div
         initial={{ opacity: 0, scale: 0.95, y: 10 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -64,17 +79,12 @@ export function DecoShop({ area, prosperity, onClose }: DecoShopProps) {
         transition={{ duration: 0.2 }}
         onClick={(e) => e.stopPropagation()}
         style={{
-          position: 'fixed',
-          top: '50%',
-          left: '50%',
-          transform: 'translate(-50%, -50%)',
           width: 420,
           maxHeight: '76vh',
           background: 'var(--color-surface)',
           borderRadius: 'var(--radius-xl)',
           border: '1px solid var(--color-border)',
           boxShadow: '0 16px 48px rgba(0,0,0,0.25)',
-          zIndex: 801,
           overflow: 'hidden',
           display: 'flex',
           flexDirection: 'column',
@@ -205,6 +215,7 @@ export function DecoShop({ area, prosperity, onClose }: DecoShopProps) {
           )}
         </div>
       </motion.div>
+      </div>
 
       {/* 购买确认弹窗 */}
       <AnimatePresence>
@@ -236,10 +247,10 @@ export function DecoShop({ area, prosperity, onClose }: DecoShopProps) {
             >
               <div style={{ fontSize: 40, marginBottom: 8 }}>{confirmDeco.icon}</div>
               <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--color-text)', marginBottom: 4 }}>
-                {confirmDeco.name}
+                {decoT(confirmDeco, t, 'name')}
               </div>
               <div style={{ fontSize: 12, color: 'var(--color-text-dim)', marginBottom: 12 }}>
-                {confirmDeco.description}
+                {decoT(confirmDeco, t, 'desc')}
               </div>
               <div style={{ fontSize: 14, marginBottom: 16 }}>
                 <strong style={{ color: 'var(--color-text)', fontFamily: 'var(--font-num)' }}>
@@ -316,7 +327,7 @@ function DecoCard({
     >
       <span style={{ fontSize: 28, filter: locked ? 'grayscale(1)' : 'none' }}>{deco.icon}</span>
       <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text)', textAlign: 'center', lineHeight: 1.2 }}>
-        {deco.name}
+        {decoT(deco, t, 'name')}
       </span>
 
       {owned ? (

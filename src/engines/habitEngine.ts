@@ -101,10 +101,15 @@ export function getNextRefreshText(habit: Habit): string | null {
 }
 
 function getWeekCompletions(habit: Habit): number {
-  // 简化：统计本周(周一到今天)完成次数
-  // 实际应从历史记录中查询，这里基于 totalCompletions 做近似
-  // 真实实现应在 habitStore 中维护
-  return 0
+  if (!habit.lastCompletedAt) return 0
+  const today = new Date()
+  const dayOfWeek = today.getDay() === 0 ? 7 : today.getDay()
+  const monday = new Date(today)
+  monday.setDate(today.getDate() - (dayOfWeek - 1))
+  monday.setHours(0, 0, 0, 0)
+  // 上次完成在本周之前 → 计数已过期
+  if (new Date(habit.lastCompletedAt) < monday) return 0
+  return habit.weeklyCompletionCount ?? 0
 }
 
 /** 计算新的连续次数 */

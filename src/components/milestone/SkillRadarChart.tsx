@@ -26,15 +26,53 @@ function pts(points: { x: number; y: number }[]): string {
   return points.map((p) => `${p.x.toFixed(2)},${p.y.toFixed(2)}`).join(' ')
 }
 
+// ── 标签分行 ─────────────────────────────────────────────────────────────────
+
+/** 将名称按最大字符数分行（中文每字=1，英文按空格断词） */
+function splitLabel(name: string, maxChars = 4): string[] {
+  // 英文：按空格拆成多行，单个词不强制截断
+  if (/[a-zA-Z]/.test(name)) {
+    const words = name.split(' ')
+    return words.length > 1 ? words : [name]
+  }
+  // 中文/其他：每 maxChars 字一行
+  if (name.length <= maxChars) return [name]
+  const lines: string[] = []
+  let remaining = name
+  while (remaining.length > 0) {
+    lines.push(remaining.slice(0, maxChars))
+    remaining = remaining.slice(maxChars)
+  }
+  return lines
+}
+
 // ── 雷达图（≥3 维度） ──────────────────────────────────────────────────────
+
+/** 估算标签到圆心所需最小半径，保证标签不与图形重叠 */
+function calcLabelR(
+  maxR: number,
+  name: string,
+  angleDeg: number,
+  fontSize: number,
+) {
+  const lineH = fontSize + 2
+  const lines = splitLabel(name)
+  const isEn = /[a-zA-Z]/.test(name)
+  const charW = isEn ? fontSize * 0.58 : fontSize * 1.05
+  const halfW = Math.max(...lines.map((l) => l.length)) * charW / 2
+  const halfH = (lines.length * lineH) / 2
+  const θ = (angleDeg - 90) * (Math.PI / 180)
+  // 标签文字块沿径向方向向圆心延伸的最大距离
+  const inward = halfW * Math.abs(Math.cos(θ)) + halfH * Math.abs(Math.sin(θ))
+  return maxR + inward + 8   // 8px 安全间距
+}
 
 function RadarChart({ dimensions, size }: Required<SkillRadarChartProps>) {
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null)
 
   const cx = size / 2
   const cy = size / 2
-  const maxR = size * 0.34          // 留出标签空间
-  const labelR = size * 0.48        // 标签半径
+  const maxR = size * 0.35          // 图形区半径
   const n = dimensions.length
   const maxVal = Math.max(1, ...dimensions.map((d) => d.value))
   // 最大刻度：取 maxVal 上取整到 5 的倍数，至少 5
@@ -148,25 +186,36 @@ function RadarChart({ dimensions, size }: Required<SkillRadarChartProps>) {
 
       {/* 轴标签 */}
       {angles.map((a, i) => {
-        const lp = polar(cx, cy, labelR, a)
         const d = dimensions[i]
         const isHovered = hoveredIdx === i
+        const fontSize = isHovered ? 12 : 10
+        const lineH = fontSize + 2
+        const lines = splitLabel(d.name)
+        const blockH = lines.length * lineH
+        // 位置用基准字号计算，避免 hover 时跳动
+        const labelR = calcLabelR(maxR, d.name, a, 10)
+        const lp = polar(cx, cy, labelR, a)
+        const startY = lp.y - (blockH - lineH) / 2
         return (
           <text
             key={i}
             x={lp.x}
-            y={lp.y}
+            y={startY}
             textAnchor="middle"
             dominantBaseline="middle"
-            fontSize={isHovered ? 10 : 8}
+            fontSize={fontSize}
             fontFamily="var(--font-en)"
             fontWeight={isHovered ? 600 : 400}
             fill={isHovered ? 'var(--color-accent)' : 'var(--color-text-dim)'}
-            style={{ cursor: 'default', transition: 'font-size 0.15s, fill 0.15s' }}
+            style={{ cursor: 'default', transition: 'fill 0.15s' }}
             onMouseEnter={() => setHoveredIdx(i)}
             onMouseLeave={() => setHoveredIdx(null)}
           >
-            {d.name}
+            {lines.map((line, li) => (
+              <tspan key={li} x={lp.x} dy={li === 0 ? 0 : lineH}>
+                {line}
+              </tspan>
+            ))}
           </text>
         )
       })}

@@ -1,5 +1,5 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react'
-import { AnimatePresence, motion, type Variants } from 'framer-motion'
+import { AnimatePresence, motion } from 'framer-motion'
 import { useAreaStore, CANVAS_W } from '@/stores/areaStore'
 import { useTaskStore } from '@/stores/taskStore'
 import { useCharacterStore } from '@/stores/characterStore'
@@ -18,23 +18,6 @@ import { ArchiveSpace } from '@/components/interior/ArchiveSpace'
 import { useT } from '@/i18n'
 import { getAreaDisplayName } from '@/utils/area'
 
-interface MapTransform { x: number; y: number; scale: number }
-
-// AnimatePresence custom 方向：'enter' = 进入区域，'exit' = 返回地图
-const mapVariants: Variants = {
-  initial: (dir: string) => ({ opacity: 0, scale: dir === 'exit' ? 1.15 : 1 }),
-  animate: { opacity: 1, scale: 1, transition: { duration: 0.4, ease: [0.4, 0, 0.2, 1] } },
-  exit: (dir: string) => ({
-    opacity: 0, scale: dir === 'enter' ? 1.15 : 1,
-    transition: { duration: dir === 'enter' ? 0.7 : 0.25, ease: [0.4, 0, 0.2, 1] },
-  }),
-}
-const interiorVariants: Variants = {
-  initial: { opacity: 0 },
-  animate: { opacity: 1, transition: { duration: 0.3, delay: 0.15 } },
-  exit: { opacity: 0, transition: { duration: 0.2 } },
-}
-
 export function WorldMap() {
   const { areas, addArea, updateArea, removeArea, canAddMore, getUsedTemplateIds } = useAreaStore()
   const { tasks } = useTaskStore()
@@ -45,14 +28,10 @@ export function WorldMap() {
   const t = useT()
 
   const viewportRef = useRef<HTMLDivElement>(null)
-  const panStartRef = useRef<{ x: number; y: number; tx: number; ty: number } | null>(null)
-  const didMoveRef = useRef(false)
   const dragAreaRef = useRef<{ areaId: string; startX: number; startY: number; origPos: { x: number; y: number } } | null>(null)
   const prevProsperityRef = useRef<Record<string, number>>({})
   const mountedRef = useRef(false)
-  const transitionDirRef = useRef<'enter' | 'exit'>('enter')
 
-  const [transform, setTransform] = useState<MapTransform>({ x: 0, y: 0, scale: 0.85 })
   const [selectedAreaId, setSelectedAreaId] = useState<string | null>(null)
   const [isEditMode, setIsEditMode] = useState(false)
   const [showAddModal, setShowAddModal] = useState(false)
@@ -62,15 +41,25 @@ export function WorldMap() {
   const [deleteTarget, setDeleteTarget] = useState<Area | null>(null)
   const [glowingAreaIds, setGlowingAreaIds] = useState<Set<string>>(new Set())
   const [isTransitioning, setIsTransitioning] = useState(false)
+  const [vpSize, setVpSize] = useState({ w: 1280, h: 800 })
 
-  // ── 初始化视角 ──────────────────────────────────────────────────
+  // ── 跟踪视口大小 ──────────────────────────────────────────────
   useEffect(() => {
     const vp = viewportRef.current
     if (!vp) return
-    const vpW = vp.clientWidth
-    const vpH = vp.clientHeight
-    setTransform({ scale: 0.85, x: vpW / 2 - 750 * 0.85, y: vpH / 2 - 430 * 0.85 })
+    const ro = new ResizeObserver(([entry]) => {
+      const { width, height } = entry.contentRect
+      if (width > 0 && height > 0) setVpSize({ w: width, h: height })
+    })
+    ro.observe(vp)
+    setVpSize({ w: vp.clientWidth, h: vp.clientHeight })
+    return () => ro.disconnect()
   }, [])
+
+  const CANVAS_H = CANVAS_W * 0.625
+  const autoScale = Math.min(vpSize.w / CANVAS_W, vpSize.h / CANVAS_H, 1) // 不超过 1:1
+  const offsetX = (vpSize.w - CANVAS_W * autoScale) / 2
+  const offsetY = (vpSize.h - CANVAS_H * autoScale) / 2
 
   // ── ESC 键退出区域 ──────────────────────────────────────────────
   useEffect(() => {
@@ -130,56 +119,26 @@ export function WorldMap() {
     return getProsperityInfo(getAreaSkillXP(tasks, area.category))
   }
 
-  // ── 鼠标事件：平移 ──────────────────────────────────────────────
-  const onMouseDown = useCallback((e: React.MouseEvent) => {
-    if ((e.target as HTMLElement).closest('[data-area-node]')) return
-    panStartRef.current = { x: e.clientX, y: e.clientY, tx: transform.x, ty: transform.y }
-    didMoveRef.current = false
-    e.currentTarget.style.cursor = 'grabbing'
-  }, [transform])
-
+  // ── 鼠标事件 ───────────────────────────────────────────────────
   const onMouseMove = useCallback((e: React.MouseEvent) => {
-    if (dragAreaRef.current) {
-      const { areaId, startX, startY, origPos } = dragAreaRef.current
-      const dx = (e.clientX - startX) / transform.scale
-      const dy = (e.clientY - startY) / transform.scale
-      updateArea(areaId, { position: { x: origPos.x + dx, y: origPos.y + dy } })
-      return
-    }
-    if (!panStartRef.current) return
-    const dx = e.clientX - panStartRef.current.x
-    const dy = e.clientY - panStartRef.current.y
-    if (Math.abs(dx) > 3 || Math.abs(dy) > 3) didMoveRef.current = true
-    setTransform((t) => ({ ...t, x: panStartRef.current!.tx + dx, y: panStartRef.current!.ty + dy }))
-  }, [transform.scale])
+    if (!dragAreaRef.current) return
+    const { areaId, startX, startY, origPos } = dragAreaRef.current
+    const dx = (e.clientX - startX) / autoScale
+    const dy = (e.clientY - startY) / autoScale
+    const newX = Math.max(50, Math.min(CANVAS_W - 50, origPos.x + dx))
+    const newY = Math.max(50, Math.min(CANVAS_H - 50, origPos.y + dy))
+    updateArea(areaId, { position: { x: newX, y: newY } })
+  }, [autoScale])
 
   const onMouseUp = useCallback((e: React.MouseEvent) => {
     dragAreaRef.current = null
-    panStartRef.current = null
-    e.currentTarget.style.cursor = ''
-    if (!didMoveRef.current && !(e.target as HTMLElement).closest('[data-area-node]')) {
+    if (!(e.target as HTMLElement).closest('[data-area-node]')) {
       setSelectedAreaId(null)
     }
   }, [])
 
-  const onMouseLeave = useCallback((e: React.MouseEvent) => {
+  const onMouseLeave = useCallback(() => {
     dragAreaRef.current = null
-    panStartRef.current = null
-    e.currentTarget.style.cursor = ''
-  }, [])
-
-  const onWheel = useCallback((e: React.WheelEvent) => {
-    e.preventDefault()
-    const rect = viewportRef.current!.getBoundingClientRect()
-    const px = e.clientX - rect.left
-    const py = e.clientY - rect.top
-    const delta = e.deltaY > 0 ? 0.9 : 1.1
-    setTransform((t) => {
-      const newScale = Math.min(2, Math.max(0.5, t.scale * delta))
-      const cpX = (px - t.x) / t.scale
-      const cpY = (py - t.y) / t.scale
-      return { scale: newScale, x: px - cpX * newScale, y: py - cpY * newScale }
-    })
   }, [])
 
   // ── 区域拖拽 ───────────────────────────────────────────────────
@@ -223,14 +182,16 @@ export function WorldMap() {
   // ── 进入 / 退出区域 ─────────────────────────────────────────────
   function handleEnterArea() {
     if (!selectedAreaId) return
-    transitionDirRef.current = 'enter'
+    setIsTransitioning(true)
     setInteriorAreaId(selectedAreaId)
     setSelectedAreaId(null)
+    setTimeout(() => setIsTransitioning(false), 500)
   }
 
   function handleExitInterior() {
-    transitionDirRef.current = 'exit'
+    setIsTransitioning(true)
     setInteriorAreaId(null)
+    setTimeout(() => setIsTransitioning(false), 400)
   }
 
   const selectedArea = areas.find((a) => a.id === selectedAreaId)
@@ -239,120 +200,109 @@ export function WorldMap() {
   // ── 渲染 ────────────────────────────────────────────────────────
   return (
     <div style={{ width: '100%', height: '100%', position: 'relative', overflow: 'hidden', background: 'var(--color-bg)' }}>
-      <AnimatePresence custom={transitionDirRef.current}>
-        {!interiorAreaId ? (
-          /* ── 地图视图 ─────────────────────────────────────── */
-          <motion.div
-            key="map"
-            custom={transitionDirRef.current}
-            variants={mapVariants}
-            initial="initial"
-            animate="animate"
-            exit="exit"
-            onAnimationStart={() => setIsTransitioning(true)}
-            onAnimationComplete={() => setIsTransitioning(false)}
-            style={{ width: '100%', height: '100%', position: 'absolute', inset: 0 }}
+      {/* ── 地图视图（始终挂载，进入区域时淡出） ──────────────── */}
+      <motion.div
+        animate={{ opacity: interiorAreaId ? 0 : 1, scale: interiorAreaId ? 1.08 : 1 }}
+        transition={{ duration: 0.35, ease: [0.4, 0, 0.2, 1] }}
+        style={{ width: '100%', height: '100%', position: 'absolute', inset: 0, pointerEvents: interiorAreaId ? 'none' : 'auto' }}
+      >
+        {/* 地图视口 */}
+        <div
+          ref={viewportRef}
+          style={{ width: '100%', height: '100%', position: 'relative', overflow: 'hidden', userSelect: 'none', pointerEvents: isTransitioning ? 'none' : 'auto' }}
+          onMouseMove={onMouseMove}
+          onMouseUp={onMouseUp}
+          onMouseLeave={onMouseLeave}
+          onClick={(e) => { if (!(e.target as HTMLElement).closest('[data-area-node]')) setSelectedAreaId(null) }}
+        >
+          {/* 画布（自动缩放适配视口） */}
+          <div
+            style={{
+              position: 'absolute',
+              width: CANVAS_W,
+              height: CANVAS_H,
+              left: offsetX,
+              top: offsetY,
+              transform: `scale(${autoScale})`,
+              transformOrigin: '0 0',
+            }}
           >
-            {/* 地图视口 */}
-            <div
-              ref={viewportRef}
-              style={{ width: '100%', height: '100%', overflow: 'hidden', cursor: 'grab', userSelect: 'none', pointerEvents: isTransitioning ? 'none' : 'auto' }}
-              onMouseDown={onMouseDown}
-              onMouseMove={onMouseMove}
-              onMouseUp={onMouseUp}
-              onMouseLeave={onMouseLeave}
-              onWheel={onWheel}
-            >
-              {/* 画布 */}
-              <div
-                style={{
-                  position: 'absolute', width: CANVAS_W, height: CANVAS_W * 0.625,
-                  transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})`,
-                  transformOrigin: '0 0',
-                }}
-              >
-                {isEditMode && (
-                  <div style={{ position: 'absolute', inset: 0, backgroundImage: 'radial-gradient(circle, var(--color-border) 1px, transparent 1px)', backgroundSize: '40px 40px', opacity: 0.4 }} />
-                )}
-
-                {areas.map((area) => {
-                  const prosperity = getAreaProsperity(area)
-                  return (
-                    <AreaNode
-                      key={area.id}
-                      area={area}
-                      prosperity={prosperity}
-                      isSelected={selectedAreaId === area.id}
-                      isEditMode={isEditMode}
-                      glowing={glowingAreaIds.has(area.id)}
-                      onSelect={() => { if (!isEditMode) setSelectedAreaId((prev) => prev === area.id ? null : area.id) }}
-                      onEdit={() => handleRename(area.id)}
-                      onDelete={() => handleDeleteRequest(area)}
-                      onDragStart={(e) => handleAreaDragStart(area.id, e)}
-                    />
-                  )
-                })}
-              </div>
-            </div>
-
-            {/* 顶部控制栏 */}
-            <div style={{ position: 'absolute', top: 12, right: 12, display: 'flex', gap: 8, zIndex: 10 }}>
-              <span style={{ fontSize: 11, color: 'var(--color-text-dim)', background: 'var(--color-surface)', border: '1px solid var(--color-border)', padding: '4px 8px', borderRadius: 'var(--radius-sm)' }}>
-                {Math.round(transform.scale * 100)}%
-              </span>
-              <MapButton onClick={() => { const vp = viewportRef.current; if (!vp) return; setTransform({ scale: 0.85, x: vp.clientWidth / 2 - 750 * 0.85, y: vp.clientHeight / 2 - 430 * 0.85 }) }} title={t.worldmap_resetView}>⊙</MapButton>
-              <MapButton onClick={() => { setIsEditMode((v) => !v); setSelectedAreaId(null) }} active={isEditMode}>{isEditMode ? t.worldmap_editDone : t.worldmap_edit}</MapButton>
-            </div>
-
-            {/* 区域计数 */}
-            <div style={{ position: 'absolute', bottom: 20, left: 16, zIndex: 10, fontSize: 11, color: 'var(--color-text-dim)', background: 'var(--color-surface)', border: '1px solid var(--color-border)', padding: '4px 10px', borderRadius: 'var(--radius-sm)' }}>
-              {t.worldmap_areaCount(areas.length)}
-            </div>
-
-            {/* 添加区域按钮 */}
-            {!isEditMode && (
-              <button
-                onClick={() => setShowAddModal(true)}
-                disabled={!canAddMore()}
-                style={{ position: 'absolute', bottom: 20, right: 16, zIndex: 10, padding: '8px 16px', borderRadius: 'var(--radius-md)', background: canAddMore() ? 'var(--color-secondary)' : 'var(--color-surface-hover)', border: 'none', color: canAddMore() ? 'white' : 'var(--color-text-dim)', fontSize: 13, fontWeight: 600, cursor: canAddMore() ? 'pointer' : 'not-allowed', boxShadow: canAddMore() ? '0 2px 8px rgba(0,0,0,0.2)' : 'none' }}
-              >
-                {t.worldmap_addArea}
-              </button>
+            {isEditMode && (
+              <div style={{ position: 'absolute', inset: 0, backgroundImage: 'radial-gradient(circle, var(--color-border) 1px, transparent 1px)', backgroundSize: '40px 40px', opacity: 0.4 }} />
             )}
 
-            {/* 区域信息栏 */}
-            <AnimatePresence>
-              {selectedArea && !isEditMode && (
-                <AreaInfoBar key={selectedArea.id} area={selectedArea} prosperity={getAreaProsperity(selectedArea)} onClose={() => setSelectedAreaId(null)} onEnter={handleEnterArea} />
-              )}
-            </AnimatePresence>
-          </motion.div>
-        ) : (
-          /* ── 区域内部视图 ─────────────────────────────────── */
+            {areas.map((area) => {
+              const prosperity = getAreaProsperity(area)
+              return (
+                <AreaNode
+                  key={area.id}
+                  area={area}
+                  prosperity={prosperity}
+                  isSelected={selectedAreaId === area.id}
+                  isEditMode={isEditMode}
+                  glowing={glowingAreaIds.has(area.id)}
+                  onSelect={() => { if (!isEditMode) setSelectedAreaId((prev) => prev === area.id ? null : area.id) }}
+                  onEdit={() => handleRename(area.id)}
+                  onDelete={() => handleDeleteRequest(area)}
+                  onDragStart={(e) => handleAreaDragStart(area.id, e)}
+                />
+              )
+            })}
+          </div>
+        </div>
+
+        {/* 顶部控制栏 */}
+        <div style={{ position: 'absolute', top: 12, right: 12, display: 'flex', gap: 8, zIndex: 10 }}>
+          <MapButton onClick={() => { setIsEditMode((v) => !v); setSelectedAreaId(null) }} active={isEditMode}>{isEditMode ? t.worldmap_editDone : t.worldmap_edit}</MapButton>
+        </div>
+
+        {/* 区域计数 */}
+        <div style={{ position: 'absolute', bottom: 20, left: 16, zIndex: 10, fontSize: 11, color: 'var(--color-text-dim)', background: 'var(--color-surface)', border: '1px solid var(--color-border)', padding: '4px 10px', borderRadius: 'var(--radius-sm)' }}>
+          {t.worldmap_areaCount(areas.length)}
+        </div>
+
+        {/* 添加区域按钮 */}
+        {!isEditMode && (
+          <button
+            onClick={() => setShowAddModal(true)}
+            disabled={!canAddMore()}
+            style={{ position: 'absolute', bottom: 20, right: 16, zIndex: 10, padding: '8px 16px', borderRadius: 'var(--radius-md)', background: canAddMore() ? 'var(--color-secondary)' : 'var(--color-surface-hover)', border: 'none', color: canAddMore() ? 'white' : 'var(--color-text-dim)', fontSize: 13, fontWeight: 600, cursor: canAddMore() ? 'pointer' : 'not-allowed', boxShadow: canAddMore() ? '0 2px 8px rgba(0,0,0,0.2)' : 'none' }}
+          >
+            {t.worldmap_addArea}
+          </button>
+        )}
+
+        {/* 区域信息栏 */}
+        <AnimatePresence>
+          {selectedArea && !isEditMode && (
+            <AreaInfoBar key={selectedArea.id} area={selectedArea} prosperity={getAreaProsperity(selectedArea)} onClose={() => setSelectedAreaId(null)} onEnter={handleEnterArea} />
+          )}
+        </AnimatePresence>
+      </motion.div>
+
+      {/* ── 区域内部视图（AnimatePresence 仅包裹此层） ───────── */}
+      <AnimatePresence>
+        {interiorAreaId && interiorArea && (
           <motion.div
             key="interior"
-            custom={transitionDirRef.current}
-            variants={interiorVariants}
-            initial="initial"
-            animate="animate"
-            exit="exit"
-            onAnimationStart={() => setIsTransitioning(true)}
-            onAnimationComplete={() => setIsTransitioning(false)}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1, transition: { duration: 0.3, delay: 0.1 } }}
+            exit={{ opacity: 0, transition: { duration: 0.2 } }}
             style={{ width: '100%', height: '100%', position: 'absolute', inset: 0 }}
           >
-            {interiorArea && interiorArea.category === '_milestone' ? (
+            {interiorArea.category === '_milestone' ? (
               <ArchiveSpace
                 area={interiorArea}
                 prosperity={getAreaProsperity(interiorArea)}
                 onExit={handleExitInterior}
               />
-            ) : interiorArea ? (
+            ) : (
               <InteriorSpace
                 area={interiorArea}
                 prosperity={getAreaProsperity(interiorArea)}
                 onExit={handleExitInterior}
               />
-            ) : null}
+            )}
           </motion.div>
         )}
       </AnimatePresence>
@@ -363,7 +313,8 @@ export function WorldMap() {
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }} onClick={() => setRenamingAreaId(null)}>
             <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} exit={{ scale: 0.9 }} onClick={(e) => e.stopPropagation()} style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--color-border)', padding: '20px', display: 'flex', flexDirection: 'column', gap: 12, width: 280 }}>
               <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-text)' }}>{t.worldmap_renameTitle}</span>
-              <input autoFocus value={renameValue} onChange={(e) => setRenameValue(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') commitRename(); if (e.key === 'Escape') setRenamingAreaId(null) }} style={{ height: 36, padding: '0 12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', background: 'var(--color-bg)', color: 'var(--color-text)', fontSize: 14, outline: 'none' }} />
+              <input autoFocus value={renameValue} maxLength={10} onChange={(e) => setRenameValue(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') commitRename(); if (e.key === 'Escape') setRenamingAreaId(null) }} style={{ height: 36, padding: '0 12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', background: 'var(--color-bg)', color: 'var(--color-text)', fontSize: 14, outline: 'none' }} />
+              <span style={{ fontSize: 11, color: renameValue.length >= 10 ? '#dc2626' : 'var(--color-text-dim)', textAlign: 'right' }}>{renameValue.length}/10</span>
               <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
                 <button onClick={() => setRenamingAreaId(null)} style={ghostBtnStyle}>{t.worldmap_renameCancel}</button>
                 <button onClick={commitRename} style={primaryBtnStyle}>{t.worldmap_renameConfirm}</button>

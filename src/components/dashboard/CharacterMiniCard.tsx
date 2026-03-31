@@ -6,6 +6,9 @@ import { getElapsedSeconds } from '@/utils/time'
 import { AnimatedXPBar } from '@/components/feedback/AnimatedXPBar'
 import { useT } from '@/i18n'
 import type { Translations } from '@/i18n'
+import type { GlobalStatus } from '@/types'
+
+const GLOBAL_STATUS_CYCLE: GlobalStatus[] = ['active', 'charging', 'resting', 'traveling', 'returning']
 
 const STATUS_ICONS: Record<string, { icon: string; key: keyof Translations }> = {
   active:    { icon: '⚡', key: 'charCard_status_active' },
@@ -36,9 +39,15 @@ interface CharacterMiniCardProps {
 }
 
 export function CharacterMiniCard({ onClickMilestone }: CharacterMiniCardProps) {
-  const { character } = useCharacterStore()
+  const { character, setGlobalStatus } = useCharacterStore()
   const { tasks } = useTaskStore()
   const t = useT()
+
+  function cycleStatus() {
+    const idx = GLOBAL_STATUS_CYCLE.indexOf(character.globalStatus)
+    const next = GLOBAL_STATUS_CYCLE[(idx + 1) % GLOBAL_STATUS_CYCLE.length]
+    setGlobalStatus(next)
+  }
 
   // Translated title via i18n arrays
   const titleIdx = getTitleIndex(character.level)
@@ -92,7 +101,11 @@ export function CharacterMiniCard({ onClickMilestone }: CharacterMiniCardProps) 
       }}
     >
       {/* 状态行 */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <div
+        style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: !topDoing ? 'pointer' : 'default' }}
+        onClick={!topDoing ? cycleStatus : undefined}
+        title={!topDoing ? t.charCard_clickToChangeStatus : undefined}
+      >
         <span style={{ fontSize: 22 }}>{statusInfo.icon}</span>
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text)' }}>

@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import { getStoragePrefix } from './accountManager'
 
 interface BadgeStore {
   /** 已获得的徽章 ID → 获得时间（ISO） */
@@ -44,6 +45,6 @@ export const useBadgeStore = create<BadgeStore>()(
 
       earnedCount: () => Object.keys(get().earnedIds).length,
     }),
-    { name: 'anvilite-badges' }
+    { name: `${getStoragePrefix()}-badges` }
   )
 )

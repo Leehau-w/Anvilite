@@ -68,9 +68,9 @@ export function Dashboard({ onNavigate }: DashboardProps) {
   const totalCompleted = taskStats.completedCount + habitStats.completed
   const totalXP = taskStats.totalXP + habitStats.totalXP
 
-  const doingTasks = tasks.filter((t) => !t.deletedAt && t.status === 'doing')
-  const todoTasks = tasks.filter((t) => !t.deletedAt && t.status === 'todo')
-  const doneTasks = tasks.filter((t) => !t.deletedAt && t.status === 'done').slice(0, 8)
+  const doingTasks = tasks.filter((t) => !t.deletedAt && !t.parentId && t.status === 'doing')
+  const todoTasks = tasks.filter((t) => !t.deletedAt && !t.parentId && t.status === 'todo')
+  const doneTasks = tasks.filter((t) => !t.deletedAt && !t.parentId && t.status === 'done').slice(0, 8)
 
   function getCard(id: CardId) {
     return layout.find((c) => c.id === id) ?? DEFAULT_LAYOUT.find((c) => c.id === id)!
@@ -164,7 +164,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
               </div>
             }
           >
-            <div style={{ overflow: 'hidden', height: '100%' }}><HabitCard /></div>
+            <div style={{ overflow: 'hidden', height: '100%' }}><HabitCard onEdit={(h) => { setEditHabit(h); setHabitDrawerOpen(true) }} /></div>
           </GridCard>
 
           <GridCard card={getCard('growth')} cw={cw} containerRef={containerRef} onUpdate={(p) => updateCard('growth', p)} title={t.dash_growth}>

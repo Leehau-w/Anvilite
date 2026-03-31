@@ -6,6 +6,7 @@ import { useToast } from '@/components/feedback/Toast'
 import { THEMES } from '@/types/settings'
 import { useT } from '@/i18n'
 import type { Translations } from '@/i18n/zh'
+import { getAccounts, getCurrentAccountId, createAccount, switchAccount, deleteAccount } from '@/stores/accountManager'
 
 /** Map theme id → i18n key */
 const THEME_NAME_KEY: Record<string, keyof Translations> = {
@@ -54,6 +55,32 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
   const t = useT()
   const [nameInput, setNameInput] = useState(character.name)
   const [confirmTheme, setConfirmTheme] = useState<string | null>(null)
+
+  // ── 账号管理 ──
+  const accounts = getAccounts()
+  const currentAccountId = getCurrentAccountId()
+  const [showCreateAccount, setShowCreateAccount] = useState(false)
+  const [newAccountName, setNewAccountName] = useState('')
+  const [accountAction, setAccountAction] = useState<{ type: 'switch' | 'delete'; id: string; name: string } | null>(null)
+
+  function handleCreateAccount() {
+    if (!newAccountName.trim()) return
+    const acc = createAccount(newAccountName.trim())
+    showToast(t.account_toastCreated(acc.name))
+    setNewAccountName('')
+    setShowCreateAccount(false)
+  }
+
+  function handleConfirmAccountAction() {
+    if (!accountAction) return
+    if (accountAction.type === 'switch') {
+      switchAccount(accountAction.id)
+    } else {
+      deleteAccount(accountAction.id)
+      showToast(t.account_toastDeleted(accountAction.name))
+      setAccountAction(null)
+    }
+  }
 
   function handleNameSave() {
     if (nameInput.trim()) setName(nameInput.trim())
@@ -168,6 +195,105 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
             </div>
 
             <div style={{ overflowY: 'auto', flex: 1, padding: 20, display: 'flex', flexDirection: 'column', gap: 24 }}>
+              {/* 账号管理 */}
+              <section>
+                <SectionTitle>{t.account_section}</SectionTitle>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {accounts.map((acc) => {
+                    const isCurrent = acc.id === currentAccountId
+                    return (
+                      <div
+                        key={acc.id}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          padding: '8px 12px',
+                          borderRadius: 'var(--radius-md)',
+                          border: `1px solid ${isCurrent ? 'var(--color-accent)' : 'var(--color-border)'}`,
+                          background: isCurrent ? 'color-mix(in srgb, var(--color-accent) 6%, transparent)' : 'transparent',
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span style={{ width: 6, height: 6, borderRadius: '50%', background: isCurrent ? 'var(--color-success)' : 'var(--color-border)' }} />
+                          <span style={{ fontSize: 13, fontWeight: isCurrent ? 600 : 400, color: 'var(--color-text)' }}>{acc.name}</span>
+                          {isCurrent && (
+                            <span style={{ fontSize: 10, color: 'var(--color-accent)', background: 'color-mix(in srgb, var(--color-accent) 12%, transparent)', padding: '1px 6px', borderRadius: 'var(--radius-full)' }}>
+                              {t.account_current}
+                            </span>
+                          )}
+                        </div>
+                        {!isCurrent && (
+                          <div style={{ display: 'flex', gap: 6 }}>
+                            <button
+                              onClick={() => setAccountAction({ type: 'switch', id: acc.id, name: acc.name })}
+                              style={{ fontSize: 11, color: 'var(--color-accent)', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 6px' }}
+                            >
+                              {t.account_switch}
+                            </button>
+                            <button
+                              onClick={() => setAccountAction({ type: 'delete', id: acc.id, name: acc.name })}
+                              style={{ fontSize: 11, color: 'var(--color-danger, #dc2626)', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 6px' }}
+                            >
+                              {t.account_delete}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+                {/* 创建新账号 */}
+                {showCreateAccount ? (
+                  <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                    <input
+                      autoFocus
+                      value={newAccountName}
+                      onChange={(e) => setNewAccountName(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') handleCreateAccount(); if (e.key === 'Escape') setShowCreateAccount(false) }}
+                      placeholder={t.account_namePlaceholder}
+                      maxLength={20}
+                      style={{
+                        flex: 1, height: 32, padding: '0 10px',
+                        borderRadius: 'var(--radius-md)',
+                        border: '1px solid var(--color-border)',
+                        background: 'var(--color-bg)',
+                        color: 'var(--color-text)',
+                        fontSize: 13, outline: 'none',
+                      }}
+                    />
+                    <button
+                      onClick={handleCreateAccount}
+                      disabled={!newAccountName.trim()}
+                      style={{
+                        height: 32, padding: '0 14px',
+                        borderRadius: 'var(--radius-md)',
+                        border: 'none',
+                        background: newAccountName.trim() ? 'var(--color-accent)' : 'var(--color-border)',
+                        color: newAccountName.trim() ? 'white' : 'var(--color-text-dim)',
+                        fontSize: 12, fontWeight: 600, cursor: newAccountName.trim() ? 'pointer' : 'default',
+                      }}
+                    >
+                      {t.account_createBtn}
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setShowCreateAccount(true)}
+                    style={{
+                      marginTop: 8, width: '100%', height: 32,
+                      borderRadius: 'var(--radius-md)',
+                      border: '1px dashed var(--color-border)',
+                      background: 'transparent',
+                      color: 'var(--color-text-dim)',
+                      fontSize: 12, cursor: 'pointer',
+                    }}
+                  >
+                    {t.account_create}
+                  </button>
+                )}
+              </section>
+
               {/* 角色名 */}
               <section>
                 <SectionTitle>{t.settings_char}</SectionTitle>
@@ -246,6 +372,70 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
               </section>
             </div>
           </motion.div>
+
+          {/* 账号操作确认弹窗 */}
+          <AnimatePresence>
+            {accountAction && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                style={{
+                  position: 'fixed', inset: 0, zIndex: 600,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}
+                onClick={() => setAccountAction(null)}
+              >
+                <motion.div
+                  initial={{ scale: 0.9, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  exit={{ scale: 0.9, opacity: 0 }}
+                  onClick={(e) => e.stopPropagation()}
+                  style={{
+                    width: 320,
+                    background: 'var(--color-surface)',
+                    borderRadius: 'var(--radius-xl)',
+                    border: '1px solid var(--color-border)',
+                    padding: 20,
+                    boxShadow: '0 8px 32px rgba(0,0,0,0.25)',
+                    textAlign: 'center',
+                  }}
+                >
+                  <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--color-text)', marginBottom: 8 }}>
+                    {accountAction.type === 'switch' ? t.account_confirmSwitchTitle : t.account_confirmDeleteTitle}
+                  </div>
+                  <div style={{ fontSize: 13, color: 'var(--color-text-dim)', lineHeight: 1.6, marginBottom: 16 }}>
+                    {accountAction.type === 'switch'
+                      ? t.account_confirmSwitchMsg(accountAction.name)
+                      : t.account_confirmDeleteMsg(accountAction.name)}
+                  </div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button
+                      onClick={() => setAccountAction(null)}
+                      style={{
+                        flex: 1, height: 34, borderRadius: 'var(--radius-md)',
+                        border: '1px solid var(--color-border)', background: 'transparent',
+                        color: 'var(--color-text-dim)', fontSize: 13, cursor: 'pointer',
+                      }}
+                    >
+                      {t.account_cancel}
+                    </button>
+                    <button
+                      onClick={handleConfirmAccountAction}
+                      style={{
+                        flex: 2, height: 34, borderRadius: 'var(--radius-md)',
+                        border: 'none',
+                        background: accountAction.type === 'delete' ? 'var(--color-danger, #dc2626)' : 'var(--color-accent)',
+                        color: 'white', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                      }}
+                    >
+                      {t.account_confirm}
+                    </button>
+                  </div>
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {/* 购买主题确认弹窗 */}
           <AnimatePresence>

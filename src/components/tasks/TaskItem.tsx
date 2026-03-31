@@ -20,6 +20,7 @@ interface TaskItemProps {
 
 export function TaskItem({ task, compact, onEdit }: TaskItemProps) {
   const { completeTask, undoComplete, updateTask, startTask, pauseTask, deleteTask, hideTask } = useTaskStore()
+  const allTasks = useTaskStore((s) => s.tasks)
   const { character, gainXPAndOre, recordActivity, revokeXP } = useCharacterStore()
   const { addEvent, removeEvent } = useGrowthEventStore()
   const { showToast } = useToast()
@@ -36,6 +37,10 @@ export function TaskItem({ task, compact, onEdit }: TaskItemProps) {
   const [durationInput, setDurationInput] = useState('')
   const confirmTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const deleteConfirmTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const [expanded, setExpanded] = useState(true)
+
+  const children = allTasks.filter((t) => !t.deletedAt && !t.isHidden && task.childIds.includes(t.id))
 
   const isOverdueDue = isOverdue(task.dueDate) && task.status !== 'done'
   const isDoing = task.status === 'doing'
@@ -90,6 +95,13 @@ export function TaskItem({ task, compact, onEdit }: TaskItemProps) {
     const completed = completeTask(task.id)
     if (!completed) { setCompleting(false); return }
 
+    // 子任务不获得 XP/矿石
+    if (task.parentId) {
+      setCompleting(false)
+      showToast(`✓ ${task.title}`)
+      return
+    }
+
     const { xp, ore } = calculateTaskXP(completed, character.streakDays)
     updateTask(task.id, { xpReward: xp })
     const { leveledUp, oldLevel, newLevel, prestigeUnlocked } = gainXPAndOre(xp, ore)
@@ -136,7 +148,7 @@ export function TaskItem({ task, compact, onEdit }: TaskItemProps) {
   function handleSaveDuration(e?: React.MouseEvent) {
     e?.stopPropagation()
     const mins = parseInt(durationInput, 10)
-    if (mins > 0) updateTask(task.id, { actualMinutes: mins })
+    if (!isNaN(mins) && mins > 0) updateTask(task.id, { actualMinutes: mins })
     setShowDurationInput(false)
   }
 
@@ -174,7 +186,7 @@ export function TaskItem({ task, compact, onEdit }: TaskItemProps) {
     setDeleteConfirm(false)
     if (task.xpReward > 0) revokeXP(task.xpReward)
     const ev = useGrowthEventStore.getState().events.find(
-      (ev) => ev.type === 'task_complete' && ev.title === `完成任务：${task.title}`
+      (ev) => ev.type === 'task_complete' && ev.title === t.task_eventTitle(task.title)
     )
     if (ev) removeEvent(ev.id)
     deleteTask(task.id)
@@ -186,6 +198,7 @@ export function TaskItem({ task, compact, onEdit }: TaskItemProps) {
       onEdit(task)
     }
   }
+
 
   const cardVariants = {
     initial: { opacity: 0, y: -10 },
@@ -214,6 +227,7 @@ export function TaskItem({ task, compact, onEdit }: TaskItemProps) {
     : 'var(--color-border)'
 
   return (
+    <div>
     <motion.div
       layout
       variants={cardVariants}
@@ -236,6 +250,16 @@ export function TaskItem({ task, compact, onEdit }: TaskItemProps) {
       }}
       whileHover={{ boxShadow: 'var(--shadow-md)' }}
     >
+      {/* 展开/收起 */}
+      {children.length > 0 && !compact && (
+        <button
+          onClick={(e) => { e.stopPropagation(); setExpanded(!expanded) }}
+          style={{ width: 14, height: 14, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-dim)', fontSize: 10, padding: 0, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'transform 0.15s', transform: expanded ? 'rotate(90deg)' : 'rotate(0deg)' }}
+        >
+          ▶
+        </button>
+      )}
+
       {/* 勾选框 */}
       <CheckButton
         done={isDone}
@@ -367,7 +391,7 @@ export function TaskItem({ task, compact, onEdit }: TaskItemProps) {
                     </ActionButton>
                   )}
                   <ActionButton onClick={handleInscribe} color="var(--color-xp)">
-                    ⭐
+                    ⭐ {t.task_inscribe}
                   </ActionButton>
                   <ActionButton onClick={handleHide} color="var(--color-text-dim)">
                     {t.task_hide}
@@ -503,6 +527,17 @@ export function TaskItem({ task, compact, onEdit }: TaskItemProps) {
         )}
       </AnimatePresence>
     </motion.div>
+
+    {/* 子任务区域 */}
+    {/* 子任务列表 */}
+    {expanded && children.length > 0 && (
+      <div style={{ paddingLeft: compact ? 16 : 20, marginTop: compact ? 2 : 4, display: 'flex', flexDirection: 'column', gap: compact ? 2 : 4, borderLeft: '2px solid var(--color-border)', marginLeft: 8 }}>
+        {children.map((child) => (
+          <TaskItem key={child.id} task={child} compact={compact} onEdit={onEdit} />
+        ))}
+      </div>
+    )}
+    </div>
   )
 }
 

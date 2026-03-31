@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { Settings, DashboardCardLayout } from '@/types/settings'
+import { getStoragePrefix } from './accountManager'
 
 interface SettingsStore {
   settings: Settings
@@ -56,7 +57,7 @@ export const useSettingsStore = create<SettingsStore>()(
         set((s) => ({ settings: { ...s.settings, characterName: name } })),
     }),
     {
-      name: 'anvilite-settings',
+      name: `${getStoragePrefix()}-settings`,
       onRehydrateStorage: () => (state) => {
         if (state) {
           const theme = state.settings.theme

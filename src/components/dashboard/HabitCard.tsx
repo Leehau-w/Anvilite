@@ -10,7 +10,7 @@ import { formatTimer, getElapsedSeconds } from '@/utils/time'
 import type { Habit } from '@/types/habit'
 import { useT } from '@/i18n'
 
-export function HabitCard() {
+export function HabitCard({ onEdit }: { onEdit?: (habit: Habit) => void }) {
   const { getTodayHabits, completeHabit, skipHabit, habits, startHabitTimer, pauseHabitTimer } = useHabitStore()
   const { gainXPAndOre, recordActivity } = useCharacterStore()
   const { addEvent } = useGrowthEventStore()
@@ -80,15 +80,34 @@ export function HabitCard() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
       <AnimatePresence mode="popLayout">
-        {todayHabits.map((habit) => (
-          <HabitItem
-            key={habit.id}
-            habit={habit}
-            onComplete={() => handleComplete(habit)}
-            onSkip={() => handleSkip(habit)}
-            onTimerToggle={() => habit.timerStartedAt ? pauseHabitTimer(habit.id) : startHabitTimer(habit.id)}
-          />
-        ))}
+        {todayHabits.map((habit) => {
+          const children = habits.filter((c) => !c.deletedAt && (habit.childIds ?? []).includes(c.id))
+          return (
+            <div key={habit.id}>
+              <HabitItem
+                habit={habit}
+                onComplete={() => handleComplete(habit)}
+                onSkip={() => handleSkip(habit)}
+                onTimerToggle={() => habit.timerStartedAt ? pauseHabitTimer(habit.id) : startHabitTimer(habit.id)}
+                onEdit={onEdit ? () => onEdit(habit) : undefined}
+              />
+              {children.length > 0 && (
+                <div style={{ paddingLeft: 16, marginTop: 2, display: 'flex', flexDirection: 'column', gap: 2, borderLeft: '2px solid var(--color-border)', marginLeft: 8 }}>
+                  {children.map((child) => (
+                    <HabitItem
+                      key={child.id}
+                      habit={child}
+                      onComplete={() => handleComplete(child)}
+                      onSkip={() => handleSkip(child)}
+                      onTimerToggle={() => child.timerStartedAt ? pauseHabitTimer(child.id) : startHabitTimer(child.id)}
+                      onEdit={onEdit ? () => onEdit(child) : undefined}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          )
+        })}
       </AnimatePresence>
     </div>
   )
@@ -99,11 +118,13 @@ function HabitItem({
   onComplete,
   onSkip,
   onTimerToggle,
+  onEdit,
 }: {
   habit: Habit
   onComplete: () => void
   onSkip: () => void
   onTimerToggle: () => void
+  onEdit?: () => void
 }) {
   const refreshText = getNextRefreshText(habit)
   const t = useT()
@@ -165,7 +186,10 @@ function HabitItem({
       )}
 
       {/* 名称 + 连续 */}
-      <div style={{ flex: 1, minWidth: 0 }}>
+      <div
+        style={{ flex: 1, minWidth: 0, cursor: onEdit ? 'pointer' : 'default' }}
+        onClick={onEdit}
+      >
         <div
           style={{
             fontSize: 14,
