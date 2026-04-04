@@ -65,6 +65,8 @@ export const zh = {
   dash_habitManage: '管理',
   dash_addHabit: '添加习惯',
   dash_growth: '成长趋势',
+  dash_editLayout: '编辑布局',
+  dash_doneEditing: '完成',
   dash_resetLayout: '重置布局',
   dash_stats: '今日数据',
   dash_character: '角色',

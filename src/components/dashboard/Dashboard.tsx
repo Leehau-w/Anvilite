@@ -42,6 +42,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
   const { getTodayStats: getHabitStats } = useHabitStore()
   const t = useT()
   const { layout, visibleCards, updateCard, removeCard, addCard, resetLayout } = useDashboardStore()
+  const [editMode, setEditMode] = useState(false)
   const [cardPickerOpen, setCardPickerOpen] = useState(false)
 
   const [drawerOpen, setDrawerOpen] = useState(false)
@@ -128,22 +129,35 @@ export function Dashboard({ onNavigate }: DashboardProps) {
           {greeting}，<span style={{ color: 'var(--color-accent)' }}>{character.name}</span>
         </h1>
         <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-          {hiddenCards.length > 0 && (
-            <button
-              onClick={() => setCardPickerOpen(true)}
-              style={{ fontSize: 11, color: 'var(--color-accent)', background: 'color-mix(in srgb, var(--color-accent) 10%, transparent)', border: '1px solid var(--color-accent)', borderRadius: 'var(--radius-sm)', padding: '3px 8px', cursor: 'pointer', fontWeight: 600 }}
-            >
-              {t.dash_addCard}
-            </button>
+          {editMode && (
+            <>
+              {hiddenCards.length > 0 && (
+                <button
+                  onClick={() => setCardPickerOpen(true)}
+                  style={{ fontSize: 11, color: 'var(--color-accent)', background: 'color-mix(in srgb, var(--color-accent) 10%, transparent)', border: '1px solid var(--color-accent)', borderRadius: 'var(--radius-sm)', padding: '3px 8px', cursor: 'pointer', fontWeight: 600 }}
+                >
+                  {t.dash_addCard}
+                </button>
+              )}
+              <button
+                onClick={() => { resetLayout(); setEditMode(false) }}
+                style={{ fontSize: 11, color: 'var(--color-text-dim)', background: 'none', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', padding: '3px 8px', cursor: 'pointer' }}
+              >
+                {t.dash_resetLayout}
+              </button>
+            </>
           )}
           <button
-            onClick={resetLayout}
-            title={t.dash_resetLayout}
-            style={{ fontSize: 11, color: 'var(--color-text-dim)', background: 'none', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', padding: '3px 8px', cursor: 'pointer', opacity: 0.6 }}
-            onMouseEnter={(e) => { e.currentTarget.style.opacity = '1' }}
-            onMouseLeave={(e) => { e.currentTarget.style.opacity = '0.6' }}
+            onClick={() => setEditMode((v) => !v)}
+            style={{
+              fontSize: 11, padding: '3px 10px', borderRadius: 'var(--radius-sm)', cursor: 'pointer', fontWeight: 600,
+              border: `1px solid ${editMode ? 'var(--color-accent)' : 'var(--color-border)'}`,
+              background: editMode ? 'color-mix(in srgb, var(--color-accent) 12%, transparent)' : 'transparent',
+              color: editMode ? 'var(--color-accent)' : 'var(--color-text-dim)',
+              transition: 'all 0.15s',
+            }}
           >
-            {t.dash_resetLayout}
+            {editMode ? t.dash_doneEditing : t.dash_editLayout}
           </button>
         </div>
       </div>
@@ -153,13 +167,13 @@ export function Dashboard({ onNavigate }: DashboardProps) {
         <div ref={containerRef} style={{ position: 'relative', height: gh, minHeight: gh }}>
 
           {visibleCards.includes('quickAdd') && (
-            <GridCard card={getCard('quickAdd')} cw={cw} containerRef={containerRef} onUpdate={(p) => updateCard('quickAdd', p)} onRemove={() => removeCard('quickAdd')} title={t.dash_quickAdd}>
+            <GridCard card={getCard('quickAdd')} cw={cw} containerRef={containerRef} onUpdate={(p) => updateCard('quickAdd', p)} locked={!editMode} onRemove={editMode ? () => removeCard('quickAdd') : undefined} title={t.dash_quickAdd}>
               <QuickInput onOpenDrawer={() => setDrawerOpen(true)} />
             </GridCard>
           )}
 
           {visibleCards.includes('stats') && (
-            <GridCard card={getCard('stats')} cw={cw} containerRef={containerRef} onUpdate={(p) => updateCard('stats', p)} onRemove={() => removeCard('stats')} title={t.dash_stats}>
+            <GridCard card={getCard('stats')} cw={cw} containerRef={containerRef} onUpdate={(p) => updateCard('stats', p)} locked={!editMode} onRemove={editMode ? () => removeCard('stats') : undefined} title={t.dash_stats}>
               <div style={{ display: 'flex', justifyContent: 'space-around', padding: '4px 0' }}>
                 <BigStat label={t.dash_statDone} value={totalCompleted} unit={t.dash_unitCount} />
                 <div style={{ width: 1, background: 'var(--color-border)' }} />
@@ -171,7 +185,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
           )}
 
           {visibleCards.includes('tasks') && (
-            <GridCard card={getCard('tasks')} cw={cw} containerRef={containerRef} onUpdate={(p) => updateCard('tasks', p)} onRemove={() => removeCard('tasks')} resizable title={t.dash_tasks}
+            <GridCard card={getCard('tasks')} cw={cw} containerRef={containerRef} onUpdate={(p) => updateCard('tasks', p)} locked={!editMode} onRemove={editMode ? () => removeCard('tasks') : undefined} resizable title={t.dash_tasks}
               titleExtra={<span style={{ fontSize: 12, color: 'var(--color-text-dim)' }}>{t.dash_pendingCount(doingTasks.length + todoTasks.length)}</span>}
             >
               <div style={{ overflowY: 'auto', height: '100%', scrollbarWidth: 'thin', scrollbarColor: 'var(--color-border) transparent' }}>
@@ -223,13 +237,13 @@ export function Dashboard({ onNavigate }: DashboardProps) {
           )}
 
           {visibleCards.includes('character') && (
-            <GridCard card={getCard('character')} cw={cw} containerRef={containerRef} onUpdate={(p) => updateCard('character', p)} onRemove={() => removeCard('character')} noShell>
+            <GridCard card={getCard('character')} cw={cw} containerRef={containerRef} onUpdate={(p) => updateCard('character', p)} locked={!editMode} onRemove={editMode ? () => removeCard('character') : undefined} noShell>
               <CharacterMiniCard onClickMilestone={() => onNavigate?.('milestone')} />
             </GridCard>
           )}
 
           {visibleCards.includes('habits') && (
-            <GridCard card={getCard('habits')} cw={cw} containerRef={containerRef} onUpdate={(p) => updateCard('habits', p)} onRemove={() => removeCard('habits')} resizable title={t.dash_habits}
+            <GridCard card={getCard('habits')} cw={cw} containerRef={containerRef} onUpdate={(p) => updateCard('habits', p)} locked={!editMode} onRemove={editMode ? () => removeCard('habits') : undefined} resizable title={t.dash_habits}
               titleExtra={
                 <div style={{ display: 'flex', gap: 4 }}>
                   <ActionBtn onClick={() => setHabitManageOpen(true)} title={t.dash_habitManage}>{t.dash_habitManage}</ActionBtn>
@@ -244,7 +258,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
           )}
 
           {visibleCards.includes('growth') && (
-            <GridCard card={getCard('growth')} cw={cw} containerRef={containerRef} onUpdate={(p) => updateCard('growth', p)} onRemove={() => removeCard('growth')} title={t.dash_growth}>
+            <GridCard card={getCard('growth')} cw={cw} containerRef={containerRef} onUpdate={(p) => updateCard('growth', p)} locked={!editMode} onRemove={editMode ? () => removeCard('growth') : undefined} title={t.dash_growth}>
               <Heatmap />
             </GridCard>
           )}
@@ -394,7 +408,7 @@ function GridCard({ card, cw, containerRef, onUpdate, onRemove, resizable, noShe
             height: '100%',
             background: 'var(--color-surface)',
             borderRadius: 'var(--radius-lg)',
-            border: `1px solid ${isActive ? 'var(--color-accent)' : 'var(--color-border)'}`,
+            border: `1px ${!locked && !isActive ? 'dashed' : 'solid'} ${isActive ? 'var(--color-accent)' : 'var(--color-border)'}`,
             boxShadow: isActive ? '0 8px 24px rgba(0,0,0,0.12)' : 'var(--shadow-sm)',
             display: 'flex',
             flexDirection: 'column',
