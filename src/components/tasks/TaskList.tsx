@@ -1,5 +1,5 @@
-import React, { useState, useRef, useMemo } from 'react'
-import { AnimatePresence, motion } from 'framer-motion'
+import React, { useState, useRef, useMemo, useCallback } from 'react'
+import { AnimatePresence, motion, Reorder } from 'framer-motion'
 import { useTaskStore } from '@/stores/taskStore'
 import { useAreaStore } from '@/stores/areaStore'
 import { useHabitStore } from '@/stores/habitStore'
@@ -25,12 +25,41 @@ export function TaskList() {
   const catLabel = (cat: string) => resolveCatLabel(cat, areas, tr)
   const [mainTab, setMainTab] = useState<'tasks' | 'habits'>('tasks')
   const [activeCategory, setActiveCategory] = useState('ALL')
+  const { reorderTasks } = useTaskStore()
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [editTask, setEditTask] = useState<Task | null>(null)
   const [trashMode, setTrashMode] = useState(false)
   const [hiddenMode, setHiddenMode] = useState(false)
   const [habitDrawerOpen, setHabitDrawerOpen] = useState(false)
   const [editHabit, setEditHabit] = useState<Habit | null>(null)
+
+  // 拖拽排序的本地状态
+  const [localDoing, setLocalDoing] = useState<Task[]>([])
+  const [localTodo, setLocalTodo] = useState<Task[]>([])
+
+  // 同步外部排序结果到本地（只在非拖拽状态更新）
+  const isDraggingRef = useRef(false)
+  useMemo(() => {
+    if (!isDraggingRef.current) {
+      setLocalDoing(doing)
+      setLocalTodo(todo)
+    }
+  }, [doing, todo])
+
+  const handleDoingReorder = useCallback((newOrder: Task[]) => {
+    isDraggingRef.current = true
+    setLocalDoing(newOrder)
+  }, [])
+
+  const handleTodoReorder = useCallback((newOrder: Task[]) => {
+    isDraggingRef.current = true
+    setLocalTodo(newOrder)
+  }, [])
+
+  const handleDragEnd = useCallback(() => {
+    isDraggingRef.current = false
+    reorderTasks([...localDoing, ...localTodo].map((t) => t.id))
+  }, [localDoing, localTodo, reorderTasks])
 
   const visible = useMemo(() => tasks.filter((task) => {
     if (task.deletedAt) return false
@@ -372,23 +401,49 @@ export function TaskList() {
           </div>
 
           <div className="flex-1 overflow-y-auto px-4 pb-4 flex flex-col gap-4">
-            {doing.length > 0 && (
-              <Section title={tr.tasklist_doing} count={doing.length} accentColor>
-                <AnimatePresence mode="popLayout">
-                  {doing.map((task) => (
-                    <TaskItem key={task.id} task={task} onEdit={openEdit} />
+            {localDoing.length > 0 && (
+              <Section title={tr.tasklist_doing} count={localDoing.length} accentColor>
+                <Reorder.Group
+                  axis="y"
+                  values={localDoing}
+                  onReorder={handleDoingReorder}
+                  style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 6 }}
+                >
+                  {localDoing.map((task) => (
+                    <Reorder.Item
+                      key={task.id}
+                      value={task}
+                      whileDrag={{ scale: 1.02, boxShadow: '0 4px 12px rgba(0,0,0,0.15)', zIndex: 10 }}
+                      onDragEnd={handleDragEnd}
+                      style={{ listStyle: 'none' }}
+                    >
+                      <TaskItem task={task} onEdit={openEdit} />
+                    </Reorder.Item>
                   ))}
-                </AnimatePresence>
+                </Reorder.Group>
               </Section>
             )}
 
-            {todo.length > 0 && (
-              <Section title={tr.tasklist_todo} count={todo.length}>
-                <AnimatePresence mode="popLayout">
-                  {todo.map((task) => (
-                    <TaskItem key={task.id} task={task} onEdit={openEdit} />
+            {localTodo.length > 0 && (
+              <Section title={tr.tasklist_todo} count={localTodo.length}>
+                <Reorder.Group
+                  axis="y"
+                  values={localTodo}
+                  onReorder={handleTodoReorder}
+                  style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 6 }}
+                >
+                  {localTodo.map((task) => (
+                    <Reorder.Item
+                      key={task.id}
+                      value={task}
+                      whileDrag={{ scale: 1.02, boxShadow: '0 4px 12px rgba(0,0,0,0.15)', zIndex: 10 }}
+                      onDragEnd={handleDragEnd}
+                      style={{ listStyle: 'none' }}
+                    >
+                      <TaskItem task={task} onEdit={openEdit} />
+                    </Reorder.Item>
                   ))}
-                </AnimatePresence>
+                </Reorder.Group>
               </Section>
             )}
 
