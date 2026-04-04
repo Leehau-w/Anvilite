@@ -151,6 +151,9 @@ export const zh = {
   task_actualMinutes: '实际用时',
   task_minuteUnit: '分钟',
   task_actualMinutesPlaceholder: '完成后可填写',
+  task_allChildrenDone: (title: string) => `所有子任务已完成，是否完成「${title}」？`,
+  task_allChildrenDoneConfirm: '完成',
+  task_allChildrenDoneLater: '稍后',
   task_toastDone: (xp: number) => `已完成 · +${xp} XP`,
   task_toastUndo: '撤销',
   task_toastUndoDone: '已撤销完成',
@@ -252,6 +255,7 @@ export const zh = {
   charCard_status_traveling: '远行中',
   charCard_status_returning: '归来',
   charCard_clickToChangeStatus: '点击切换状态',
+  charCard_statusAutoLabel: '自动',
   charCard_catStatus_library: '学习中',
   charCard_catStatus_forge: '工作中',
   charCard_catStatus_arena: '运动中',
@@ -715,6 +719,19 @@ export const zh = {
   account_toastDeleted: (name: string) => `已删除账号「${name}」`,
   account_confirm: '确认',
   account_cancel: '取消',
+
+  // Data management
+  data_section: '数据管理',
+  data_export: '导出数据',
+  data_import: '导入数据',
+  data_importConfirmTitle: '确认导入',
+  data_importConfirmMsg: '导入将覆盖当前所有数据，此操作不可撤销。建议先导出当前数据作为备份。',
+  data_importConfirm: '确认导入',
+  data_importCancel: '取消',
+  data_importSuccess: '导入成功，正在重新加载…',
+  data_importErrorFormat: '文件格式无效',
+  data_importErrorVersion: '文件版本过新，请升级应用',
+  data_importErrorParse: '文件解析失败，请检查文件是否损坏',
 
   // Subtasks
   subtask_add: '添加子项',

@@ -38,6 +38,7 @@ export function TaskItem({ task, compact, onEdit }: TaskItemProps) {
   const deleteConfirmTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const [expanded, setExpanded] = useState(true)
+  const [parentCompletionPrompt, setParentCompletionPrompt] = useState<string | null>(null) // parentId when all siblings done
 
   const children = allTasks.filter((t) => !t.deletedAt && !t.isHidden && task.childIds.includes(t.id))
 
@@ -83,10 +84,13 @@ export function TaskItem({ task, compact, onEdit }: TaskItemProps) {
     const completed = completeTask(task.id)
     if (!completed) { setCompleting(false); return }
 
-    // 子任务不获得 XP/矿石
+    // 子任务不获得 XP/矿石，但检查是否全部完成
     if (task.parentId) {
       setCompleting(false)
       showToast(`✓ ${task.title}`)
+      if (completed.allSiblingsDone) {
+        setParentCompletionPrompt(task.parentId)
+      }
       return
     }
 
@@ -503,6 +507,61 @@ export function TaskItem({ task, compact, onEdit }: TaskItemProps) {
         </AnimatePresence>
       </div>
     )}
+
+    {/* 全部子任务完成提示 */}
+    <AnimatePresence>
+      {parentCompletionPrompt && (() => {
+        const parent = allTasks.find((t) => t.id === parentCompletionPrompt)
+        if (!parent) return null
+        return (
+          <motion.div
+            key="parent-prompt"
+            initial={{ opacity: 0, y: 4, scale: 0.97 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.97 }}
+            style={{
+              marginTop: 6, padding: '10px 12px',
+              background: 'color-mix(in srgb, var(--color-success) 8%, var(--color-surface))',
+              border: '1px solid color-mix(in srgb, var(--color-success) 30%, transparent)',
+              borderRadius: 'var(--radius-md)',
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
+            }}
+          >
+            <span style={{ fontSize: 12, color: 'var(--color-text)', flex: 1 }}>
+              {t.task_allChildrenDone(parent.title)}
+            </span>
+            <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+              <button
+                onClick={() => { setParentCompletionPrompt(null) }}
+                style={{ fontSize: 11, padding: '3px 8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', background: 'transparent', color: 'var(--color-text-dim)', cursor: 'pointer' }}
+              >
+                {t.task_allChildrenDoneLater}
+              </button>
+              <button
+                onClick={() => {
+                  setParentCompletionPrompt(null)
+                  // 触发父任务完成（由父任务自己的 TaskItem 处理 XP，这里用外部调用）
+                  const parentTask = allTasks.find((t) => t.id === parentCompletionPrompt)
+                  if (parentTask && onEdit) onEdit(parentTask)
+                  // 直接调用 completeTask 并计算XP
+                  const completed = completeTask(parentCompletionPrompt!)
+                  if (completed && !completed.parentId) {
+                    const { xp, ore } = calculateTaskXP(completed, character.streakDays)
+                    updateTask(parentCompletionPrompt!, { xpReward: xp })
+                    gainXPAndOre(xp, ore)
+                    recordActivity()
+                  }
+                  showToast(`✓ ${parent.title}`)
+                }}
+                style={{ fontSize: 11, padding: '3px 8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-success)', background: 'color-mix(in srgb, var(--color-success) 15%, transparent)', color: 'var(--color-success)', cursor: 'pointer', fontWeight: 600 }}
+              >
+                {t.task_allChildrenDoneConfirm}
+              </button>
+            </div>
+          </motion.div>
+        )
+      })()}
+    </AnimatePresence>
     </div>
   )
 }
