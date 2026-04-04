@@ -89,11 +89,14 @@ describe('checkNewBadges', () => {
   })
 
   describe('主题类', () => {
-    it('解锁 ≥ 3 个主题', () => {
-      const input = makeInput({ unlockedThemeCount: 3 })
-      const ids = checkNewBadges(input)
-      // 根据实际 badge 定义检测主题相关徽章
-      expect(ids.some((id) => id.startsWith('theme') || id.includes('theme'))).toBe(true)
+    it('解锁 ≥ 8 个主题 → 解锁 theme_collect', () => {
+      const input = makeInput({ unlockedThemeCount: 8 })
+      expect(checkNewBadges(input)).toContain('theme_collect')
+    })
+
+    it('解锁 < 8 个主题 → 不解锁', () => {
+      const input = makeInput({ unlockedThemeCount: 7 })
+      expect(checkNewBadges(input)).not.toContain('theme_collect')
     })
   })
 
