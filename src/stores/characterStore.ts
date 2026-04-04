@@ -67,6 +67,14 @@ export const useCharacterStore = create<CharacterStore>()(
             totalOreEarned: s.character.totalOreEarned + ore,
           },
         }))
+        if (leveledUp) {
+          useGrowthEventStore.getState().addEvent({
+            type: 'level_up',
+            title: `升至 Lv.${newLevel}`,
+            details: { oldLevel, newLevel },
+            isMilestone: newLevel % 10 === 0,
+          })
+        }
         return { leveledUp, oldLevel, newLevel, prestigeUnlocked }
       },
 

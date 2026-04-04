@@ -13,11 +13,14 @@ import { FeedbackProvider } from '@/components/feedback/FeedbackContext'
 import ErrorBoundary from '@/components/ui/ErrorBoundary'
 import { startDateWatcher } from '@/utils/dateWatcher'
 import { useHabitStore } from '@/stores/habitStore'
+import { useProsperityWatcher } from '@/hooks/useProsperityWatcher'
 
 function App() {
   const [activeTab, setActiveTab] = useState<NavTab>('dashboard')
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [inspirationOpen, setInspirationOpen] = useState(false)
+
+  useProsperityWatcher()
 
   useEffect(() => {
     return startDateWatcher(() => {

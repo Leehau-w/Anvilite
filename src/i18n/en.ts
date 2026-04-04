@@ -353,6 +353,7 @@ export const en: Translations = {
   worldmap_deleteConfirm: 'Delete',
   worldmap_levelUpToast: (name: string, levelName: string) => `${name} upgraded to "${levelName}"!`,
   worldmap_levelUpEvent: (name: string, levelName: string) => `${name} upgraded to ${levelName}`,
+  char_levelUpEvent: (level: number) => `Reached Lv.${level}`,
   area_rename: 'Rename',
   area_delete: 'Delete',
 

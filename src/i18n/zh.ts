@@ -351,6 +351,7 @@ export const zh = {
   worldmap_deleteConfirm: '确认删除',
   worldmap_levelUpToast: (name: string, levelName: string) => `${name} 升级为「${levelName}」！`,
   worldmap_levelUpEvent: (name: string, levelName: string) => `${name} 升级为${levelName}`,
+  char_levelUpEvent: (level: number) => `升至 Lv.${level}`,
   area_rename: '改名',
   area_delete: '删除',
 
