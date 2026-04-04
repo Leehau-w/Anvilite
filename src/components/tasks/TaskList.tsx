@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react'
+import React, { useState, useRef, useMemo } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useTaskStore } from '@/stores/taskStore'
 import { useAreaStore } from '@/stores/areaStore'
@@ -13,6 +13,7 @@ import type { Task } from '@/types/task'
 import type { Habit } from '@/types/habit'
 import { useT } from '@/i18n'
 import { categoryDisplay, getAreaDisplayName } from '@/utils/area'
+import { sortTasksInGroup } from '@/utils/task'
 
 
 export function TaskList() {
@@ -31,17 +32,17 @@ export function TaskList() {
   const [habitDrawerOpen, setHabitDrawerOpen] = useState(false)
   const [editHabit, setEditHabit] = useState<Habit | null>(null)
 
-  const visible = tasks.filter((task) => {
+  const visible = useMemo(() => tasks.filter((task) => {
     if (task.deletedAt) return false
     if (task.isHidden) return false
-    if (task.parentId) return false  // 子任务在父任务内渲染
+    if (task.parentId) return false
     if (activeCategory !== 'ALL' && task.category !== activeCategory) return false
     return true
-  })
+  }), [tasks, activeCategory])
 
-  const doing = visible.filter((t) => t.status === 'doing')
-  const todo = visible.filter((t) => t.status === 'todo')
-  const done = visible.filter((t) => t.status === 'done')
+  const doing = useMemo(() => sortTasksInGroup(visible.filter((t) => t.status === 'doing')), [visible])
+  const todo = useMemo(() => sortTasksInGroup(visible.filter((t) => t.status === 'todo')), [visible])
+  const done = useMemo(() => visible.filter((t) => t.status === 'done'), [visible])
 
   // 已删除任务（30天内）
   const deleted = tasks
