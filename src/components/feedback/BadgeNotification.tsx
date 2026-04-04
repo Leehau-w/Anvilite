@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useBadgeStore } from '@/stores/badgeStore'
+import { useGrowthEventStore } from '@/stores/growthEventStore'
 import { STATIC_BADGE_DEFS, makeAreaBadgeDef, type BadgeDef } from '@/types/badge'
+import { useT } from '@/i18n'
 
 /** 从徽章ID查找定义（含动态区域徽章） */
 function resolveBadgeDef(id: string): BadgeDef | null {
@@ -31,6 +33,8 @@ interface ActiveNotif {
 
 export function BadgeNotificationLayer() {
   const { notifyQueue, dismissNotify } = useBadgeStore()
+  const { addEvent } = useGrowthEventStore()
+  const t = useT()
   const [active, setActive] = useState<ActiveNotif[]>([])
   const [lit, setLit] = useState<Set<string>>(new Set())
 
@@ -46,6 +50,14 @@ export function BadgeNotificationLayer() {
       dismissNotify(id)
       return
     }
+
+    // 记录成长事件
+    addEvent({
+      type: 'badge_earned',
+      title: t.badge_earnedEvent(def.name),
+      details: { badgeId: id },
+      isMilestone: false,
+    })
 
     // 500ms 后变彩色发光
     const litTimer = setTimeout(() => {

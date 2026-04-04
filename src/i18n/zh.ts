@@ -491,6 +491,7 @@ export const zh = {
   timeline_eventHabitMiss: '习惯错过',
   timeline_eventLevelUp: '升级',
   timeline_eventBadge: '徽章',
+  badge_earnedEvent: (name: string) => `获得徽章「${name}」`,
   timeline_eventAreaUp: '区域升级',
   timeline_eventMilestone: '里程碑',
   timeline_filterAll: '全部',

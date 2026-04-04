@@ -493,6 +493,7 @@ export const en: Translations = {
   timeline_eventHabitMiss: 'Habit Miss',
   timeline_eventLevelUp: 'Level Up',
   timeline_eventBadge: 'Badge',
+  badge_earnedEvent: (name: string) => `Badge earned: "${name}"`,
   timeline_eventAreaUp: 'Area Up',
   timeline_eventMilestone: 'Milestone',
   timeline_filterAll: 'All',
