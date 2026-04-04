@@ -130,3 +130,69 @@ onDrop(targetGroupId):
 | `src/components/tasks/TaskList.tsx` | 新增拖放逻辑（DragState + drop zones + draggable rows） |
 | `src/i18n/zh.ts` | 新增 `task_dropHere` |
 | `src/i18n/en.ts` | 新增 `task_dropHere` |
+
+---
+
+## 五、Bug 修复（同日第二次会话）
+
+本次对已有功能进行了 code review，发现并修复 6 个 bug。
+
+### BUG-A：StreakMilestonePopup — FloatingBadge 水平居中失效
+
+**文件**：`src/components/feedback/StreakMilestonePopup.tsx`
+
+**现象**：3/7/14 天连击的浮动徽章向左偏移，不在屏幕水平中央。
+
+**根因**：`FloatingBadge` 的 `motion.div` 在 `style` 中同时设置了 `transform: translateX(-50%)` 和 Framer Motion 的 `y` 动画。Framer Motion 执行动画时会整体替换 `transform` 属性，覆盖 CSS 的 `translateX(-50%)`。这是项目已知的 v0.1 历史 Bug 模式（Framer Motion 的 transform 覆盖 CSS 定位 transform）。
+
+**修复**：将定位逻辑（`position: fixed`、`left: 50%`、`transform: translateX(-50%)`）移到外层普通 `<div>`，内层 `motion.div` 只保留动画属性。
+
+### BUG-B：StreakMilestonePopup — useEffect 闭包陈旧引用
+
+**文件**：`src/components/feedback/StreakMilestonePopup.tsx:40`
+
+**根因**：`useEffect` 依赖数组只有 `[milestone]`，缺少 `cfg` 和 `onDismiss`。若父组件重渲染更新了 `onDismiss` 引用，自动关闭计时器会调用旧版回调。
+
+**修复**：依赖数组改为 `[milestone, cfg, onDismiss]`。
+
+### BUG-C：LevelUpCelebration — useEffect 闭包 + 计时器时长不响应 titleChanged
+
+**文件**：`src/components/feedback/LevelUpCelebration.tsx:23`
+
+**根因**：`useEffect` 依赖数组只有 `[visible]`，缺少 `onDismiss` 和 `titleChanged`。`titleChanged` 为 `true` 时计时器应延长至 3700ms（展示称号变化），但若 effect 捕获的是旧值则实际用 2200ms 提前关闭。
+
+**修复**：依赖数组改为 `[visible, onDismiss, titleChanged]`。
+
+### BUG-D：LevelUpCelebration — 硬编码中文字符串
+
+**文件**：`src/components/feedback/LevelUpCelebration.tsx:87`
+
+**根因**：升级弹窗底部"点击任意位置继续"为硬编码中文，违反"零硬编码中文"规范。
+
+**修复**：改用已有翻译 key `t.streakPopup_dismiss`（中文"点击任意位置继续"/ 英文"Click anywhere to continue"）。同时为该组件补充了 `useT()` 和 `import { useT } from '@/i18n'`。
+
+### BUG-E：粒子效果在 render 期间直接调用 Math.random()（闪烁）
+
+**文件**：`src/components/feedback/LevelUpCelebration.tsx`、`src/components/feedback/StreakMilestonePopup.tsx`
+
+**根因**：`Particles`、`MiniParticles`、`FireParticles` 组件在渲染期间直接调用 `Math.random()` 生成粒子参数（距离、大小、延迟）。每次父组件触发重渲染，这些随机值都会重新生成，导致粒子位置和大小在动画中途跳变闪烁。
+
+**修复**：将粒子参数数组改为 `useMemo(() => [...], [count])` 缓存，只在 `count` 变化时重新生成。`Math.random()` 仅在 mount 时执行一次。
+
+### BUG-F：InspirationCard — 全部转化后空状态文案语义错误
+
+**文件**：`src/components/dashboard/InspirationCard.tsx:50`
+
+**根因**：所有灵感均已转化为任务时，空状态提示复用了 `t.inspiration_converted`（"已转为任务"），语义为单条灵感的状态标签，用作整体空状态文案不准确。
+
+**修复**：新增 i18n key `inspiration_allConverted`（中文"所有灵感已转为任务" / 英文"All ideas converted to tasks"），同步更新 `zh.ts`、`en.ts`，`InspirationCard` 改用新 key。
+
+---
+
+## 六、文档与 README 整理
+
+- 重写 `README.md`，补充中英文双语项目介绍（功能概览、技术栈、快速开始、设计原则）
+- 将 v0.1 开发文档归档至 `docs/v0.1_history/`
+- 新建 `docs/user-guide.md`（v0.2 版用户指南）
+- 新建 `docs/CHANGELOG.md`（版本更新记录）
+- 清理 `docs/` 根目录，仅保留面向用户的文档
