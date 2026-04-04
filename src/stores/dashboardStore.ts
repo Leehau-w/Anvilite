@@ -4,6 +4,8 @@ import { getStoragePrefix } from './accountManager'
 
 export type CardId = 'quickAdd' | 'stats' | 'tasks' | 'character' | 'habits' | 'growth'
 
+export const ALL_CARD_IDS: CardId[] = ['quickAdd', 'stats', 'tasks', 'character', 'habits', 'growth']
+
 export interface CardLayout {
   id: CardId
   col: number
@@ -27,7 +29,10 @@ export const DEFAULT_LAYOUT: CardLayout[] = [
 
 interface DashboardStore {
   layout: CardLayout[]
+  visibleCards: CardId[]
   updateCard: (id: CardId, patch: Partial<Omit<CardLayout, 'id'>>) => void
+  removeCard: (id: CardId) => void
+  addCard: (id: CardId) => void
   resetLayout: () => void
 }
 
@@ -35,20 +40,29 @@ export const useDashboardStore = create<DashboardStore>()(
   persist(
     (set) => ({
       layout: DEFAULT_LAYOUT,
+      visibleCards: ALL_CARD_IDS,
       updateCard: (id, patch) =>
         set((s) => ({
           layout: s.layout.map((c) => (c.id === id ? { ...c, ...patch } : c)),
         })),
-      resetLayout: () => set({ layout: DEFAULT_LAYOUT }),
+      removeCard: (id) =>
+        set((s) => ({ visibleCards: s.visibleCards.filter((c) => c !== id) })),
+      addCard: (id) =>
+        set((s) => {
+          if (s.visibleCards.includes(id)) return s
+          return { visibleCards: [...s.visibleCards, id] }
+        }),
+      resetLayout: () => set({ layout: DEFAULT_LAYOUT, visibleCards: ALL_CARD_IDS }),
     }),
     {
       name: `${getStoragePrefix()}-dashboard`,
-      version: 2,
+      version: 3,
       onRehydrateStorage: () => (state) => {
         if (!state) return
         const ids = new Set(state.layout.map((c) => c.id))
         const missing = DEFAULT_LAYOUT.filter((c) => !ids.has(c.id))
         if (missing.length) state.layout = [...state.layout, ...missing]
+        if (!state.visibleCards) state.visibleCards = ALL_CARD_IDS
       },
     }
   )

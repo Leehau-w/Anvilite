@@ -5,6 +5,7 @@ import { useHabitStore } from '@/stores/habitStore'
 import {
   useDashboardStore,
   DEFAULT_LAYOUT,
+  ALL_CARD_IDS,
   gridRect,
   snapPos,
   snapSpan,
@@ -39,7 +40,8 @@ export function Dashboard({ onNavigate }: DashboardProps) {
   const { character } = useCharacterStore()
   const { getTodayStats: getHabitStats } = useHabitStore()
   const t = useT()
-  const { layout, updateCard, resetLayout } = useDashboardStore()
+  const { layout, visibleCards, updateCard, removeCard, addCard, resetLayout } = useDashboardStore()
+  const [cardPickerOpen, setCardPickerOpen] = useState(false)
 
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [editTask, setEditTask] = useState<Task | null>(null)
@@ -86,7 +88,9 @@ export function Dashboard({ onNavigate }: DashboardProps) {
     return layout.find((c) => c.id === id) ?? DEFAULT_LAYOUT.find((c) => c.id === id)!
   }
 
-  const gh = useMemo(() => gridHeight(layout), [layout])
+  const visibleLayout = useMemo(() => layout.filter((c) => visibleCards.includes(c.id)), [layout, visibleCards])
+  const gh = useMemo(() => gridHeight(visibleLayout.length ? visibleLayout : DEFAULT_LAYOUT), [visibleLayout])
+  const hiddenCards = useMemo(() => ALL_CARD_IDS.filter((id) => !visibleCards.includes(id)), [visibleCards])
 
   return (
     <div style={{ height: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column', background: 'var(--color-bg)' }}>
@@ -95,91 +99,115 @@ export function Dashboard({ onNavigate }: DashboardProps) {
         <h1 style={{ fontSize: 20, fontWeight: 700, color: 'var(--color-text)', margin: 0 }}>
           {greeting}，<span style={{ color: 'var(--color-accent)' }}>{character.name}</span>
         </h1>
-        <button
-          onClick={resetLayout}
-          title={t.dash_resetLayout}
-          style={{ fontSize: 11, color: 'var(--color-text-dim)', background: 'none', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', padding: '3px 8px', cursor: 'pointer', opacity: 0.6 }}
-          onMouseEnter={(e) => { e.currentTarget.style.opacity = '1' }}
-          onMouseLeave={(e) => { e.currentTarget.style.opacity = '0.6' }}
-        >
-          {t.dash_resetLayout}
-        </button>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          {hiddenCards.length > 0 && (
+            <button
+              onClick={() => setCardPickerOpen(true)}
+              style={{ fontSize: 11, color: 'var(--color-accent)', background: 'color-mix(in srgb, var(--color-accent) 10%, transparent)', border: '1px solid var(--color-accent)', borderRadius: 'var(--radius-sm)', padding: '3px 8px', cursor: 'pointer', fontWeight: 600 }}
+            >
+              {t.dash_addCard}
+            </button>
+          )}
+          <button
+            onClick={resetLayout}
+            title={t.dash_resetLayout}
+            style={{ fontSize: 11, color: 'var(--color-text-dim)', background: 'none', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', padding: '3px 8px', cursor: 'pointer', opacity: 0.6 }}
+            onMouseEnter={(e) => { e.currentTarget.style.opacity = '1' }}
+            onMouseLeave={(e) => { e.currentTarget.style.opacity = '0.6' }}
+          >
+            {t.dash_resetLayout}
+          </button>
+        </div>
       </div>
 
       {/* 网格 */}
       <div style={{ flex: 1, overflow: 'auto', padding: '0 24px 16px' }}>
         <div ref={containerRef} style={{ position: 'relative', height: gh, minHeight: gh }}>
 
-          <GridCard card={getCard('quickAdd')} cw={cw} containerRef={containerRef} onUpdate={(p) => updateCard('quickAdd', p)} title={t.dash_quickAdd}>
-            <QuickInput onOpenDrawer={() => setDrawerOpen(true)} />
-          </GridCard>
+          {visibleCards.includes('quickAdd') && (
+            <GridCard card={getCard('quickAdd')} cw={cw} containerRef={containerRef} onUpdate={(p) => updateCard('quickAdd', p)} onRemove={() => removeCard('quickAdd')} title={t.dash_quickAdd}>
+              <QuickInput onOpenDrawer={() => setDrawerOpen(true)} />
+            </GridCard>
+          )}
 
-          <GridCard card={getCard('stats')} cw={cw} containerRef={containerRef} onUpdate={(p) => updateCard('stats', p)}>
-            <div style={{ display: 'flex', justifyContent: 'space-around', padding: '4px 0' }}>
-              <BigStat label={t.dash_statDone} value={totalCompleted} unit={t.dash_unitCount} />
-              <div style={{ width: 1, background: 'var(--color-border)' }} />
-              <BigStat label={t.dash_statXP} value={totalXP} unit="xp" />
-              <div style={{ width: 1, background: 'var(--color-border)' }} />
-              <BigStat label={t.dash_statStreak} value={character.streakDays} unit={t.dash_unitDays} emoji="🔥" />
-            </div>
-          </GridCard>
-
-          <GridCard card={getCard('tasks')} cw={cw} containerRef={containerRef} onUpdate={(p) => updateCard('tasks', p)} resizable title={t.dash_tasks}
-            titleExtra={<span style={{ fontSize: 12, color: 'var(--color-text-dim)' }}>{t.dash_pendingCount(doingTasks.length + todoTasks.length)}</span>}
-          >
-            <div style={{ overflowY: 'auto', height: '100%', scrollbarWidth: 'thin', scrollbarColor: 'var(--color-border) transparent' }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                {doingTasks.length > 0 && (
-                  <>
-                    <SectionLabel label={t.dash_doing} color="var(--color-accent)" />
-                    <AnimatePresence mode="popLayout">
-                      {doingTasks.map((task) => <TaskItem key={task.id} task={task} compact onEdit={openEditTask} />)}
-                    </AnimatePresence>
-                  </>
-                )}
-                {todoTasks.length > 0 && (
-                  <>
-                    {doingTasks.length > 0 && <div style={{ height: 4 }} />}
-                    <SectionLabel label={t.dash_todo} />
-                    <AnimatePresence mode="popLayout">
-                      {todoTasks.slice(0, 10).map((task) => <TaskItem key={task.id} task={task} compact onEdit={openEditTask} />)}
-                    </AnimatePresence>
-                  </>
-                )}
-                {doneTasks.length > 0 && (
-                  <>
-                    <div style={{ height: 4, borderTop: '1px solid var(--color-border)', marginTop: 4 }} />
-                    <SectionLabel label={t.dash_done} dim />
-                    <AnimatePresence mode="popLayout">
-                      {doneTasks.map((task) => <TaskItem key={task.id} task={task} compact onEdit={openEditTask} />)}
-                    </AnimatePresence>
-                  </>
-                )}
-                {doingTasks.length === 0 && todoTasks.length === 0 && doneTasks.length === 0 && (
-                  <Empty>{t.dash_empty}</Empty>
-                )}
+          {visibleCards.includes('stats') && (
+            <GridCard card={getCard('stats')} cw={cw} containerRef={containerRef} onUpdate={(p) => updateCard('stats', p)} onRemove={() => removeCard('stats')} title={t.dash_stats}>
+              <div style={{ display: 'flex', justifyContent: 'space-around', padding: '4px 0' }}>
+                <BigStat label={t.dash_statDone} value={totalCompleted} unit={t.dash_unitCount} />
+                <div style={{ width: 1, background: 'var(--color-border)' }} />
+                <BigStat label={t.dash_statXP} value={totalXP} unit="xp" />
+                <div style={{ width: 1, background: 'var(--color-border)' }} />
+                <BigStat label={t.dash_statStreak} value={character.streakDays} unit={t.dash_unitDays} emoji="🔥" />
               </div>
-            </div>
-          </GridCard>
+            </GridCard>
+          )}
 
-          <GridCard card={getCard('character')} cw={cw} containerRef={containerRef} onUpdate={(p) => updateCard('character', p)} noShell>
-            <CharacterMiniCard onClickMilestone={() => onNavigate?.('milestone')} />
-          </GridCard>
-
-          <GridCard card={getCard('habits')} cw={cw} containerRef={containerRef} onUpdate={(p) => updateCard('habits', p)} resizable title={t.dash_habits}
-            titleExtra={
-              <div style={{ display: 'flex', gap: 4 }}>
-                <ActionBtn onClick={() => setHabitManageOpen(true)} title={t.dash_habitManage}>{t.dash_habitManage}</ActionBtn>
-                <ActionBtn onClick={() => { setEditHabit(null); setHabitDrawerOpen(true) }} title={t.dash_addHabit} accent>＋</ActionBtn>
+          {visibleCards.includes('tasks') && (
+            <GridCard card={getCard('tasks')} cw={cw} containerRef={containerRef} onUpdate={(p) => updateCard('tasks', p)} onRemove={() => removeCard('tasks')} resizable title={t.dash_tasks}
+              titleExtra={<span style={{ fontSize: 12, color: 'var(--color-text-dim)' }}>{t.dash_pendingCount(doingTasks.length + todoTasks.length)}</span>}
+            >
+              <div style={{ overflowY: 'auto', height: '100%', scrollbarWidth: 'thin', scrollbarColor: 'var(--color-border) transparent' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {doingTasks.length > 0 && (
+                    <>
+                      <SectionLabel label={t.dash_doing} color="var(--color-accent)" />
+                      <AnimatePresence mode="popLayout">
+                        {doingTasks.map((task) => <TaskItem key={task.id} task={task} compact onEdit={openEditTask} />)}
+                      </AnimatePresence>
+                    </>
+                  )}
+                  {todoTasks.length > 0 && (
+                    <>
+                      {doingTasks.length > 0 && <div style={{ height: 4 }} />}
+                      <SectionLabel label={t.dash_todo} />
+                      <AnimatePresence mode="popLayout">
+                        {todoTasks.slice(0, 10).map((task) => <TaskItem key={task.id} task={task} compact onEdit={openEditTask} />)}
+                      </AnimatePresence>
+                    </>
+                  )}
+                  {doneTasks.length > 0 && (
+                    <>
+                      <div style={{ height: 4, borderTop: '1px solid var(--color-border)', marginTop: 4 }} />
+                      <SectionLabel label={t.dash_done} dim />
+                      <AnimatePresence mode="popLayout">
+                        {doneTasks.map((task) => <TaskItem key={task.id} task={task} compact onEdit={openEditTask} />)}
+                      </AnimatePresence>
+                    </>
+                  )}
+                  {doingTasks.length === 0 && todoTasks.length === 0 && doneTasks.length === 0 && (
+                    <Empty>{t.dash_empty}</Empty>
+                  )}
+                </div>
               </div>
-            }
-          >
-            <div style={{ overflow: 'hidden', height: '100%' }}><HabitCard onEdit={(h) => { setEditHabit(h); setHabitDrawerOpen(true) }} /></div>
-          </GridCard>
+            </GridCard>
+          )}
 
-          <GridCard card={getCard('growth')} cw={cw} containerRef={containerRef} onUpdate={(p) => updateCard('growth', p)} title={t.dash_growth}>
-            <Heatmap />
-          </GridCard>
+          {visibleCards.includes('character') && (
+            <GridCard card={getCard('character')} cw={cw} containerRef={containerRef} onUpdate={(p) => updateCard('character', p)} onRemove={() => removeCard('character')} noShell>
+              <CharacterMiniCard onClickMilestone={() => onNavigate?.('milestone')} />
+            </GridCard>
+          )}
+
+          {visibleCards.includes('habits') && (
+            <GridCard card={getCard('habits')} cw={cw} containerRef={containerRef} onUpdate={(p) => updateCard('habits', p)} onRemove={() => removeCard('habits')} resizable title={t.dash_habits}
+              titleExtra={
+                <div style={{ display: 'flex', gap: 4 }}>
+                  <ActionBtn onClick={() => setHabitManageOpen(true)} title={t.dash_habitManage}>{t.dash_habitManage}</ActionBtn>
+                  <ActionBtn onClick={() => { setEditHabit(null); setHabitDrawerOpen(true) }} title={t.dash_addHabit} accent>＋</ActionBtn>
+                </div>
+              }
+            >
+              <div style={{ overflowY: 'auto', height: '100%', scrollbarWidth: 'thin', scrollbarColor: 'var(--color-border) transparent' }}>
+                <HabitCard onEdit={(h) => { setEditHabit(h); setHabitDrawerOpen(true) }} />
+              </div>
+            </GridCard>
+          )}
+
+          {visibleCards.includes('growth') && (
+            <GridCard card={getCard('growth')} cw={cw} containerRef={containerRef} onUpdate={(p) => updateCard('growth', p)} onRemove={() => removeCard('growth')} title={t.dash_growth}>
+              <Heatmap />
+            </GridCard>
+          )}
 
         </div>
       </div>
@@ -187,6 +215,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
       <TaskDrawer open={drawerOpen} onClose={() => { setDrawerOpen(false); setEditTask(null) }} editTask={editTask} />
       <HabitDrawer open={habitDrawerOpen} onClose={() => { setHabitDrawerOpen(false); setEditHabit(null) }} editHabit={editHabit} />
       <HabitManageModal open={habitManageOpen} onClose={() => setHabitManageOpen(false)} onEdit={(h) => { setEditHabit(h); setHabitDrawerOpen(true) }} />
+      <CardPickerModal open={cardPickerOpen} onClose={() => setCardPickerOpen(false)} hiddenCards={hiddenCards} onAdd={(id) => { addCard(id); setCardPickerOpen(false) }} />
     </div>
   )
 }
@@ -198,6 +227,7 @@ interface GridCardProps {
   cw: number
   containerRef: React.RefObject<HTMLDivElement | null>
   onUpdate: (patch: Partial<Omit<CardLayout, 'id'>>) => void
+  onRemove?: () => void
   resizable?: boolean
   noShell?: boolean
   /** Disable drag and resize entirely */
@@ -207,7 +237,8 @@ interface GridCardProps {
   children: React.ReactNode
 }
 
-function GridCard({ card, cw, containerRef, onUpdate, resizable, noShell, locked, title, titleExtra, children }: GridCardProps) {
+function GridCard({ card, cw, containerRef, onUpdate, onRemove, resizable, noShell, locked, title, titleExtra, children }: GridCardProps) {
+  const [hovered, setHovered] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
   const [isResizing, setIsResizing] = useState(false)
   const [resizeDelta, setResizeDelta] = useState({ dw: 0, dh: 0 })
@@ -279,6 +310,8 @@ function GridCard({ card, cw, containerRef, onUpdate, resizable, noShell, locked
 
   return (
     <div
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
       style={{
         position: 'absolute',
         left: rect.x,
@@ -295,6 +328,23 @@ function GridCard({ card, cw, containerRef, onUpdate, resizable, noShell, locked
             onPointerDown={startDrag}
             style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 24, cursor: 'grab', zIndex: 2 }}
           />
+          {onRemove && hovered && (
+            <button
+              onClick={onRemove}
+              title="移除卡片"
+              style={{
+                position: 'absolute', top: 4, right: 4, zIndex: 10,
+                width: 20, height: 20, borderRadius: '50%',
+                border: '1px solid var(--color-border)',
+                background: 'var(--color-surface)', color: 'var(--color-text-dim)',
+                cursor: 'pointer', fontSize: 12, lineHeight: 1,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                opacity: 0.7, transition: 'opacity 0.15s',
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.color = 'var(--color-danger)' }}
+              onMouseLeave={(e) => { e.currentTarget.style.opacity = '0.7'; e.currentTarget.style.color = 'var(--color-text-dim)' }}
+            >×</button>
+          )}
           {children}
         </div>
       ) : (
@@ -323,13 +373,50 @@ function GridCard({ card, cw, containerRef, onUpdate, resizable, noShell, locked
               }}
             >
               <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-text)' }}>{title}</span>
-              {titleExtra && <div onPointerDown={(e) => e.stopPropagation()}>{titleExtra}</div>}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }} onPointerDown={(e) => e.stopPropagation()}>
+                {titleExtra}
+                {onRemove && hovered && (
+                  <button
+                    onClick={onRemove}
+                    title="移除卡片"
+                    style={{
+                      width: 18, height: 18, borderRadius: '50%',
+                      border: '1px solid var(--color-border)',
+                      background: 'transparent', color: 'var(--color-text-dim)',
+                      cursor: 'pointer', fontSize: 12, lineHeight: 1,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      opacity: 0.6, transition: 'opacity 0.15s, color 0.15s', flexShrink: 0,
+                    }}
+                    onMouseEnter={(e) => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.color = 'var(--color-danger)' }}
+                    onMouseLeave={(e) => { e.currentTarget.style.opacity = '0.6'; e.currentTarget.style.color = 'var(--color-text-dim)' }}
+                  >×</button>
+                )}
+              </div>
             </div>
           ) : (
-            <div
-              onPointerDown={startDrag}
-              style={{ position: 'absolute', top: 0, left: 0, right: resizable ? 20 : 0, height: 20, cursor: 'grab', zIndex: 1 }}
-            />
+            <>
+              <div
+                onPointerDown={startDrag}
+                style={{ position: 'absolute', top: 0, left: 0, right: resizable ? 20 : 0, height: 20, cursor: 'grab', zIndex: 1 }}
+              />
+              {onRemove && hovered && (
+                <button
+                  onClick={onRemove}
+                  title="移除卡片"
+                  style={{
+                    position: 'absolute', top: 4, right: 4, zIndex: 10,
+                    width: 18, height: 18, borderRadius: '50%',
+                    border: '1px solid var(--color-border)',
+                    background: 'var(--color-surface)', color: 'var(--color-text-dim)',
+                    cursor: 'pointer', fontSize: 12, lineHeight: 1,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    opacity: 0.6, transition: 'opacity 0.15s, color 0.15s',
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.color = 'var(--color-danger)' }}
+                  onMouseLeave={(e) => { e.currentTarget.style.opacity = '0.6'; e.currentTarget.style.color = 'var(--color-text-dim)' }}
+                >×</button>
+              )}
+            </>
           )}
 
           {/* Content */}
@@ -405,6 +492,90 @@ function Empty({ children }: { children: React.ReactNode }) {
   return (
     <div style={{ textAlign: 'center', padding: '16px 0', fontSize: 12, color: 'var(--color-text-dim)' }}>
       {children}
+    </div>
+  )
+}
+
+// ─── CardPickerModal ──────────────────────────────────────────────────────────
+
+function CardPickerModal({ open, onClose, hiddenCards, onAdd }: {
+  open: boolean
+  onClose: () => void
+  hiddenCards: CardId[]
+  onAdd: (id: CardId) => void
+}) {
+  const t = useT()
+
+  const CARD_LABELS: Record<CardId, string> = {
+    quickAdd: t.dash_quickAdd,
+    stats: t.dash_stats,
+    tasks: t.dash_tasks,
+    character: t.dash_character,
+    habits: t.dash_habits,
+    growth: t.dash_growth,
+  }
+
+  if (!open) return null
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 1000,
+        background: 'rgba(0,0,0,0.35)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: 'var(--color-surface)',
+          borderRadius: 'var(--radius-xl)',
+          border: '1px solid var(--color-border)',
+          padding: '20px 24px',
+          minWidth: 280,
+          maxWidth: 400,
+          boxShadow: '0 8px 32px rgba(0,0,0,0.15)',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+          <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--color-text)' }}>{t.dash_cardPickerTitle}</span>
+          <button
+            onClick={onClose}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-dim)', fontSize: 18, lineHeight: 1, padding: '0 4px' }}
+          >×</button>
+        </div>
+
+        {hiddenCards.length === 0 ? (
+          <p style={{ fontSize: 13, color: 'var(--color-text-dim)', textAlign: 'center', padding: '12px 0' }}>
+            {t.dash_cardPickerEmpty}
+          </p>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {hiddenCards.map((id) => (
+              <button
+                key={id}
+                onClick={() => onAdd(id)}
+                style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  padding: '10px 14px',
+                  borderRadius: 'var(--radius-md)',
+                  border: '1px solid var(--color-border)',
+                  background: 'var(--color-bg)',
+                  cursor: 'pointer',
+                  transition: 'border-color 0.15s, background 0.15s',
+                  textAlign: 'left',
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--color-accent)'; e.currentTarget.style.background = 'color-mix(in srgb, var(--color-accent) 6%, var(--color-bg))' }}
+                onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--color-border)'; e.currentTarget.style.background = 'var(--color-bg)' }}
+              >
+                <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--color-text)' }}>{CARD_LABELS[id]}</span>
+                <span style={{ fontSize: 12, color: 'var(--color-accent)', fontWeight: 600 }}>+ 添加</span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   )
 }

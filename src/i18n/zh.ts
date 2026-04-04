@@ -66,6 +66,12 @@ export const zh = {
   dash_addHabit: '添加习惯',
   dash_growth: '成长趋势',
   dash_resetLayout: '重置布局',
+  dash_stats: '今日数据',
+  dash_character: '角色',
+  dash_addCard: '+ 添加卡片',
+  dash_removeCard: '移除卡片',
+  dash_cardPickerTitle: '添加卡片',
+  dash_cardPickerEmpty: '所有卡片均已显示',
 
   // ─── Task List ────────────────────────────────────────────────────────────────
   tasklist_tabTasks: '任务',
