@@ -2,7 +2,6 @@ import React from 'react'
 import { useCharacterStore } from '@/stores/characterStore'
 import { useTaskStore } from '@/stores/taskStore'
 import { getXPProgress, xpToNextLevel } from '@/engines/levelEngine'
-import { getElapsedSeconds } from '@/utils/time'
 import { AnimatedXPBar } from '@/components/feedback/AnimatedXPBar'
 import { useT } from '@/i18n'
 import type { Translations } from '@/i18n'
@@ -67,12 +66,7 @@ export function CharacterMiniCard({ onClickMilestone }: CharacterMiniCardProps) 
     const catStatus = CATEGORY_STATUS[topDoing.category]
     const icon = catStatus ? catStatus.icon : '📌'
     const label = catStatus ? (t[catStatus.key] as string) : t.charCard_busy
-    const elapsed = topDoing.actualMinutes + Math.floor(getElapsedSeconds(topDoing.timerStartedAt) / 60)
-    statusInfo = {
-      icon,
-      label,
-      extra: elapsed > 0 ? t.charCard_elapsedMin(elapsed) : undefined,
-    }
+    statusInfo = { icon, label }
   } else {
     const s = STATUS_ICONS[character.globalStatus] ?? STATUS_ICONS.active
     statusInfo = { icon: s.icon, label: t[s.key] as string }

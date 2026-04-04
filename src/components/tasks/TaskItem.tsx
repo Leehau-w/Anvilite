@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import type { Task } from '@/types/task'
 import { PriorityDot } from '@/components/ui/PriorityBadge'
-import { formatRelativeDate, isOverdue, formatTimer, getElapsedSeconds } from '@/utils/time'
+import { formatRelativeDate, isOverdue } from '@/utils/time'
 import { useTaskStore } from '@/stores/taskStore'
 import { useCharacterStore } from '@/stores/characterStore'
 import { useGrowthEventStore } from '@/stores/growthEventStore'
@@ -32,7 +32,6 @@ export function TaskItem({ task, compact, onEdit }: TaskItemProps) {
   const [confirmHigh, setConfirmHigh] = useState(false)
   const [hovered, setHovered] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState(false)
-  const [elapsed, setElapsed] = useState(0)
   const [showDurationInput, setShowDurationInput] = useState(false)
   const [durationInput, setDurationInput] = useState('')
   const confirmTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -45,17 +44,6 @@ export function TaskItem({ task, compact, onEdit }: TaskItemProps) {
   const isOverdueDue = isOverdue(task.dueDate) && task.status !== 'done'
   const isDoing = task.status === 'doing'
   const isDone = task.status === 'done'
-
-  // 计时器
-  useEffect(() => {
-    if (!isDoing || !task.timerStartedAt) return
-    const update = () => {
-      setElapsed(task.actualMinutes * 60 + getElapsedSeconds(task.timerStartedAt))
-    }
-    update()
-    const interval = setInterval(update, 1000)
-    return () => clearInterval(interval)
-  }, [isDoing, task.timerStartedAt, task.actualMinutes])
 
   // 清理确认timer
   useEffect(() => {
@@ -316,9 +304,9 @@ export function TaskItem({ task, compact, onEdit }: TaskItemProps) {
             {task.estimatedMinutes && !isDoing && (
               <span style={{ opacity: 0.6 }}>{t.task_estMin(task.estimatedMinutes)}</span>
             )}
-            {isDoing && task.timerStartedAt && (
-              <span style={{ color: 'var(--color-accent)', fontFamily: 'var(--font-num)', fontWeight: 600 }}>
-                ⏱ {formatTimer(elapsed)}
+            {isDoing && (
+              <span style={{ color: 'var(--color-accent)', fontSize: 11 }}>
+                {t.task_doing}
               </span>
             )}
             {isDone && task.xpReward > 0 && (
@@ -446,39 +434,11 @@ export function TaskItem({ task, compact, onEdit }: TaskItemProps) {
         </span>
       )}
 
-      {/* 计时显示（compact：计时中 or 暂停后累计） */}
-      {compact && isDoing && task.timerStartedAt && (
-        <span
-          style={{
-            fontSize: 11,
-            color: 'var(--color-accent)',
-            fontFamily: 'var(--font-num)',
-            fontWeight: 600,
-            flexShrink: 0,
-          }}
-        >
-          ⏱{formatTimer(elapsed)}
-        </span>
-      )}
-      {compact && !isDoing && !isDone && task.actualMinutes > 0 && (
-        <span
-          style={{
-            fontSize: 11,
-            color: 'var(--color-text-dim)',
-            fontFamily: 'var(--font-num)',
-            fontWeight: 600,
-            flexShrink: 0,
-          }}
-        >
-          ⏱{formatTimer(task.actualMinutes * 60)}
-        </span>
-      )}
-
-      {/* 计时器控制按钮（非已完成） */}
+      {/* 进行中/开始按钮（非已完成） */}
       {!isDone && (
         <button
           onClick={handleStatusToggle}
-          title={isDoing ? t.task_timerPause : t.task_timerStart}
+          title={isDoing ? t.task_pauseDoing : t.task_startDoing}
           style={{
             width: 26,
             height: 26,

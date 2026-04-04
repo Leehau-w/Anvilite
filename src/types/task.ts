@@ -13,7 +13,6 @@ export interface Task {
   nestingLevel: number
   xpReward: number
   actualMinutes: number
-  timerStartedAt: string | null
   completedAt: string | null
   deletedAt: string | null
   isHidden: boolean
