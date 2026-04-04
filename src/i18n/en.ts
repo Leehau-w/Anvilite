@@ -68,6 +68,12 @@ export const en: Translations = {
   dash_addHabit: 'Add Habit',
   dash_growth: 'Growth Trend',
   dash_resetLayout: 'Reset Layout',
+  dash_stats: "Today's Stats",
+  dash_character: 'Character',
+  dash_addCard: '+ Add Card',
+  dash_removeCard: 'Remove Card',
+  dash_cardPickerTitle: 'Add Card',
+  dash_cardPickerEmpty: 'All cards are visible',
 
   // ─── Task List ────────────────────────────────────────────────────────────────
   tasklist_tabTasks: 'Tasks',
