@@ -7,6 +7,8 @@ import { calculateTaskXP } from '@/engines/xpEngine'
 import { getTodayString } from '@/utils/time'
 import { useGrowthEventStore } from './growthEventStore'
 import { useTaskStore } from './taskStore'
+import { useAreaStore } from './areaStore'
+import { PROSPERITY_NAMES } from '@/types/area'
 
 interface CharacterStore {
   character: Character
@@ -74,6 +76,23 @@ export const useCharacterStore = create<CharacterStore>()(
             details: { oldLevel, newLevel },
             isMilestone: newLevel % 10 === 0,
           })
+
+          // 档案馆（_milestone 区域）繁荣度跟随角色等级变化，在升级时同步检测
+          const milestoneProsp = (lvl: number) =>
+            lvl <= 0 ? 1 : lvl <= 3 ? 2 : lvl <= 8 ? 3 : lvl <= 15 ? 4 : lvl <= 25 ? 5 : 6
+          const oldProsp = milestoneProsp(oldLevel)
+          const newProsp = milestoneProsp(newLevel)
+          if (newProsp > oldProsp) {
+            const milestoneArea = useAreaStore.getState().areas.find((a) => a.category === '_milestone')
+            const areaName = milestoneArea?.name ?? '档案馆'
+            const levelName = PROSPERITY_NAMES[newProsp - 1]
+            useGrowthEventStore.getState().addEvent({
+              type: 'area_level_up',
+              title: `${areaName} 升级为${levelName}`,
+              details: { areaName, prosperityLevel: newProsp },
+              isMilestone: newProsp >= 4,
+            })
+          }
         }
         return { leveledUp, oldLevel, newLevel, prestigeUnlocked }
       },

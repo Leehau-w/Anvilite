@@ -496,36 +496,45 @@ interface MonthBlock {
   areaLevelUps: number
 }
 
-const EVENT_SYMBOL_COLORS: Record<string, string> = {
-  '⬆': 'var(--color-accent)',
-  '⭐': 'var(--color-xp)',
-  '🏆': 'var(--color-secondary)',
-  '🏘': 'var(--color-success)',
+// 事件类型 → 符号 + 颜色，作为唯一数据源供图例和卡片行共用
+// 故意使用无 VS-16 变体选择符的字符，确保 CSS color 可以着色
+const EVENT_TYPE_CONFIG: Partial<Record<GrowthEvent['type'], { symbol: string; color: string }>> = {
+  level_up:         { symbol: '⬆', color: 'var(--color-accent)' },
+  milestone:        { symbol: '⭐', color: 'var(--color-xp)' },
+  custom_milestone: { symbol: '⭐', color: 'var(--color-xp)' },
+  badge_earned:     { symbol: '🏆', color: 'var(--color-secondary)' },
+  area_level_up:    { symbol: '🏘', color: 'var(--color-success)' },
+  prestige:         { symbol: '✦', color: 'var(--color-secondary)' },
+  task_complete:    { symbol: '✓', color: 'var(--color-text-dim)' },
+  habit_complete:   { symbol: '●', color: 'var(--color-text-dim)' },
+  habit_skip:       { symbol: '○', color: 'var(--color-text-dim)' },
+  habit_miss:       { symbol: '·', color: 'var(--color-text-dim)' },
+}
+
+function getEventDisplaySymbol(e: GrowthEvent): string {
+  return EVENT_TYPE_CONFIG[e.type]?.symbol ?? '·'
 }
 
 function getEventColor(e: GrowthEvent): string {
-  switch (e.type) {
-    case 'level_up':         return 'var(--color-accent)'
-    case 'milestone':
-    case 'custom_milestone': return 'var(--color-xp)'
-    case 'badge_earned':     return 'var(--color-secondary)'
-    case 'area_level_up':    return 'var(--color-success)'
-    case 'prestige':         return 'var(--color-secondary)'
-    default:                 return 'var(--color-text-dim)'
-  }
+  return EVENT_TYPE_CONFIG[e.type]?.color ?? 'var(--color-text-dim)'
 }
 
 type EventSymbolConfig = Record<string, { symbol: string; label: string; color: string }>
 
 function getEventSymbolConfig(t: ReturnType<typeof useT>): EventSymbolConfig {
   return {
-    level_up:         { symbol: '⬆', label: t.archive_eventLevelUp,   color: 'var(--color-accent)' },
-    milestone:        { symbol: '⭐', label: t.archive_eventMilestone, color: 'var(--color-xp)' },
-    custom_milestone: { symbol: '⭐', label: t.archive_eventMilestone, color: 'var(--color-xp)' },
-    badge_earned:     { symbol: '🏆', label: t.archive_eventBadge,     color: 'var(--color-secondary)' },
-    area_level_up:    { symbol: '🏘', label: t.archive_eventAreaUp,    color: 'var(--color-success)' },
+    level_up:         { symbol: EVENT_TYPE_CONFIG.level_up!.symbol,         label: t.archive_eventLevelUp,   color: EVENT_TYPE_CONFIG.level_up!.color },
+    milestone:        { symbol: EVENT_TYPE_CONFIG.milestone!.symbol,        label: t.archive_eventMilestone, color: EVENT_TYPE_CONFIG.milestone!.color },
+    custom_milestone: { symbol: EVENT_TYPE_CONFIG.custom_milestone!.symbol, label: t.archive_eventMilestone, color: EVENT_TYPE_CONFIG.custom_milestone!.color },
+    badge_earned:     { symbol: EVENT_TYPE_CONFIG.badge_earned!.symbol,     label: t.archive_eventBadge,     color: EVENT_TYPE_CONFIG.badge_earned!.color },
+    area_level_up:    { symbol: EVENT_TYPE_CONFIG.area_level_up!.symbol,    label: t.archive_eventAreaUp,    color: EVENT_TYPE_CONFIG.area_level_up!.color },
   }
 }
+
+// summaryParts 使用相同符号，EVENT_SYMBOL_COLORS 用于着色
+const EVENT_SYMBOL_COLORS: Record<string, string> = Object.fromEntries(
+  Object.values(EVENT_TYPE_CONFIG).map((v) => [v.symbol, v.color])
+)
 
 const PRIORITY_ORDER = ['prestige', 'custom_milestone', 'milestone', 'badge_earned', 'level_up', 'area_level_up', 'habit_complete', 'task_complete', 'habit_skip', 'habit_miss']
 
@@ -559,19 +568,6 @@ function groupByMonth(events: GrowthEvent[]): MonthBlock[] {
     })
 }
 
-function getEventIcon(e: GrowthEvent): string {
-  switch (e.type) {
-    case 'prestige': return '🔥'
-    case 'custom_milestone':
-    case 'milestone': return '⭐'
-    case 'badge_earned': return '🏆'
-    case 'level_up': return '⬆️'
-    case 'area_level_up': return '🏘️'
-    case 'task_complete': return '✓'
-    case 'habit_complete': return '●'
-    default: return '·'
-  }
-}
 
 function ScrollTimeline() {
   const t = useT()
@@ -755,7 +751,7 @@ function MonthBlockCard({
           >
             {topEvents.map((e) => (
               <div key={e.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 5 }}>
-                <span style={{ fontSize: 11, flexShrink: 0, marginTop: 1, color: getEventColor(e) }}>{getEventIcon(e)}</span>
+                <span style={{ fontSize: 11, flexShrink: 0, marginTop: 1, color: getEventColor(e), fontFamily: 'var(--font-num)', fontWeight: 700 }}>{getEventDisplaySymbol(e)}</span>
                 <span
                   style={{
                     fontSize: 11,

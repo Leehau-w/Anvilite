@@ -6,41 +6,38 @@
 import { useEffect, useRef } from 'react'
 import { useAreaStore } from '@/stores/areaStore'
 import { useTaskStore } from '@/stores/taskStore'
-import { useCharacterStore } from '@/stores/characterStore'
 import { useGrowthEventStore } from '@/stores/growthEventStore'
 import { getProsperityInfo, getAreaSkillXP } from '@/engines/prosperityEngine'
 import { PROSPERITY_NAMES } from '@/types/area'
 
-function getAreaProsperityLevel(category: string, tasks: ReturnType<typeof useTaskStore.getState>['tasks'], characterLevel: number): number {
-  if (category === '_milestone') {
-    const lvl = characterLevel
-    return lvl === 0 ? 1 : lvl <= 3 ? 2 : lvl <= 8 ? 3 : lvl <= 15 ? 4 : lvl <= 25 ? 5 : 6
-  }
+function getAreaProsperityLevel(category: string, tasks: ReturnType<typeof useTaskStore.getState>['tasks']): number {
+  // _milestone 区域由 characterStore.gainXPAndOre 在升级时同步记录，此处跳过避免重复
+  if (category === '_milestone') return -1
   return getProsperityInfo(getAreaSkillXP(tasks, category)).prosperityLevel
 }
 
 export function useProsperityWatcher() {
   const areas = useAreaStore((s) => s.areas)
   const tasks = useTaskStore((s) => s.tasks)
-  const characterLevel = useCharacterStore((s) => s.character.level)
   const prevRef = useRef<Record<string, number> | null>(null)
 
   useEffect(() => {
     const current: Record<string, number> = {}
     for (const area of areas) {
-      current[area.id] = getAreaProsperityLevel(area.category, tasks, characterLevel)
+      current[area.id] = getAreaProsperityLevel(area.category, tasks)
     }
 
     if (prevRef.current === null) {
-      // 首次：记录基准，不触发事件
       prevRef.current = current
       return
     }
 
     for (const area of areas) {
-      const prev = prevRef.current[area.id] ?? 1
+      const prev = prevRef.current[area.id]
       const now = current[area.id]
-      if (now > prev) {
+      // -1 表示由其他机制处理（_milestone），跳过
+      if (now === -1 || prev === -1) continue
+      if (prev !== undefined && now > prev) {
         const levelName = PROSPERITY_NAMES[now - 1]
         useGrowthEventStore.getState().addEvent({
           type: 'area_level_up',
@@ -52,5 +49,5 @@ export function useProsperityWatcher() {
     }
 
     prevRef.current = current
-  }, [tasks, characterLevel, areas])
+  }, [tasks, areas])
 }
