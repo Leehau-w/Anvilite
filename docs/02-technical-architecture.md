@@ -1,4 +1,4 @@
-# Anvilite v0.1 - 技术架构文档
+# Anvilite v0.1.0 - 技术架构文档
 
 ## 一、技术栈
 
@@ -133,8 +133,10 @@ accountManager.ts（非 Zustand，直接操作 localStorage）
 ```
 用户点击完成 → TaskItem.handleComplete()
   │
+  ├─ 检查 task.parentId → 子任务？跳过 XP，仅 toast 提示
+  │
   ├─ taskStore.completeTask(id)     → 更新任务状态、记录完成时间
-  ├─ xpEngine.calculateTaskXP()    → 计算 XP 和矿石
+  ├─ xpEngine.calculateTaskXP()    → 计算 XP 和矿石（仅根任务）
   ├─ characterStore.gainXPAndOre()  → 累加 XP/矿石，检测升级
   ├─ characterStore.recordActivity()→ 更新连续活跃天数
   ├─ growthEventStore.addEvent()    → 记录成长事件
@@ -145,6 +147,27 @@ accountManager.ts（非 Zustand，直接操作 localStorage）
   └─ BadgeChecker (useEffect)
         └─ badgeEngine.checkBadges() → 检测新徽章
               └─ BadgeNotification   → 徽章通知
+```
+
+### 3.4 子任务/子习惯数据模型
+
+```
+Task / Habit 共用字段：
+  parentId: string | null     // null = 根级
+  childIds: string[]          // 子项 ID 列表
+  nestingLevel: number        // 0=根, 1=子, 2=孙（最多3层）
+
+addTask({ parentId }):
+  1. 校验 parent.nestingLevel < 2
+  2. 设置 nestingLevel = parent.nestingLevel + 1
+  3. 继承 parent.category + difficulty
+  4. 追加到 parent.childIds
+
+deleteTask(id):
+  BFS 收集所有子孙 → 级联软删除
+
+渲染：列表只显示 parentId===null 的根级项
+      TaskItem 递归渲染 children（compact 模式传递 compact 给子项）
 ```
 
 ---
@@ -228,9 +251,32 @@ accountManager.ts（非 Zustand，直接操作 localStorage）
 
 切换主题 = `document.documentElement.setAttribute('data-theme', id)`
 
-### 5.3 动画体系
+### 5.3 世界地图渲染
 
-- **页面过渡**：AnimatePresence + mapVariants/interiorVariants（opacity + scale）
+```
+<div> (容器)
+  <motion.div>  ← 地图层，始终挂载，animate={{ opacity, scale }} 控制显隐
+    <div ref={viewportRef}>  ← 视口，处理 click/mouse 事件
+      <div style={{ transform: scale(autoScale) }}>  ← 画布，自动缩放
+        <AreaNode /> × N  ← 区域节点，绝对定位
+      </div>
+    </div>
+    控制栏 + 信息栏 + 弹窗
+  </motion.div>
+  <AnimatePresence>  ← 仅包裹区域内部
+    {interiorAreaId && <motion.div> interior </motion.div>}
+  </AnimatePresence>
+</div>
+
+自动缩放: scale = min(vpWidth/1600, vpHeight/1000, 1)
+居中: offsetX = (vpWidth - 1600 × scale) / 2
+区域拖拽: dx / autoScale 转换回画布坐标, clamp [50, CANVAS-50]
+窗口缩放: ResizeObserver 实时更新 vpSize → 重算 scale
+```
+
+### 5.4 动画体系
+
+- **页面过渡**：地图用 `animate={{ opacity, scale }}` 直接驱动；区域内部用 AnimatePresence fade
 - **列表动画**：motion.div initial/animate/exit + stagger
 - **微交互**：hover scale、按钮 whileHover/whileTap
 - **庆祝效果**：LevelUp 弹窗（scale bounce）、XPFloat（translateY fade）、Badge toast（slideIn）
@@ -264,12 +310,16 @@ main.ts:
   BrowserWindow({ frame: false, titleBarStyle: 'hidden' })
   IPC: window-minimize / window-maximize / window-close
 
-preload.ts:
+preload.ts (必须编译为 CJS):
   contextBridge.exposeInMainWorld('electronAPI', {
     minimize: () => ipcRenderer.send('window-minimize'),
     maximize: () => ipcRenderer.send('window-maximize'),
     close:    () => ipcRenderer.send('window-close'),
   })
+
+vite.config.ts preload 构建:
+  lib.formats: ['cjs'], rollupOptions.output.format: 'cjs'
+  (Electron 不支持 ESM preload，必须输出 CJS)
 
 安全: contextIsolation: true, nodeIntegration: false
 ```
@@ -287,3 +337,7 @@ preload.ts:
 | 多账号用 key 前缀隔离 | 零迁移成本，默认账号完全兼容旧数据 |
 | window.location.reload 切换账号 | 避免 Store 热切换的复杂度和状态泄漏 |
 | Framer Motion 而非 CSS Animation | 声明式、支持 AnimatePresence exit 动画、手势集成 |
+| 地图始终挂载而非 AnimatePresence 二选一 | 避免重挂载引起的 opacity:0 白屏闪烁 |
+| 地图固定画布 + auto-scale | 比用户手动平移缩放更简单可靠，窗口缩放自动适配 |
+| preload 强制 CJS 输出 | Electron 不支持 ESM preload，默认 Vite 输出会导致窗口控制失效 |
+| 子任务不获得 XP | 防止拆分刷经验，激励完成有意义的根任务 |

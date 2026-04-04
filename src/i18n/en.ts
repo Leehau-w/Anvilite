@@ -153,6 +153,9 @@ export const en: Translations = {
   task_actualMinutes: 'Actual Duration',
   task_minuteUnit: 'min',
   task_actualMinutesPlaceholder: 'Available after completion',
+  task_allChildrenDone: (title: string) => `All subtasks done — complete "${title}"?`,
+  task_allChildrenDoneConfirm: 'Complete',
+  task_allChildrenDoneLater: 'Later',
   task_toastDone: (xp: number) => `Done · +${xp} XP`,
   task_toastUndo: 'Undo',
   task_toastUndoDone: 'Completion undone',
@@ -254,6 +257,7 @@ export const en: Translations = {
   charCard_status_traveling: 'Traveling',
   charCard_status_returning: 'Returned',
   charCard_clickToChangeStatus: 'Click to change status',
+  charCard_statusAutoLabel: 'Auto',
   charCard_catStatus_library: 'Studying',
   charCard_catStatus_forge: 'Working',
   charCard_catStatus_arena: 'Training',
@@ -717,6 +721,19 @@ export const en: Translations = {
   account_toastDeleted: (name: string) => `Account "${name}" deleted`,
   account_confirm: 'Confirm',
   account_cancel: 'Cancel',
+
+  // Data management
+  data_section: 'Data Management',
+  data_export: 'Export Data',
+  data_import: 'Import Data',
+  data_importConfirmTitle: 'Confirm Import',
+  data_importConfirmMsg: 'Importing will overwrite all current data. This cannot be undone. Consider exporting a backup first.',
+  data_importConfirm: 'Confirm Import',
+  data_importCancel: 'Cancel',
+  data_importSuccess: 'Import successful, reloading…',
+  data_importErrorFormat: 'Invalid file format',
+  data_importErrorVersion: 'File version is too new — please update the app',
+  data_importErrorParse: 'Failed to parse file — file may be corrupted',
 
   // Subtasks
   subtask_add: 'Add sub-item',

@@ -11,6 +11,7 @@ export interface Character {
   lastActiveDate: string | null
   globalStatus: 'active' | 'charging' | 'resting' | 'traveling' | 'returning'
   prestigeLevel: number   // 淬火重铸次数，默认0
+  xpFormulaVersion: number  // XP公式版本，用于追溯重算（当前=2）
   createdAt: string
 }
 

@@ -18,7 +18,7 @@ interface TaskStore {
 
   hideTask: (id: string) => void  // 隐藏已完成任务
 
-  completeTask: (id: string) => Task | null
+  completeTask: (id: string) => (Task & { allSiblingsDone: boolean }) | null
   undoComplete: (id: string) => void
 
   startTask: (id: string) => void
@@ -144,7 +144,6 @@ export const useTaskStore = create<TaskStore>()(
         if (!task || task.status === 'done') return null
 
         const now = new Date().toISOString()
-
         const updatedTask: Task = {
           ...task,
           status: 'done',
@@ -156,7 +155,19 @@ export const useTaskStore = create<TaskStore>()(
           tasks: s.tasks.map((t) => (t.id === id ? updatedTask : t)),
         }))
 
-        return updatedTask
+        // 检查兄弟子任务是否全部完成
+        let allSiblingsDone = false
+        if (task.parentId) {
+          const parent = get().tasks.find((t) => t.id === task.parentId)
+          if (parent) {
+            allSiblingsDone = parent.childIds.every((cid) => {
+              const child = get().tasks.find((t) => t.id === cid)
+              return !child || child.status === 'done'
+            })
+          }
+        }
+
+        return { ...updatedTask, allSiblingsDone }
       },
 
       undoComplete: (id) => {
@@ -175,16 +186,17 @@ export const useTaskStore = create<TaskStore>()(
       },
 
       startTask: (id) => {
+        const task = get().tasks.find((t) => t.id === id)
+        const now = new Date().toISOString()
         set((s) => ({
-          tasks: s.tasks.map((t) =>
-            t.id === id
-              ? {
-                  ...t,
-                  status: 'doing',
-                  updatedAt: new Date().toISOString(),
-                }
-              : t
-          ),
+          tasks: s.tasks.map((t) => {
+            if (t.id === id) return { ...t, status: 'doing', updatedAt: now }
+            // 子任务 → doing 时，todo 状态的父任务自动跟随
+            if (task?.parentId && t.id === task.parentId && t.status === 'todo') {
+              return { ...t, status: 'doing', updatedAt: now }
+            }
+            return t
+          }),
         }))
       },
 
