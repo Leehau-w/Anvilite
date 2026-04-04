@@ -1,5 +1,4 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react'
-import type { Task } from '@/types/task'
 import { useTaskStore } from '@/stores/taskStore'
 import { useCharacterStore } from '@/stores/characterStore'
 import { useHabitStore } from '@/stores/habitStore'
