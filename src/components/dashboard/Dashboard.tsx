@@ -291,7 +291,13 @@ export function Dashboard({ onNavigate, onOpenInspiration }: DashboardProps) {
           )}
 
           {visibleCards.includes('inspiration') && (
-            <GridCard card={getCard('inspiration')} cw={cw} containerRef={containerRef} onUpdate={(p) => updateCard('inspiration', p)} locked={!editMode} onRemove={editMode ? () => removeCard('inspiration') : undefined} title={t.inspiration_list}>
+            <GridCard card={getCard('inspiration')} cw={cw} containerRef={containerRef} onUpdate={(p) => updateCard('inspiration', p)} locked={!editMode} onRemove={editMode ? () => removeCard('inspiration') : undefined} resizable title={`💡 ${t.inspiration_list}`}
+              titleExtra={
+                onOpenInspiration && (
+                  <ActionBtn onClick={onOpenInspiration} title={t.inspiration_save} accent>＋</ActionBtn>
+                )
+              }
+            >
               <InspirationCard onOpenModal={onOpenInspiration} />
             </GridCard>
           )}

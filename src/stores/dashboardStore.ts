@@ -41,7 +41,7 @@ export const useDashboardStore = create<DashboardStore>()(
   persist(
     (set) => ({
       layout: DEFAULT_LAYOUT,
-      visibleCards: ALL_CARD_IDS.filter((id) => id !== 'inspiration'),
+      visibleCards: ALL_CARD_IDS,
       updateCard: (id, patch) =>
         set((s) => ({
           layout: s.layout.map((c) => (c.id === id ? { ...c, ...patch } : c)),
@@ -53,7 +53,7 @@ export const useDashboardStore = create<DashboardStore>()(
           if (s.visibleCards.includes(id)) return s
           return { visibleCards: [...s.visibleCards, id] }
         }),
-      resetLayout: () => set({ layout: DEFAULT_LAYOUT, visibleCards: ALL_CARD_IDS.filter((id) => id !== 'inspiration') }),
+      resetLayout: () => set({ layout: DEFAULT_LAYOUT, visibleCards: ALL_CARD_IDS }),
     }),
     {
       name: `${getStoragePrefix()}-dashboard`,
@@ -63,7 +63,11 @@ export const useDashboardStore = create<DashboardStore>()(
         const ids = new Set(state.layout.map((c) => c.id))
         const missing = DEFAULT_LAYOUT.filter((c) => !ids.has(c.id))
         if (missing.length) state.layout = [...state.layout, ...missing]
-        if (!state.visibleCards) state.visibleCards = ALL_CARD_IDS
+        if (!state.visibleCards) {
+          state.visibleCards = ALL_CARD_IDS
+        } else if (!state.visibleCards.includes('inspiration')) {
+          state.visibleCards = [...state.visibleCards, 'inspiration']
+        }
       },
     }
   )

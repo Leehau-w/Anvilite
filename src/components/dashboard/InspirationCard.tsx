@@ -24,67 +24,31 @@ export function InspirationCard({ onOpenModal }: { onOpenModal?: () => void }) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 8 }}>
         <span style={{ fontSize: 24 }}>💡</span>
-        <p style={{ fontSize: 12, color: 'var(--color-text-dim)', textAlign: 'center', lineHeight: 1.5, margin: 0 }}>
+        <p style={{ fontSize: 12, color: 'var(--color-text-dim)', textAlign: 'center', lineHeight: 1.5, margin: 0, padding: '0 8px' }}>
           {t.inspiration_empty}
         </p>
-        {onOpenModal && (
-          <button
-            onClick={onOpenModal}
-            style={{ fontSize: 12, color: 'var(--color-accent)', background: 'none', border: 'none', cursor: 'pointer', padding: '4px 8px' }}
-          >
-            + {t.inspiration_save}
-          </button>
-        )}
       </div>
     )
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      {/* Header */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        padding: '8px 12px',
-        borderBottom: '1px solid var(--color-border)',
-        flexShrink: 0,
-      }}>
-        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text)' }}>
-          💡 {t.inspiration_list}
-          {unconverted.length > 0 && (
-            <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--color-text-dim)' }}>({unconverted.length})</span>
-          )}
-        </span>
-        {onOpenModal && (
-          <button
-            onClick={onOpenModal}
-            style={{ fontSize: 11, color: 'var(--color-accent)', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 6px' }}
-          >
-            +
-          </button>
-        )}
-      </div>
-
-      {/* List */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '4px 0' }}>
-        <AnimatePresence mode="popLayout">
-          {unconverted.map((item) => (
-            <InspirationRow
-              key={item.id}
-              item={item}
-              onConvert={handleConvert}
-              onDelete={() => deleteInspiration(item.id)}
-              t={t}
-            />
-          ))}
-        </AnimatePresence>
-        {unconverted.length === 0 && (
-          <p style={{ fontSize: 12, color: 'var(--color-text-dim)', textAlign: 'center', padding: '16px 0' }}>
-            {t.inspiration_converted} ✓
-          </p>
-        )}
-      </div>
+    <div style={{ overflowY: 'auto', height: '100%', scrollbarWidth: 'thin', scrollbarColor: 'var(--color-border) transparent' }}>
+      <AnimatePresence mode="popLayout">
+        {unconverted.map((item) => (
+          <InspirationRow
+            key={item.id}
+            item={item}
+            onConvert={handleConvert}
+            onDelete={() => deleteInspiration(item.id)}
+            t={t}
+          />
+        ))}
+      </AnimatePresence>
+      {unconverted.length === 0 && inspirations.length > 0 && (
+        <p style={{ fontSize: 12, color: 'var(--color-text-dim)', textAlign: 'center', padding: '16px 0' }}>
+          {t.inspiration_converted} ✓
+        </p>
+      )}
     </div>
   )
 }
@@ -117,7 +81,8 @@ function InspirationRow({
           display: 'flex',
           alignItems: 'flex-start',
           gap: 6,
-          padding: '6px 12px',
+          padding: '6px 2px',
+          borderBottom: '1px solid var(--color-border)',
           background: hovered ? 'var(--color-surface-hover)' : 'transparent',
           transition: 'background 0.1s',
         }}
