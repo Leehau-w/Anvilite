@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useCharacterStore } from '@/stores/characterStore'
@@ -8,6 +8,7 @@ import { useT } from '@/i18n'
 import type { Translations } from '@/i18n/zh'
 import { getAccounts, getCurrentAccountId, createAccount, switchAccount, deleteAccount } from '@/stores/accountManager'
 import { exportData, importData } from '@/utils/dataExport'
+import { getStorageUsage, formatBytes } from '@/utils/storageMonitor'
 
 /** Map theme id → i18n key */
 const THEME_NAME_KEY: Record<string, keyof Translations> = {
@@ -151,6 +152,11 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
   const confirmThemeInfo = confirmTheme ? THEMES.find((t) => t.id === confirmTheme) : null
   const confirmCost = confirmTheme ? (THEME_ORE_COST[confirmTheme] ?? 0) : 0
   const canAfford = character.ore >= confirmCost
+
+  const [storageUsage, setStorageUsage] = useState(() => getStorageUsage())
+  useEffect(() => {
+    if (open) setStorageUsage(getStorageUsage())
+  }, [open])
 
   return (
     <AnimatePresence>
@@ -424,6 +430,28 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
                     📥 {t.data_import}
                   </button>
                   <input ref={importInputRef} type="file" accept=".json" style={{ display: 'none' }} onChange={handleImportSelect} />
+                </div>
+              </section>
+
+              {/* 存储用量 */}
+              <section>
+                <SectionTitle>{t.settings_storage}</SectionTitle>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <div style={{ height: 6, borderRadius: 'var(--radius-full)', background: 'var(--color-border)', overflow: 'hidden' }}>
+                    <div
+                      style={{
+                        height: '100%',
+                        width: `${Math.min(storageUsage.usageRatio * 100, 100)}%`,
+                        borderRadius: 'var(--radius-full)',
+                        background: storageUsage.isWarning ? 'var(--color-danger)' : 'var(--color-accent)',
+                        transition: 'width 0.3s ease',
+                      }}
+                    />
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--color-text-dim)' }}>
+                    <span>{t.storage_used}: {formatBytes(storageUsage.usedBytes)}</span>
+                    <span>{t.storage_total}: {formatBytes(storageUsage.totalBytes)}</span>
+                  </div>
                 </div>
               </section>
             </div>

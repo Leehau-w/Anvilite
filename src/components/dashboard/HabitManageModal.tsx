@@ -14,7 +14,7 @@ interface HabitManageModalProps {
 }
 
 export function HabitManageModal({ open, onClose, onEdit }: HabitManageModalProps) {
-  const { habits, pauseHabit, resumeHabit, hideHabit, unhideHabit, deleteHabit, restoreHabit, permanentlyDeleteHabit } = useHabitStore()
+  const { habits, pauseHabit, resumeHabit, hideHabit, unhideHabit, deleteHabit, restoreHabit, permanentlyDeleteHabit, startHabitTimer, pauseHabitTimer } = useHabitStore()
   const [hiddenMode, setHiddenMode] = useState(false)
   const [trashMode, setTrashMode] = useState(false)
   const tr = useT()
@@ -82,7 +82,7 @@ export function HabitManageModal({ open, onClose, onEdit }: HabitManageModalProp
               <Section title={tr.habits_active} count={active.length}>
                 <AnimatePresence mode="popLayout">
                   {active.map((h) => (
-                    <HabitRow key={h.id} habit={h} onEdit={() => { onEdit(h); onClose() }} onPause={() => pauseHabit(h.id)} onHide={() => handleHide(h.id)} onDelete={() => handleDelete(h.id)} />
+                    <HabitRow key={h.id} habit={h} onEdit={() => { onEdit(h); onClose() }} onStartPause={() => h.timerStartedAt ? pauseHabitTimer(h.id) : startHabitTimer(h.id)} onPause={() => pauseHabit(h.id)} onHide={() => handleHide(h.id)} onDelete={() => handleDelete(h.id)} />
                   ))}
                 </AnimatePresence>
               </Section>
@@ -141,6 +141,7 @@ function Section({ title, count, children }: { title: string; count: number; chi
 function HabitRow({
   habit,
   onEdit,
+  onStartPause,
   onPause,
   onResume,
   onHide,
@@ -152,6 +153,7 @@ function HabitRow({
 }: {
   habit: Habit
   onEdit?: () => void
+  onStartPause?: () => void
   onPause?: () => void
   onResume?: () => void
   onHide?: () => void
@@ -212,6 +214,20 @@ function HabitRow({
         {onEdit && (
           <IconBtn onClick={onEdit} title={tr.habit_edit} color="var(--color-secondary)">
             ✏️
+          </IconBtn>
+        )}
+        {onStartPause && (
+          <IconBtn onClick={onStartPause} title={habit.timerStartedAt ? tr.habit_pauseDoing : tr.habit_startDoing} color={habit.timerStartedAt ? 'var(--color-accent)' : 'var(--color-text-dim)'}>
+            {habit.timerStartedAt ? (
+              <svg width="9" height="9" viewBox="0 0 10 10" fill="currentColor">
+                <rect x="2" y="2" width="2.5" height="6" rx="0.5"/>
+                <rect x="5.5" y="2" width="2.5" height="6" rx="0.5"/>
+              </svg>
+            ) : (
+              <svg width="9" height="9" viewBox="0 0 10 10" fill="currentColor">
+                <path d="M3 2l5 3-5 3V2z"/>
+              </svg>
+            )}
           </IconBtn>
         )}
         {onPause && (

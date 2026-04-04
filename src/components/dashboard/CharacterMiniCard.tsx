@@ -1,6 +1,7 @@
 import React from 'react'
 import { useCharacterStore } from '@/stores/characterStore'
 import { useTaskStore } from '@/stores/taskStore'
+import { useHabitStore } from '@/stores/habitStore'
 import { getXPProgress, xpToNextLevel } from '@/engines/levelEngine'
 import { AnimatedXPBar } from '@/components/feedback/AnimatedXPBar'
 import { useT } from '@/i18n'
@@ -40,6 +41,7 @@ interface CharacterMiniCardProps {
 export function CharacterMiniCard({ onClickMilestone }: CharacterMiniCardProps) {
   const { character, setGlobalStatus } = useCharacterStore()
   const { tasks } = useTaskStore()
+  const { habits } = useHabitStore()
   const t = useT()
 
   function cycleStatus() {
@@ -61,9 +63,13 @@ export function CharacterMiniCard({ onClickMilestone }: CharacterMiniCardProps) 
   const priorityOrder = { urgent: 0, high: 1, medium: 2, low: 3 }
   const topDoing = doingTasks.sort((a, b) => priorityOrder[a.priority] - priorityOrder[b.priority])[0]
 
+  // 找正在进行的习惯
+  const topDoingHabit = !topDoing ? habits.find((h) => !h.deletedAt && h.timerStartedAt !== null) : undefined
+  const topActive = topDoing ?? topDoingHabit ?? null
+
   let statusInfo: { icon: string; label: string; extra?: string }
-  if (topDoing) {
-    const catStatus = CATEGORY_STATUS[topDoing.category]
+  if (topActive) {
+    const catStatus = CATEGORY_STATUS[topActive.category]
     const icon = catStatus ? catStatus.icon : '📌'
     const label = catStatus ? (t[catStatus.key] as string) : t.charCard_busy
     statusInfo = { icon, label }
@@ -96,15 +102,15 @@ export function CharacterMiniCard({ onClickMilestone }: CharacterMiniCardProps) 
     >
       {/* 状态行 */}
       <div
-        style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: !topDoing ? 'pointer' : 'default' }}
-        onClick={!topDoing ? cycleStatus : undefined}
-        title={!topDoing ? t.charCard_clickToChangeStatus : undefined}
+        style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: !topActive ? 'pointer' : 'default' }}
+        onClick={!topActive ? (e) => { e.stopPropagation(); cycleStatus() } : (e) => e.stopPropagation()}
+        title={!topActive ? t.charCard_clickToChangeStatus : undefined}
       >
         <span style={{ fontSize: 22 }}>{statusInfo.icon}</span>
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: 6 }}>
             {statusInfo.label}
-            {topDoing && (
+            {topActive && (
               <span style={{ fontSize: 10, fontWeight: 500, color: 'var(--color-accent)', background: 'color-mix(in srgb, var(--color-accent) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--color-accent) 30%, transparent)', borderRadius: 'var(--radius-sm)', padding: '1px 5px', lineHeight: 1.4 }}>
                 {t.charCard_statusAutoLabel}
               </span>

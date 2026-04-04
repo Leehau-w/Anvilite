@@ -106,7 +106,9 @@ export const en: Translations = {
   habits_archived: (n: number) => `Archived (${n})`,
   habits_hidden: (n: number) => `Hidden (${n})`,
   habit_edit: 'Edit',
-  habit_pause: 'Pause',
+  habit_pause: 'Pause Habit',
+  habit_startDoing: 'Start',
+  habit_pauseDoing: 'Pause',
   habit_resume: 'Resume',
   habit_archive: 'Archive',
   habit_archiveConfirm: 'Click again to confirm archive',
@@ -279,6 +281,25 @@ export const en: Translations = {
   habitCard_eventTitle: (title: string) => `Habit done: ${title}`,
   habitCard_eventSkip: (title: string) => `Habit skipped: ${title}`,
 
+  // ─── Phase 4 additions ────────────────────────────────────────────────────
+  task_groupByMonth: 'By Month',
+  task_groupByArea: 'By Area',
+  task_groupCustom: 'Custom',
+  task_newGroup: 'New Group',
+  task_groupNamePlaceholder: 'Group name',
+  task_ungrouped: 'Ungrouped',
+  task_uncategorized: 'Uncategorized',
+  task_moveToGroup: 'Move to Group',
+  task_removeFromGroup: 'Remove from Group',
+  task_dropHere: 'Drop here',
+  habit_completed: 'Completed Habits',
+  dashboard_todayCompleted: 'Completed Today',
+  dashboard_cycleCompleted: 'Completed This Cycle',
+  common_undo: 'Undo',
+  habit_undoComplete: 'Undo Completion',
+  habit_undoneToast: (name: string) => `Undid completion of "${name}"`,
+  habit_completedToast: (name: string, xp: number) => `${name} done! +${xp} XP`,
+
   // ─── Heatmap ─────────────────────────────────────────────────────────────
   heatmap_month: 'Month',
   heatmap_week: 'Week',
@@ -351,6 +372,7 @@ export const en: Translations = {
   worldmap_deleteConfirm: 'Delete',
   worldmap_levelUpToast: (name: string, levelName: string) => `${name} upgraded to "${levelName}"!`,
   worldmap_levelUpEvent: (name: string, levelName: string) => `${name} upgraded to ${levelName}`,
+  char_levelUpEvent: (level: number) => `Reached Lv.${level}`,
   area_rename: 'Rename',
   area_delete: 'Delete',
 
@@ -740,4 +762,22 @@ export const en: Translations = {
   subtask_placeholder: 'Title, press Enter',
   subtask_collapse: 'Collapse',
   subtask_expand: 'Expand',
+
+  // Inspiration
+  inspiration_title: 'Quick Note',
+  inspiration_placeholder: 'Capture this idea…',
+  inspiration_save: 'Save',
+  inspiration_list: 'Inspirations',
+  inspiration_convertToTask: 'Convert to Task',
+  inspiration_empty: 'No ideas yet — press Ctrl+Shift+N to capture',
+  inspiration_converted: 'Converted to task',
+  inspiration_allConverted: 'All ideas converted to tasks',
+  inspiration_deleteConfirm: 'Delete this inspiration?',
+
+  // Storage
+  settings_storage: 'Storage Usage',
+  storage_warning: 'Storage usage exceeds 80% — consider exporting a backup',
+  storage_exportNow: 'Export Now',
+  storage_used: 'Used',
+  storage_total: 'Total',
 }

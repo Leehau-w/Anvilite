@@ -302,7 +302,7 @@ export function TaskDrawer({ open, onClose, editTask, initialCategory }: TaskDra
 
         {/* 子项管理（编辑时 + 层级 < 2） */}
         {editTask && editTask.nestingLevel < 2 && (() => {
-          const children = allTasks.filter((c) => !c.deletedAt && editTask.childIds.includes(c.id))
+          const children = allTasks.filter((c) => !c.deletedAt && c.parentId === editTask.id)
           return (
             <div className="flex flex-col gap-1.5">
               <label style={{ fontSize: 12, color: 'var(--color-text-dim)' }}>{t.subtask_add}</label>

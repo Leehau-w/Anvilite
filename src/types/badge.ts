@@ -98,14 +98,15 @@ export function makeAreaBadgeId(category: string, level: number): string {
   return `area_${category}_${level}`
 }
 
-/** 从区域徽章ID生成 BadgeDef */
-export function makeAreaBadgeDef(category: string, level: number): BadgeDef {
+/** 从区域徽章ID生成 BadgeDef。displayName 为用户可见名称，缺省时回退到 category。 */
+export function makeAreaBadgeDef(category: string, level: number, displayName?: string): BadgeDef {
   const info = AREA_PROSPERITY_BADGE_NAMES[level]
+  const label = displayName ?? category
   return {
     id: makeAreaBadgeId(category, level),
     category: '区域',
-    name: `${category}·${info.name}`,
-    description: `「${category}」${info.description}`,
+    name: `${label}·${info.name}`,
+    description: `「${label}」${info.description}`,
     icon: info.icon,
   }
 }

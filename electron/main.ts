@@ -22,6 +22,7 @@ function createWindow() {
       nodeIntegration: false,
     },
     backgroundColor: '#faf8f5',
+    icon: path.join(process.cwd(), 'build/icon.png'),
   })
 
   if (isDev) {

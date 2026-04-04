@@ -2,9 +2,9 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { getStoragePrefix } from './accountManager'
 
-export type CardId = 'quickAdd' | 'stats' | 'tasks' | 'character' | 'habits' | 'growth'
+export type CardId = 'quickAdd' | 'stats' | 'tasks' | 'character' | 'habits' | 'growth' | 'inspiration'
 
-export const ALL_CARD_IDS: CardId[] = ['quickAdd', 'stats', 'tasks', 'character', 'habits', 'growth']
+export const ALL_CARD_IDS: CardId[] = ['quickAdd', 'stats', 'tasks', 'character', 'habits', 'growth', 'inspiration']
 
 export interface CardLayout {
   id: CardId
@@ -19,12 +19,13 @@ export const ROW_H = 44    // px per row
 export const GAP = 8       // px gap between cells
 
 export const DEFAULT_LAYOUT: CardLayout[] = [
-  { id: 'quickAdd',  col: 0,  row: 0,  colSpan: 16, rowSpan: 2 },
-  { id: 'stats',     col: 16, row: 0,  colSpan: 8,  rowSpan: 2 },
-  { id: 'tasks',     col: 0,  row: 2,  colSpan: 8,  rowSpan: 8 },
-  { id: 'habits',    col: 8,  row: 2,  colSpan: 8,  rowSpan: 8 },
-  { id: 'character', col: 16, row: 2,  colSpan: 8,  rowSpan: 3 },
-  { id: 'growth',    col: 16, row: 5,  colSpan: 8,  rowSpan: 5 },
+  { id: 'quickAdd',     col: 0,  row: 0,  colSpan: 16, rowSpan: 2 },
+  { id: 'stats',        col: 16, row: 0,  colSpan: 8,  rowSpan: 2 },
+  { id: 'tasks',        col: 0,  row: 2,  colSpan: 8,  rowSpan: 8 },
+  { id: 'habits',       col: 8,  row: 2,  colSpan: 8,  rowSpan: 8 },
+  { id: 'character',    col: 16, row: 2,  colSpan: 8,  rowSpan: 3 },
+  { id: 'growth',       col: 16, row: 5,  colSpan: 8,  rowSpan: 5 },
+  { id: 'inspiration',  col: 0,  row: 10, colSpan: 8,  rowSpan: 5 },
 ]
 
 interface DashboardStore {
@@ -62,7 +63,11 @@ export const useDashboardStore = create<DashboardStore>()(
         const ids = new Set(state.layout.map((c) => c.id))
         const missing = DEFAULT_LAYOUT.filter((c) => !ids.has(c.id))
         if (missing.length) state.layout = [...state.layout, ...missing]
-        if (!state.visibleCards) state.visibleCards = ALL_CARD_IDS
+        if (!state.visibleCards) {
+          state.visibleCards = ALL_CARD_IDS
+        } else if (!state.visibleCards.includes('inspiration')) {
+          state.visibleCards = [...state.visibleCards, 'inspiration']
+        }
       },
     }
   )

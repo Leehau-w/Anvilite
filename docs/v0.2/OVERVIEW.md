@@ -123,6 +123,7 @@ anvilite/
 | Phase 1 | 8 个 Bug 修复 + 2 个功能 + 测试基建 | 1.5~2 周 |
 | Phase 2 | 3 个功能完善 + 4 个 PRD Patch + 数据导出 | 2~3 周 |
 | Phase 3 | 2 个 PRD Patch + 灵感记录 + 存储监控 | 3~4 周 |
+| Phase 4 | 已完成项展示优化 + 习惯撤销机制 | 2~3 周 |
 
 ### 不包含（移至 v0.3+）
 
@@ -194,5 +195,6 @@ onRehydrateStorage: () => (state) => {
 | `phase1-testing.md` | Vitest 配置 + 5 个引擎测试 | Phase 1 |
 | `phase2-tasks.md` | FEAT-03/04/05, PATCH-01/02/03/07, 数据导出 | Phase 2 |
 | `phase3-tasks.md` | PATCH-04/05, NEW-01, 存储监控 | Phase 3 |
+| `phase4-tasks.md` | FEAT-06/07/08/09, 已完成项分组 + 习惯撤销 | Phase 4 |
 
 **使用方式**：接到任务时，先确认任务编号 → 查阅对应子文档 → 按文档中的实现规格执行。如有与本总纲冲突之处，以本总纲为准。

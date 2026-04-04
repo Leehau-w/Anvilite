@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react'
+import { getStorageUsage } from '@/utils/storageMonitor'
 import { useTaskStore } from '@/stores/taskStore'
 import { useCharacterStore } from '@/stores/characterStore'
 import { useHabitStore } from '@/stores/habitStore'
@@ -25,7 +26,9 @@ import { HabitCard } from './HabitCard'
 import { HabitDrawer } from './HabitDrawer'
 import { HabitManageModal } from './HabitManageModal'
 import { Heatmap } from './Heatmap'
+import { InspirationCard } from './InspirationCard'
 import { AnimatePresence, Reorder } from 'framer-motion'
+import { CollapsibleGroup } from '@/components/ui/CollapsibleGroup'
 import type { Habit } from '@/types/habit'
 import type { Task } from '@/types/task'
 
@@ -33,9 +36,10 @@ type NavTab = 'dashboard' | 'tasks' | 'worldmap' | 'timeline' | 'milestone'
 
 interface DashboardProps {
   onNavigate?: (tab: NavTab) => void
+  onOpenInspiration?: () => void
 }
 
-export function Dashboard({ onNavigate }: DashboardProps) {
+export function Dashboard({ onNavigate, onOpenInspiration }: DashboardProps) {
   const { tasks, getTodayStats, reorderTasks } = useTaskStore()
   const { character } = useCharacterStore()
   const { getTodayStats: getHabitStats } = useHabitStore()
@@ -84,10 +88,12 @@ export function Dashboard({ onNavigate }: DashboardProps) {
     () => sortTasksInGroup(tasks.filter((t) => !t.deletedAt && !t.parentId && t.status === 'todo')),
     [tasks]
   )
-  const doneTasks = useMemo(
-    () => tasks.filter((t) => !t.deletedAt && !t.parentId && t.status === 'done').slice(0, 8),
-    [tasks]
-  )
+  const doneTasks = useMemo(() => {
+    const today = new Date().toISOString().split('T')[0]
+    return tasks
+      .filter((t) => !t.deletedAt && !t.parentId && t.status === 'done' && t.completedAt && t.completedAt.startsWith(today))
+      .slice(0, 8)
+  }, [tasks])
 
   // sync drag-sort local state from store
   useEffect(() => {
@@ -119,6 +125,11 @@ export function Dashboard({ onNavigate }: DashboardProps) {
   const visibleLayout = useMemo(() => layout.filter((c) => visibleCards.includes(c.id)), [layout, visibleCards])
   const gh = useMemo(() => gridHeight(visibleLayout.length ? visibleLayout : DEFAULT_LAYOUT), [visibleLayout])
   const hiddenCards = useMemo(() => ALL_CARD_IDS.filter((id) => !visibleCards.includes(id)), [visibleCards])
+
+  const storageWarning = useMemo(() => {
+    const usage = getStorageUsage()
+    return usage.isWarning ? usage : null
+  }, [])
 
   return (
     <div style={{ height: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column', background: 'var(--color-bg)' }}>
@@ -160,6 +171,26 @@ export function Dashboard({ onNavigate }: DashboardProps) {
           </button>
         </div>
       </div>
+
+      {/* 存储警告 */}
+      {storageWarning && (
+        <div style={{
+          margin: '0 24px 8px',
+          padding: '7px 12px',
+          borderRadius: 'var(--radius-md)',
+          background: 'color-mix(in srgb, var(--color-danger) 10%, transparent)',
+          border: '1px solid color-mix(in srgb, var(--color-danger) 30%, transparent)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          fontSize: 12,
+          color: 'var(--color-danger)',
+          flexShrink: 0,
+        }}>
+          <span>⚠️</span>
+          <span style={{ flex: 1 }}>{t.storage_warning}</span>
+        </div>
+      )}
 
       {/* 网格 */}
       <div style={{ flex: 1, overflow: 'auto', padding: '0 24px 16px' }}>
@@ -221,10 +252,15 @@ export function Dashboard({ onNavigate }: DashboardProps) {
                   {doneTasks.length > 0 && (
                     <>
                       <div style={{ height: 4, borderTop: '1px solid var(--color-border)', marginTop: 4 }} />
-                      <SectionLabel label={t.dash_done} dim />
-                      <AnimatePresence mode="popLayout">
-                        {doneTasks.map((task) => <TaskItem key={task.id} task={task} compact onEdit={openEditTask} />)}
-                      </AnimatePresence>
+                      <CollapsibleGroup
+                        label={t.dashboard_todayCompleted}
+                        count={doneTasks.length}
+                        defaultOpen={true}
+                      >
+                        <AnimatePresence mode="popLayout">
+                          {doneTasks.map((task) => <TaskItem key={task.id} task={task} compact onEdit={openEditTask} />)}
+                        </AnimatePresence>
+                      </CollapsibleGroup>
                     </>
                   )}
                   {localDoing.length === 0 && localTodo.length === 0 && doneTasks.length === 0 && (
@@ -259,6 +295,18 @@ export function Dashboard({ onNavigate }: DashboardProps) {
           {visibleCards.includes('growth') && (
             <GridCard card={getCard('growth')} cw={cw} containerRef={containerRef} onUpdate={(p) => updateCard('growth', p)} locked={!editMode} onRemove={editMode ? () => removeCard('growth') : undefined} title={t.dash_growth}>
               <Heatmap />
+            </GridCard>
+          )}
+
+          {visibleCards.includes('inspiration') && (
+            <GridCard card={getCard('inspiration')} cw={cw} containerRef={containerRef} onUpdate={(p) => updateCard('inspiration', p)} locked={!editMode} onRemove={editMode ? () => removeCard('inspiration') : undefined} resizable title={`💡 ${t.inspiration_list}`}
+              titleExtra={
+                onOpenInspiration && (
+                  <ActionBtn onClick={onOpenInspiration} title={t.inspiration_save} accent>＋</ActionBtn>
+                )
+              }
+            >
+              <InspirationCard onOpenModal={onOpenInspiration} />
             </GridCard>
           )}
 

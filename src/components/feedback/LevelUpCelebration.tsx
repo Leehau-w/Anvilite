@@ -1,7 +1,8 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { getTitle } from '@/engines/levelEngine'
 import { useCharacterStore } from '@/stores/characterStore'
+import { useT } from '@/i18n'
 
 interface LevelUpCelebrationProps {
   visible: boolean
@@ -12,6 +13,7 @@ interface LevelUpCelebrationProps {
 
 export function LevelUpCelebration({ visible, newLevel, oldLevel, onDismiss }: LevelUpCelebrationProps) {
   const { character } = useCharacterStore()
+  const t = useT()
   const newTitle = getTitle(newLevel, character.titlePreset, character.customTitles)
   const oldTitle = getTitle(oldLevel, character.titlePreset, character.customTitles)
   const titleChanged = newTitle !== oldTitle
@@ -20,7 +22,7 @@ export function LevelUpCelebration({ visible, newLevel, oldLevel, onDismiss }: L
     if (!visible) return
     const timer = setTimeout(onDismiss, titleChanged ? 3700 : 2200)
     return () => clearTimeout(timer)
-  }, [visible])
+  }, [visible, onDismiss, titleChanged])
 
   return (
     <AnimatePresence>
@@ -84,7 +86,7 @@ export function LevelUpCelebration({ visible, newLevel, oldLevel, onDismiss }: L
             transition={{ delay: 0.3 }}
             style={{ fontSize: 12, color: 'var(--color-surface)', marginTop: 8 }}
           >
-            点击任意位置继续
+            {t.streakPopup_dismiss}
           </motion.p>
         </motion.div>
       )}
@@ -92,21 +94,26 @@ export function LevelUpCelebration({ visible, newLevel, oldLevel, onDismiss }: L
   )
 }
 
+const PARTICLE_COUNT = 24
+
 function Particles() {
-  const particles = Array.from({ length: 24 }, (_, i) => i)
+  const particles = useMemo(() =>
+    Array.from({ length: PARTICLE_COUNT }, (_, i) => {
+      const angle = (i / PARTICLE_COUNT) * 360
+      const rad = (angle * Math.PI) / 180
+      const distance = 80 + Math.random() * 120
+      const size = 3 + Math.random() * 4
+      const delay = Math.random() * 0.3
+      return { i, rad, distance, size, delay }
+    }),
+  [])
 
   return (
     <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', overflow: 'hidden' }}>
-      {particles.map((i) => {
-        const angle = (i / particles.length) * 360
-        const distance = 80 + Math.random() * 120
-        const size = 3 + Math.random() * 4
-        const delay = Math.random() * 0.3
+      {particles.map(({ i, rad, distance, size, delay }) => {
         const color = i % 2 === 0 ? 'var(--color-accent)' : 'var(--color-xp)'
-        const rad = (angle * Math.PI) / 180
         const tx = Math.cos(rad) * distance
         const ty = Math.sin(rad) * distance
-
         return (
           <motion.div
             key={i}

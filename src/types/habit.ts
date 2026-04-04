@@ -38,3 +38,11 @@ export interface Habit {
 
 export type HabitRepeatType = Habit['repeatType']
 export type HabitStatus = Habit['status']
+
+export interface HabitGroup {
+  id: string
+  name: string
+  type: 'custom'
+  habitIds: string[]
+  createdAt: string
+}

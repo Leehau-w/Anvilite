@@ -1,14 +1,18 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import type { Habit } from '@/types/habit'
+import type { Habit, HabitGroup } from '@/types/habit'
 import { getStoragePrefix } from './accountManager'
 import { generateId } from '@/utils/id'
 import { migrateCategory } from '@/utils/area'
 import { isHabitDueToday, calculateNewStreak, calculateToleranceUpdate } from '@/engines/habitEngine'
 import { calculateHabitXP } from '@/engines/xpEngine'
+import { useCharacterStore } from './characterStore'
+import { useGrowthEventStore } from './growthEventStore'
 
 interface HabitStore {
   habits: Habit[]
+  completedHabitViewMode: 'area' | 'custom'
+  customHabitGroups: HabitGroup[]
   addHabit: (partial: Omit<Habit, 'id' | 'status' | 'isHidden' | 'deletedAt' | 'timerStartedAt' | 'actualMinutes' | 'consecutiveCount' | 'totalCompletions' | 'toleranceCharges' | 'toleranceNextAt' | 'weeklyCompletionCount' | 'lastCompletedAt' | 'lastDueAt' | 'currentCycleCount' | 'parentId' | 'childIds' | 'nestingLevel' | 'createdAt' | 'updatedAt'> & { parentId?: string | null }) => void
   updateHabit: (id: string, patch: Partial<Habit>) => void
   deleteHabit: (id: string) => void
@@ -24,6 +28,7 @@ interface HabitStore {
   pauseHabitTimer: (id: string) => void
 
   completeHabit: (id: string) => { xp: number; ore: number; newStreak: number; partial: boolean } | null
+  undoComplete: (id: string) => void
   skipHabit: (id: string) => { newStreak: number } | null
   missHabit: (id: string) => { usedTolerance: boolean; newStreak: number } | null
 
@@ -32,6 +37,13 @@ interface HabitStore {
   getTodayHabits: () => Habit[]
   getHabitsByCategory: (category: string) => Habit[]
   getTodayStats: () => { completed: number; totalXP: number }
+
+  setCompletedHabitViewMode: (mode: 'area' | 'custom') => void
+  addCustomHabitGroup: (name: string) => HabitGroup
+  renameCustomHabitGroup: (id: string, name: string) => void
+  deleteCustomHabitGroup: (id: string) => void
+  moveHabitToGroup: (habitId: string, groupId: string) => void
+  removeHabitFromGroup: (habitId: string, groupId: string) => void
 }
 
 /** 收集习惯及其所有子孙 ID */
@@ -80,6 +92,8 @@ export const useHabitStore = create<HabitStore>()(
   persist(
     (set, get) => ({
       habits: [],
+      completedHabitViewMode: 'area',
+      customHabitGroups: [],
 
       addHabit: (partial) => {
         const habit = makeDefaultHabit(partial)
@@ -154,13 +168,7 @@ export const useHabitStore = create<HabitStore>()(
       },
 
       pauseHabitTimer: (id) => {
-        const habit = get().habits.find((h) => h.id === id)
-        if (!habit || !habit.timerStartedAt) return
-        const elapsed = Math.floor((Date.now() - new Date(habit.timerStartedAt).getTime()) / 60000)
-        get().updateHabit(id, {
-          timerStartedAt: null,
-          actualMinutes: (habit.actualMinutes ?? 0) + elapsed,
-        })
+        get().updateHabit(id, { timerStartedAt: null })
       },
 
       completeHabit: (id) => {
@@ -221,6 +229,44 @@ export const useHabitStore = create<HabitStore>()(
         return { xp, ore, newStreak, partial: false }
       },
 
+      undoComplete: (id) => {
+        const habit = get().habits.find((h) => h.id === id)
+        if (!habit || habit.status !== 'completed_today') return
+
+        // Recalculate the XP that was granted to revoke it
+        const xpToRevoke = calculateHabitXP(habit.difficulty, habit.consecutiveCount, habit.repeatType).xp
+
+        set((s) => ({
+          habits: s.habits.map((h) => {
+            if (h.id !== id) return h
+            return {
+              ...h,
+              status: 'active' as const,
+              consecutiveCount: Math.max(0, h.consecutiveCount - 1),
+              totalCompletions: Math.max(0, (h.totalCompletions ?? 0) - 1),
+              currentCycleCount: (h.targetCount ?? 1) > 1
+                ? Math.max(0, (h.currentCycleCount ?? 0) - 1)
+                : (h.currentCycleCount ?? 0),
+              updatedAt: new Date().toISOString(),
+            }
+          }),
+        }))
+
+        // Revoke XP (ore is kept per project rules)
+        if (xpToRevoke > 0) {
+          useCharacterStore.getState().revokeXP(xpToRevoke)
+        }
+
+        // Remove the most recent habit_complete growth event matching this habit's title
+        const events = useGrowthEventStore.getState().events
+        const matchEvent = events.find(
+          (e) => e.type === 'habit_complete' && e.title.includes(habit.title)
+        )
+        if (matchEvent) {
+          useGrowthEventStore.getState().removeEvent(matchEvent.id)
+        }
+      },
+
       skipHabit: (id) => {
         const habit = get().habits.find((h) => h.id === id)
         if (!habit) return null
@@ -270,6 +316,53 @@ export const useHabitStore = create<HabitStore>()(
         }))
 
         return { usedTolerance, newStreak: usedTolerance ? habit.consecutiveCount : newStreak }
+      },
+
+      setCompletedHabitViewMode: (mode) => {
+        set({ completedHabitViewMode: mode })
+      },
+
+      addCustomHabitGroup: (name) => {
+        const group: HabitGroup = {
+          id: generateId(),
+          name,
+          type: 'custom',
+          habitIds: [],
+          createdAt: new Date().toISOString(),
+        }
+        set((s) => ({ customHabitGroups: [...s.customHabitGroups, group] }))
+        return group
+      },
+
+      renameCustomHabitGroup: (id, name) => {
+        set((s) => ({
+          customHabitGroups: s.customHabitGroups.map((g) =>
+            g.id === id ? { ...g, name } : g
+          ),
+        }))
+      },
+
+      deleteCustomHabitGroup: (id) => {
+        set((s) => ({ customHabitGroups: s.customHabitGroups.filter((g) => g.id !== id) }))
+      },
+
+      moveHabitToGroup: (habitId, groupId) => {
+        set((s) => ({
+          customHabitGroups: s.customHabitGroups.map((g) => {
+            if (g.id === groupId) {
+              return { ...g, habitIds: g.habitIds.includes(habitId) ? g.habitIds : [...g.habitIds, habitId] }
+            }
+            return { ...g, habitIds: g.habitIds.filter((id) => id !== habitId) }
+          }),
+        }))
+      },
+
+      removeHabitFromGroup: (habitId, groupId) => {
+        set((s) => ({
+          customHabitGroups: s.customHabitGroups.map((g) =>
+            g.id === groupId ? { ...g, habitIds: g.habitIds.filter((id) => id !== habitId) } : g
+          ),
+        }))
       },
 
       reorderHabits: (ids) => {
@@ -377,6 +470,9 @@ export const useHabitStore = create<HabitStore>()(
           }
           return patched
         })
+        // New fields compat
+        if (!state.completedHabitViewMode) state.completedHabitViewMode = 'area'
+        if (!state.customHabitGroups) state.customHabitGroups = []
       },
     }
   )

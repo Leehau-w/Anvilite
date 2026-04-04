@@ -401,7 +401,7 @@ export function TaskItem({ task, compact, onEdit }: TaskItemProps) {
           </div>
         )}
 
-        {/* 未完成任务操作行（hover 时显示删除） */}
+        {/* 未完成任务操作行（hover 时显示） */}
         {!isDone && !compact && (
           <AnimatePresence>
             {hovered && (
@@ -412,6 +412,12 @@ export function TaskItem({ task, compact, onEdit }: TaskItemProps) {
                 transition={{ duration: 0.15 }}
                 style={{ display: 'flex', gap: 4, marginTop: 6 }}
               >
+                <ActionButton onClick={handleInscribe} color="var(--color-xp)">
+                  ⭐ {t.task_inscribe}
+                </ActionButton>
+                <ActionButton onClick={handleHide} color="var(--color-text-dim)">
+                  {t.task_hide}
+                </ActionButton>
                 <ActionButton
                   onClick={handleDeleteDone}
                   color={deleteConfirm ? 'var(--color-danger)' : 'var(--color-text-dim)'}

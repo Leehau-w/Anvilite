@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react'
+import React, { useEffect, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useT } from '@/i18n'
 
@@ -37,7 +37,7 @@ export function StreakMilestonePopup({ milestone, onDismiss }: StreakMilestonePo
     if (!milestone || !cfg) return
     const timer = setTimeout(onDismiss, cfg.duration)
     return () => clearTimeout(timer)
-  }, [milestone])
+  }, [milestone, cfg, onDismiss])
 
   return (
     <AnimatePresence>
@@ -56,12 +56,8 @@ function FloatingBadge({ cfg, milestone }: { cfg: MilestoneConfigEntry; mileston
   const isSmall = cfg.size === 'sm'
 
   return (
-    <motion.div
+    <div
       key={`streak-${milestone}`}
-      initial={{ opacity: 0, y: 20, scale: 0.85 }}
-      animate={{ opacity: 1, y: -8, scale: 1 }}
-      exit={{ opacity: 0, y: -30, scale: 0.9 }}
-      transition={{ duration: 0.35, ease: [0.34, 1.56, 0.64, 1] }}
       style={{
         position: 'fixed',
         bottom: 120,
@@ -69,6 +65,14 @@ function FloatingBadge({ cfg, milestone }: { cfg: MilestoneConfigEntry; mileston
         transform: 'translateX(-50%)',
         zIndex: 1001,
         pointerEvents: 'none',
+      }}
+    >
+    <motion.div
+      initial={{ opacity: 0, y: 20, scale: 0.85 }}
+      animate={{ opacity: 1, y: -8, scale: 1 }}
+      exit={{ opacity: 0, y: -30, scale: 0.9 }}
+      transition={{ duration: 0.35, ease: [0.34, 1.56, 0.64, 1] }}
+      style={{
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
@@ -102,6 +106,7 @@ function FloatingBadge({ cfg, milestone }: { cfg: MilestoneConfigEntry; mileston
         </span>
       </div>
     </motion.div>
+    </div>
   )
 }
 
@@ -185,63 +190,71 @@ function FullOverlay({ cfg, milestone, onDismiss }: {
 }
 
 function MiniParticles({ count }: { count: number }) {
+  const particles = useMemo(() =>
+    Array.from({ length: count }, (_, i) => {
+      const angle = (i / count) * 360
+      const rad = (angle * Math.PI) / 180
+      const d = 30 + Math.random() * 20
+      return { i, rad, d, delay: Math.random() * 0.2 }
+    }),
+  [count])
+
   return (
     <div style={{ position: 'absolute', pointerEvents: 'none', width: 160, height: 60 }}>
-      {Array.from({ length: count }, (_, i) => {
-        const angle = (i / count) * 360
-        const rad = (angle * Math.PI) / 180
-        const d = 30 + Math.random() * 20
-        return (
-          <motion.div
-            key={i}
-            initial={{ opacity: 1, x: 80, y: 30, scale: 1 }}
-            animate={{ opacity: 0, x: 80 + Math.cos(rad) * d, y: 30 + Math.sin(rad) * d, scale: 0 }}
-            transition={{ duration: 0.6, delay: Math.random() * 0.2 }}
-            style={{
-              position: 'absolute',
-              width: 4,
-              height: 4,
-              borderRadius: '50%',
-              background: i % 2 === 0 ? 'var(--color-accent)' : 'var(--color-xp)',
-              marginLeft: -2,
-              marginTop: -2,
-            }}
-          />
-        )
-      })}
+      {particles.map(({ i, rad, d, delay }) => (
+        <motion.div
+          key={i}
+          initial={{ opacity: 1, x: 80, y: 30, scale: 1 }}
+          animate={{ opacity: 0, x: 80 + Math.cos(rad) * d, y: 30 + Math.sin(rad) * d, scale: 0 }}
+          transition={{ duration: 0.6, delay }}
+          style={{
+            position: 'absolute',
+            width: 4,
+            height: 4,
+            borderRadius: '50%',
+            background: i % 2 === 0 ? 'var(--color-accent)' : 'var(--color-xp)',
+            marginLeft: -2,
+            marginTop: -2,
+          }}
+        />
+      ))}
     </div>
   )
 }
 
 function FireParticles({ count }: { count: number }) {
+  const colors = ['var(--color-accent)', 'var(--color-xp)', '#ff4444', '#ff8800']
+  const particles = useMemo(() =>
+    Array.from({ length: count }, (_, i) => {
+      const angle = (i / count) * 360
+      const rad = (angle * Math.PI) / 180
+      const d = 100 + Math.random() * 150
+      const size = 4 + Math.random() * 5
+      return { i, rad, d, size, delay: Math.random() * 0.4 }
+    }),
+  [count])
+
   return (
     <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', overflow: 'hidden' }}>
-      {Array.from({ length: count }, (_, i) => {
-        const angle = (i / count) * 360
-        const d = 100 + Math.random() * 150
-        const size = 4 + Math.random() * 5
-        const rad = (angle * Math.PI) / 180
-        const colors = ['var(--color-accent)', 'var(--color-xp)', '#ff4444', '#ff8800']
-        return (
-          <motion.div
-            key={i}
-            initial={{ opacity: 1, x: 0, y: 0, scale: 1 }}
-            animate={{ opacity: [1, 1, 0], x: Math.cos(rad) * d, y: Math.sin(rad) * d + 60, scale: [1, 1, 0.3] }}
-            transition={{ duration: 1.2, delay: Math.random() * 0.4, ease: 'easeOut' }}
-            style={{
-              position: 'absolute',
-              left: '50%',
-              top: '45%',
-              width: size,
-              height: size,
-              borderRadius: '50%',
-              background: colors[i % colors.length],
-              marginLeft: -size / 2,
-              marginTop: -size / 2,
-            }}
-          />
-        )
-      })}
+      {particles.map(({ i, rad, d, size, delay }) => (
+        <motion.div
+          key={i}
+          initial={{ opacity: 1, x: 0, y: 0, scale: 1 }}
+          animate={{ opacity: [1, 1, 0], x: Math.cos(rad) * d, y: Math.sin(rad) * d + 60, scale: [1, 1, 0.3] }}
+          transition={{ duration: 1.2, delay, ease: 'easeOut' }}
+          style={{
+            position: 'absolute',
+            left: '50%',
+            top: '45%',
+            width: size,
+            height: size,
+            borderRadius: '50%',
+            background: colors[i % colors.length],
+            marginLeft: -size / 2,
+            marginTop: -size / 2,
+          }}
+        />
+      ))}
     </div>
   )
 }

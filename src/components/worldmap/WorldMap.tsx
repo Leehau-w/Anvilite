@@ -4,7 +4,6 @@ import { useAreaStore, CANVAS_W } from '@/stores/areaStore'
 import { useTaskStore } from '@/stores/taskStore'
 import { useCharacterStore } from '@/stores/characterStore'
 import { useHabitStore } from '@/stores/habitStore'
-import { useGrowthEventStore } from '@/stores/growthEventStore'
 import { useToast } from '@/components/feedback/Toast'
 import { getProsperityInfo, getAreaSkillXP } from '@/engines/prosperityEngine'
 import type { ProsperityInfo } from '@/engines/prosperityEngine'
@@ -23,7 +22,6 @@ export function WorldMap() {
   const { tasks } = useTaskStore()
   const { habits } = useHabitStore()
   const { character } = useCharacterStore()
-  const { addEvent } = useGrowthEventStore()
   const { showToast } = useToast()
   const t = useT()
 
@@ -88,16 +86,10 @@ export function WorldMap() {
       const prev = prevProsperityRef.current[area.id] ?? 1
       const now = current[area.id]
       if (now > prev) {
-        // 繁荣升级！
+        // 繁荣升级！toast + 发光动画（事件记录由 useProsperityWatcher 统一处理）
         const levelName = PROSPERITY_NAMES[now - 1]
         const displayName = getAreaDisplayName(area, t)
         showToast(t.worldmap_levelUpToast(displayName, levelName))
-        addEvent({
-          type: 'area_level_up',
-          title: t.worldmap_levelUpEvent(area.name, levelName),
-          details: { areaName: area.name, prosperityLevel: now },
-          isMilestone: now >= 4,
-        })
         // 触发发光动画
         setGlowingAreaIds((s) => new Set([...s, area.id]))
         setTimeout(() => {
@@ -113,7 +105,7 @@ export function WorldMap() {
   function getAreaProsperity(area: Area): ProsperityInfo {
     if (area.category === '_milestone') {
       const skillLevel = character.level
-      const pl = skillLevel === 0 ? 1 : skillLevel <= 3 ? 2 : skillLevel <= 8 ? 3 : skillLevel <= 15 ? 4 : skillLevel <= 25 ? 5 : 6
+      const pl = skillLevel <= 3 ? 1 : skillLevel <= 8 ? 2 : skillLevel <= 15 ? 3 : skillLevel <= 25 ? 4 : skillLevel <= 40 ? 5 : 6
       return { skillLevel, prosperityLevel: pl, prosperityName: PROSPERITY_NAMES[pl - 1], subLevelCurrent: 0, subLevelTotal: 1, subLevelFraction: 0, totalSkillXP: 0 }
     }
     return getProsperityInfo(getAreaSkillXP(tasks, area.category))

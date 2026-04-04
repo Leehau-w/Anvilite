@@ -104,7 +104,9 @@ export const zh = {
   habits_archived: (n: number) => `已归档 (${n})`,
   habits_hidden: (n: number) => `已隐藏 (${n})`,
   habit_edit: '编辑',
-  habit_pause: '暂停',
+  habit_pause: '暂停习惯',
+  habit_startDoing: '开始',
+  habit_pauseDoing: '暂停',
   habit_resume: '恢复',
   habit_archive: '归档',
   habit_archiveConfirm: '再次点击确认归档',
@@ -277,6 +279,25 @@ export const zh = {
   habitCard_eventTitle: (title: string) => `习惯完成：${title}`,
   habitCard_eventSkip: (title: string) => `习惯跳过：${title}`,
 
+  // ─── Phase 4 additions ────────────────────────────────────────────────────
+  task_groupByMonth: '按月',
+  task_groupByArea: '按区域',
+  task_groupCustom: '自定义',
+  task_newGroup: '新建分组',
+  task_groupNamePlaceholder: '输入分组名称',
+  task_ungrouped: '未分组',
+  task_uncategorized: '未分类',
+  task_moveToGroup: '移至分组',
+  task_removeFromGroup: '移出分组',
+  task_dropHere: '拖放到此处',
+  habit_completed: '已完成习惯',
+  dashboard_todayCompleted: '今日已完成',
+  dashboard_cycleCompleted: '本周期已完成',
+  common_undo: '撤销',
+  habit_undoComplete: '撤销完成',
+  habit_undoneToast: (name: string) => `已撤销「${name}」的完成`,
+  habit_completedToast: (name: string, xp: number) => `${name} 完成！+${xp} XP`,
+
   // ─── Heatmap ─────────────────────────────────────────────────────────────
   heatmap_month: '本月',
   heatmap_week: '本周',
@@ -349,6 +370,7 @@ export const zh = {
   worldmap_deleteConfirm: '确认删除',
   worldmap_levelUpToast: (name: string, levelName: string) => `${name} 升级为「${levelName}」！`,
   worldmap_levelUpEvent: (name: string, levelName: string) => `${name} 升级为${levelName}`,
+  char_levelUpEvent: (level: number) => `升至 Lv.${level}`,
   area_rename: '改名',
   area_delete: '删除',
 
@@ -738,6 +760,24 @@ export const zh = {
   subtask_placeholder: '输入标题，回车创建',
   subtask_collapse: '收起',
   subtask_expand: '展开',
+
+  // Inspiration
+  inspiration_title: '灵感速记',
+  inspiration_placeholder: '记下这个想法…',
+  inspiration_save: '保存',
+  inspiration_list: '灵感列表',
+  inspiration_convertToTask: '转为任务',
+  inspiration_empty: '暂无灵感，按 Ctrl+Shift+N 快速记录',
+  inspiration_converted: '已转为任务',
+  inspiration_allConverted: '所有灵感已转为任务',
+  inspiration_deleteConfirm: '删除这条灵感？',
+
+  // Storage
+  settings_storage: '存储用量',
+  storage_warning: '存储用量已超过 80%，建议导出备份',
+  storage_exportNow: '立即导出',
+  storage_used: '已使用',
+  storage_total: '共',
 }
 
 export type Translations = typeof zh
