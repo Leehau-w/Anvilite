@@ -14,6 +14,7 @@ import {
   type CardLayout,
 } from '@/stores/dashboardStore'
 import { getGreetingKey } from '@/utils/time'
+import { sortTasksInGroup } from '@/utils/task'
 import { useT } from '@/i18n'
 import { TaskItem } from '@/components/tasks/TaskItem'
 import { QuickInput } from '@/components/tasks/QuickInput'
@@ -68,9 +69,18 @@ export function Dashboard({ onNavigate }: DashboardProps) {
   const totalCompleted = taskStats.completedCount + habitStats.completed
   const totalXP = taskStats.totalXP + habitStats.totalXP
 
-  const doingTasks = tasks.filter((t) => !t.deletedAt && !t.parentId && t.status === 'doing')
-  const todoTasks = tasks.filter((t) => !t.deletedAt && !t.parentId && t.status === 'todo')
-  const doneTasks = tasks.filter((t) => !t.deletedAt && !t.parentId && t.status === 'done').slice(0, 8)
+  const doingTasks = useMemo(
+    () => sortTasksInGroup(tasks.filter((t) => !t.deletedAt && !t.parentId && t.status === 'doing')),
+    [tasks]
+  )
+  const todoTasks = useMemo(
+    () => sortTasksInGroup(tasks.filter((t) => !t.deletedAt && !t.parentId && t.status === 'todo')),
+    [tasks]
+  )
+  const doneTasks = useMemo(
+    () => tasks.filter((t) => !t.deletedAt && !t.parentId && t.status === 'done').slice(0, 8),
+    [tasks]
+  )
 
   function getCard(id: CardId) {
     return layout.find((c) => c.id === id) ?? DEFAULT_LAYOUT.find((c) => c.id === id)!
@@ -117,7 +127,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
           <GridCard card={getCard('tasks')} cw={cw} containerRef={containerRef} onUpdate={(p) => updateCard('tasks', p)} resizable title={t.dash_tasks}
             titleExtra={<span style={{ fontSize: 12, color: 'var(--color-text-dim)' }}>{t.dash_pendingCount(doingTasks.length + todoTasks.length)}</span>}
           >
-            <div style={{ overflow: 'hidden', height: '100%' }}>
+            <div style={{ overflowY: 'auto', height: '100%', scrollbarWidth: 'thin', scrollbarColor: 'var(--color-border) transparent' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {doingTasks.length > 0 && (
                   <>

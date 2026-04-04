@@ -48,7 +48,6 @@ function makeDefaultTask(partial: Partial<Task> & { title: string }): Task {
     nestingLevel: partial.nestingLevel ?? 0,
     xpReward: 0, // 完成时动态计算
     actualMinutes: 0,
-    timerStartedAt: null,
     completedAt: null,
     deletedAt: null,
     isHidden: false,
@@ -87,9 +86,9 @@ export const useTaskStore = create<TaskStore>()(
           task.nestingLevel = parent.nestingLevel + 1
           if (!partial.category) task.category = parent.category
           set((s) => ({
-            tasks: [task, ...s.tasks.map((t) =>
+            tasks: s.tasks.map((t) =>
               t.id === task.parentId ? { ...t, childIds: [...t.childIds, task.id], updatedAt: new Date().toISOString() } : t
-            )],
+            ).concat(task),
             lastCategory: task.category,
           }))
           return task
@@ -145,22 +144,11 @@ export const useTaskStore = create<TaskStore>()(
         if (!task || task.status === 'done') return null
 
         const now = new Date().toISOString()
-        let actualMinutes = task.actualMinutes
-
-        // 如果正在计时，计算额外时间
-        if (task.timerStartedAt) {
-          const elapsed = Math.floor(
-            (Date.now() - new Date(task.timerStartedAt).getTime()) / 60000
-          )
-          actualMinutes += elapsed
-        }
 
         const updatedTask: Task = {
           ...task,
           status: 'done',
           completedAt: now,
-          timerStartedAt: null,
-          actualMinutes,
           updatedAt: now,
         }
 
@@ -193,7 +181,6 @@ export const useTaskStore = create<TaskStore>()(
               ? {
                   ...t,
                   status: 'doing',
-                  timerStartedAt: new Date().toISOString(),
                   updatedAt: new Date().toISOString(),
                 }
               : t
@@ -202,23 +189,10 @@ export const useTaskStore = create<TaskStore>()(
       },
 
       pauseTask: (id) => {
-        const task = get().tasks.find((t) => t.id === id)
-        if (!task || !task.timerStartedAt) return
-
-        const elapsed = Math.floor(
-          (Date.now() - new Date(task.timerStartedAt).getTime()) / 60000
-        )
-
         set((s) => ({
           tasks: s.tasks.map((t) =>
             t.id === id
-              ? {
-                  ...t,
-                  status: 'todo',
-                  timerStartedAt: null,
-                  actualMinutes: t.actualMinutes + elapsed,
-                  updatedAt: new Date().toISOString(),
-                }
+              ? { ...t, status: 'todo', updatedAt: new Date().toISOString() }
               : t
           ),
         }))
@@ -266,10 +240,20 @@ export const useTaskStore = create<TaskStore>()(
       name: `${getStoragePrefix()}-tasks`,
       onRehydrateStorage: () => (state) => {
         if (!state) return
-        state.tasks = state.tasks.map((t) => ({
-          ...t,
-          category: migrateCategory(t.category),
-        }))
+        state.tasks = state.tasks.map((t) => {
+          // 迁移：清理旧版计时器字段
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const legacy = t as any
+          if ('timerStartedAt' in legacy) delete legacy.timerStartedAt
+          if ('timerElapsed' in legacy) delete legacy.timerElapsed
+          // doing 状态保持，只是不再有计时器
+          return {
+            ...t,
+            category: migrateCategory(t.category),
+            actualMinutes: t.actualMinutes ?? 0,
+            sortOrder: t.sortOrder ?? 0,
+          }
+        })
         state.lastCategory = migrateCategory(state.lastCategory)
       },
     }
