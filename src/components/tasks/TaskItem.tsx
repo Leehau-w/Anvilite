@@ -533,13 +533,14 @@ export function TaskItem({ task, compact, onEdit }: TaskItemProps) {
       </AnimatePresence>
     </motion.div>
 
-    {/* 子任务区域 */}
     {/* 子任务列表 */}
     {expanded && children.length > 0 && (
       <div style={{ paddingLeft: compact ? 16 : 20, marginTop: compact ? 2 : 4, display: 'flex', flexDirection: 'column', gap: compact ? 2 : 4, borderLeft: '2px solid var(--color-border)', marginLeft: 8 }}>
-        {children.map((child) => (
-          <TaskItem key={child.id} task={child} compact={compact} onEdit={onEdit} />
-        ))}
+        <AnimatePresence mode="popLayout">
+          {children.map((child) => (
+            <TaskItem key={child.id} task={child} compact={compact} onEdit={onEdit} />
+          ))}
+        </AnimatePresence>
       </div>
     )}
     </div>

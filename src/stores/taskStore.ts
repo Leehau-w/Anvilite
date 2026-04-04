@@ -87,9 +87,9 @@ export const useTaskStore = create<TaskStore>()(
           task.nestingLevel = parent.nestingLevel + 1
           if (!partial.category) task.category = parent.category
           set((s) => ({
-            tasks: [task, ...s.tasks.map((t) =>
+            tasks: s.tasks.map((t) =>
               t.id === task.parentId ? { ...t, childIds: [...t.childIds, task.id], updatedAt: new Date().toISOString() } : t
-            )],
+            ).concat(task),
             lastCategory: task.category,
           }))
           return task
