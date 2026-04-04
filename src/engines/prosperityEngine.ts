@@ -6,7 +6,7 @@ import { PROSPERITY_NAMES } from '@/types/area'
 export function getAreaSkillXP(tasks: Task[], category: string): number {
   return tasks
     .filter((t) => t.category === category && t.status === 'done' && !t.deletedAt)
-    .reduce((sum, t) => sum + t.xpReward, 0)
+    .reduce((sum, t) => sum + (t.xpReward ?? 0), 0)
 }
 
 /** 将累计XP换算为技能等级（0开始） */

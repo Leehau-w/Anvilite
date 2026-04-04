@@ -3,8 +3,10 @@ import { persist } from 'zustand/middleware'
 import type { Character } from '@/types/character'
 import { getStoragePrefix } from './accountManager'
 import { applyXP, getTitle } from '@/engines/levelEngine'
+import { calculateTaskXP } from '@/engines/xpEngine'
 import { getTodayString } from '@/utils/time'
 import { useGrowthEventStore } from './growthEventStore'
+import { useTaskStore } from './taskStore'
 
 interface CharacterStore {
   character: Character
@@ -33,6 +35,7 @@ const DEFAULT_CHARACTER: Character = {
   lastActiveDate: null,
   globalStatus: 'active',
   prestigeLevel: 0,
+  xpFormulaVersion: 2,
   createdAt: new Date().toISOString(),
 }
 
@@ -64,6 +67,14 @@ export const useCharacterStore = create<CharacterStore>()(
             totalOreEarned: s.character.totalOreEarned + ore,
           },
         }))
+        if (leveledUp) {
+          useGrowthEventStore.getState().addEvent({
+            type: 'level_up',
+            title: `升至 Lv.${newLevel}`,
+            details: { oldLevel, newLevel },
+            isMilestone: newLevel % 10 === 0,
+          })
+        }
         return { leveledUp, oldLevel, newLevel, prestigeUnlocked }
       },
 
@@ -146,6 +157,37 @@ export const useCharacterStore = create<CharacterStore>()(
         return getTitle(character.level, character.titlePreset, character.customTitles)
       },
     }),
-    { name: `${getStoragePrefix()}-character` }
+    {
+      name: `${getStoragePrefix()}-character`,
+      onRehydrateStorage: () => (state) => {
+        if (!state) return
+        // 填充新字段默认值
+        if (state.character.xpFormulaVersion === undefined) {
+          state.character.xpFormulaVersion = 0
+        }
+        // 追溯重算：v2 乘法公式上线，重算所有已完成任务的 XP
+        if ((state.character.xpFormulaVersion ?? 0) < 2) {
+          const tasks = useTaskStore.getState().tasks
+          const doneTasks = tasks.filter((t) => t.status === 'done' && !t.deletedAt && !t.parentId)
+          let totalXP = 0
+          doneTasks.forEach((task) => {
+            const { xp } = calculateTaskXP(task, 0) // 历史记录无 streakDays，用 0
+            totalXP += xp
+          })
+          // 用重算后的 XP 重置等级
+          let lvl = 1, curXP = totalXP
+          while (true) {
+            const needed = Math.round(5 * Math.log(lvl + 1) * lvl)
+            if (curXP < needed) break
+            curXP -= needed
+            lvl++
+          }
+          state.character.level = lvl
+          state.character.currentXP = curXP
+          state.character.totalXP = totalXP
+          state.character.xpFormulaVersion = 2
+        }
+      },
+    }
   )
 )

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import type { Task } from '@/types/task'
 import { PriorityDot } from '@/components/ui/PriorityBadge'
-import { formatRelativeDate, isOverdue, formatTimer, getElapsedSeconds } from '@/utils/time'
+import { formatRelativeDate, isOverdue } from '@/utils/time'
 import { useTaskStore } from '@/stores/taskStore'
 import { useCharacterStore } from '@/stores/characterStore'
 import { useGrowthEventStore } from '@/stores/growthEventStore'
@@ -32,30 +32,19 @@ export function TaskItem({ task, compact, onEdit }: TaskItemProps) {
   const [confirmHigh, setConfirmHigh] = useState(false)
   const [hovered, setHovered] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState(false)
-  const [elapsed, setElapsed] = useState(0)
   const [showDurationInput, setShowDurationInput] = useState(false)
   const [durationInput, setDurationInput] = useState('')
   const confirmTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const deleteConfirmTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const [expanded, setExpanded] = useState(true)
+  const [parentCompletionPrompt, setParentCompletionPrompt] = useState<string | null>(null) // parentId when all siblings done
 
   const children = allTasks.filter((t) => !t.deletedAt && !t.isHidden && task.childIds.includes(t.id))
 
   const isOverdueDue = isOverdue(task.dueDate) && task.status !== 'done'
   const isDoing = task.status === 'doing'
   const isDone = task.status === 'done'
-
-  // 计时器
-  useEffect(() => {
-    if (!isDoing || !task.timerStartedAt) return
-    const update = () => {
-      setElapsed(task.actualMinutes * 60 + getElapsedSeconds(task.timerStartedAt))
-    }
-    update()
-    const interval = setInterval(update, 1000)
-    return () => clearInterval(interval)
-  }, [isDoing, task.timerStartedAt, task.actualMinutes])
 
   // 清理确认timer
   useEffect(() => {
@@ -95,10 +84,13 @@ export function TaskItem({ task, compact, onEdit }: TaskItemProps) {
     const completed = completeTask(task.id)
     if (!completed) { setCompleting(false); return }
 
-    // 子任务不获得 XP/矿石
+    // 子任务不获得 XP/矿石，但检查是否全部完成
     if (task.parentId) {
       setCompleting(false)
       showToast(`✓ ${task.title}`)
+      if (completed.allSiblingsDone) {
+        setParentCompletionPrompt(task.parentId)
+      }
       return
     }
 
@@ -316,9 +308,9 @@ export function TaskItem({ task, compact, onEdit }: TaskItemProps) {
             {task.estimatedMinutes && !isDoing && (
               <span style={{ opacity: 0.6 }}>{t.task_estMin(task.estimatedMinutes)}</span>
             )}
-            {isDoing && task.timerStartedAt && (
-              <span style={{ color: 'var(--color-accent)', fontFamily: 'var(--font-num)', fontWeight: 600 }}>
-                ⏱ {formatTimer(elapsed)}
+            {isDoing && (
+              <span style={{ color: 'var(--color-accent)', fontSize: 11 }}>
+                {t.task_doing}
               </span>
             )}
             {isDone && task.xpReward > 0 && (
@@ -409,7 +401,7 @@ export function TaskItem({ task, compact, onEdit }: TaskItemProps) {
           </div>
         )}
 
-        {/* 未完成任务操作行（hover 时显示删除） */}
+        {/* 未完成任务操作行（hover 时显示） */}
         {!isDone && !compact && (
           <AnimatePresence>
             {hovered && (
@@ -420,6 +412,12 @@ export function TaskItem({ task, compact, onEdit }: TaskItemProps) {
                 transition={{ duration: 0.15 }}
                 style={{ display: 'flex', gap: 4, marginTop: 6 }}
               >
+                <ActionButton onClick={handleInscribe} color="var(--color-xp)">
+                  ⭐ {t.task_inscribe}
+                </ActionButton>
+                <ActionButton onClick={handleHide} color="var(--color-text-dim)">
+                  {t.task_hide}
+                </ActionButton>
                 <ActionButton
                   onClick={handleDeleteDone}
                   color={deleteConfirm ? 'var(--color-danger)' : 'var(--color-text-dim)'}
@@ -446,39 +444,11 @@ export function TaskItem({ task, compact, onEdit }: TaskItemProps) {
         </span>
       )}
 
-      {/* 计时显示（compact：计时中 or 暂停后累计） */}
-      {compact && isDoing && task.timerStartedAt && (
-        <span
-          style={{
-            fontSize: 11,
-            color: 'var(--color-accent)',
-            fontFamily: 'var(--font-num)',
-            fontWeight: 600,
-            flexShrink: 0,
-          }}
-        >
-          ⏱{formatTimer(elapsed)}
-        </span>
-      )}
-      {compact && !isDoing && !isDone && task.actualMinutes > 0 && (
-        <span
-          style={{
-            fontSize: 11,
-            color: 'var(--color-text-dim)',
-            fontFamily: 'var(--font-num)',
-            fontWeight: 600,
-            flexShrink: 0,
-          }}
-        >
-          ⏱{formatTimer(task.actualMinutes * 60)}
-        </span>
-      )}
-
-      {/* 计时器控制按钮（非已完成） */}
+      {/* 进行中/开始按钮（非已完成） */}
       {!isDone && (
         <button
           onClick={handleStatusToggle}
-          title={isDoing ? t.task_timerPause : t.task_timerStart}
+          title={isDoing ? t.task_pauseDoing : t.task_startDoing}
           style={{
             width: 26,
             height: 26,
@@ -501,42 +471,103 @@ export function TaskItem({ task, compact, onEdit }: TaskItemProps) {
       {/* 高难度确认提示 */}
       <AnimatePresence>
         {confirmHigh && (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.9 }}
+          <div
             style={{
               position: 'absolute',
               right: 8,
               top: '50%',
               transform: 'translateY(-50%)',
-              background: 'var(--color-surface)',
-              border: '1px solid var(--color-warning)',
-              borderRadius: 'var(--radius-md)',
-              padding: '4px 10px',
-              fontSize: 11,
-              color: 'var(--color-warning)',
-              fontWeight: 500,
-              whiteSpace: 'nowrap',
-              boxShadow: 'var(--shadow-md)',
               zIndex: 10,
             }}
           >
-            {t.task_confirmComplete}
-          </motion.div>
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              style={{
+                background: 'var(--color-surface)',
+                border: '1px solid var(--color-warning)',
+                borderRadius: 'var(--radius-md)',
+                padding: '4px 10px',
+                fontSize: 11,
+                color: 'var(--color-warning)',
+                fontWeight: 500,
+                whiteSpace: 'nowrap',
+                boxShadow: 'var(--shadow-md)',
+              }}
+            >
+              {t.task_confirmComplete}
+            </motion.div>
+          </div>
         )}
       </AnimatePresence>
     </motion.div>
 
-    {/* 子任务区域 */}
     {/* 子任务列表 */}
     {expanded && children.length > 0 && (
       <div style={{ paddingLeft: compact ? 16 : 20, marginTop: compact ? 2 : 4, display: 'flex', flexDirection: 'column', gap: compact ? 2 : 4, borderLeft: '2px solid var(--color-border)', marginLeft: 8 }}>
-        {children.map((child) => (
-          <TaskItem key={child.id} task={child} compact={compact} onEdit={onEdit} />
-        ))}
+        <AnimatePresence mode="popLayout">
+          {children.map((child) => (
+            <TaskItem key={child.id} task={child} compact={compact} onEdit={onEdit} />
+          ))}
+        </AnimatePresence>
       </div>
     )}
+
+    {/* 全部子任务完成提示 */}
+    <AnimatePresence>
+      {parentCompletionPrompt && (() => {
+        const parent = allTasks.find((t) => t.id === parentCompletionPrompt)
+        if (!parent) return null
+        return (
+          <motion.div
+            key="parent-prompt"
+            initial={{ opacity: 0, y: 4, scale: 0.97 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.97 }}
+            style={{
+              marginTop: 6, padding: '10px 12px',
+              background: 'color-mix(in srgb, var(--color-success) 8%, var(--color-surface))',
+              border: '1px solid color-mix(in srgb, var(--color-success) 30%, transparent)',
+              borderRadius: 'var(--radius-md)',
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
+            }}
+          >
+            <span style={{ fontSize: 12, color: 'var(--color-text)', flex: 1 }}>
+              {t.task_allChildrenDone(parent.title)}
+            </span>
+            <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+              <button
+                onClick={() => { setParentCompletionPrompt(null) }}
+                style={{ fontSize: 11, padding: '3px 8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', background: 'transparent', color: 'var(--color-text-dim)', cursor: 'pointer' }}
+              >
+                {t.task_allChildrenDoneLater}
+              </button>
+              <button
+                onClick={() => {
+                  setParentCompletionPrompt(null)
+                  // 触发父任务完成（由父任务自己的 TaskItem 处理 XP，这里用外部调用）
+                  const parentTask = allTasks.find((t) => t.id === parentCompletionPrompt)
+                  if (parentTask && onEdit) onEdit(parentTask)
+                  // 直接调用 completeTask 并计算XP
+                  const completed = completeTask(parentCompletionPrompt!)
+                  if (completed && !completed.parentId) {
+                    const { xp, ore } = calculateTaskXP(completed, character.streakDays)
+                    updateTask(parentCompletionPrompt!, { xpReward: xp })
+                    gainXPAndOre(xp, ore)
+                    recordActivity()
+                  }
+                  showToast(`✓ ${parent.title}`)
+                }}
+                style={{ fontSize: 11, padding: '3px 8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-success)', background: 'color-mix(in srgb, var(--color-success) 15%, transparent)', color: 'var(--color-success)', cursor: 'pointer', fontWeight: 600 }}
+              >
+                {t.task_allChildrenDoneConfirm}
+              </button>
+            </div>
+          </motion.div>
+        )
+      })()}
+    </AnimatePresence>
     </div>
   )
 }

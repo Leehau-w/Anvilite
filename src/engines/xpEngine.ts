@@ -13,27 +13,26 @@ export function getStreakBonusRate(streakDays: number): number {
 }
 
 /**
- * 计算任务完成后获得的 XP
- * 最终XP = round( 基础XP × (1 + 按时加成% + 连续加成% + 高难加成%) )
+ * 计算任务完成后获得的 XP（v2 乘法公式）
+ * 最终XP = round( base × 按时系数 × 连续系数 × 高难系数 )
  * 矿石 = 最终XP（1:1）
  */
 export function calculateTaskXP(task: Task, streakDays: number): { xp: number; ore: number } {
   const base = BASE_XP[task.difficulty]
-  let bonusRate = 0
 
-  // 按时完成加成 +20%
-  if (task.dueDate) {
-    const today = new Date().toISOString().split('T')[0]
-    if (task.dueDate >= today) bonusRate += 0.20
-  }
+  // 按时完成系数 ×1.2，无截止日或已过期 ×1.0
+  const onTime = task.dueDate
+    ? task.dueDate >= new Date().toISOString().split('T')[0]
+    : false
+  const onTimeMultiplier = onTime ? 1.2 : 1.0
 
-  // 连续阶梯加成
-  bonusRate += getStreakBonusRate(streakDays)
+  // 连续阶梯系数
+  const streakMultiplier = 1 + getStreakBonusRate(streakDays)
 
-  // 高难度加成 +50%
-  if (task.difficulty >= 4) bonusRate += 0.50
+  // 高难度系数 ×1.5（难度4-5）
+  const difficultyMultiplier = task.difficulty >= 4 ? 1.5 : 1.0
 
-  const xp = Math.round(base * (1 + bonusRate))
+  const xp = Math.round(base * onTimeMultiplier * streakMultiplier * difficultyMultiplier)
   return { xp, ore: xp }
 }
 

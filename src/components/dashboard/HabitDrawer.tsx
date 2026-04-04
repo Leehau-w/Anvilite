@@ -390,7 +390,7 @@ export function HabitDrawer({ open, onClose, editHabit, defaultCategory }: Habit
 
         {/* 子项管理（编辑时 + 层级 < 2） */}
         {editHabit && (editHabit.nestingLevel ?? 0) < 2 && (() => {
-          const children = allHabits.filter((c) => !c.deletedAt && (editHabit.childIds ?? []).includes(c.id))
+          const children = allHabits.filter((c) => !c.deletedAt && c.parentId === editHabit.id)
           return (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               <label style={{ fontSize: 12, color: 'var(--color-text-dim)' }}>{t.subtask_add}</label>

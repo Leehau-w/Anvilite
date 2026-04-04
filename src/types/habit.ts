@@ -31,9 +31,18 @@ export interface Habit {
   weeklyCompletionCount: number       // 本周已完成次数（仅 weekly flexible 使用）
   lastCompletedAt: string | null
   lastDueAt: string | null
+  sortOrder: number
   createdAt: string
   updatedAt: string
 }
 
 export type HabitRepeatType = Habit['repeatType']
 export type HabitStatus = Habit['status']
+
+export interface HabitGroup {
+  id: string
+  name: string
+  type: 'custom'
+  habitIds: string[]
+  createdAt: string
+}

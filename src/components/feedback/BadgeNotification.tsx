@@ -1,10 +1,16 @@
 import React, { useEffect, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useBadgeStore } from '@/stores/badgeStore'
+import { useGrowthEventStore } from '@/stores/growthEventStore'
+import { useAreaStore } from '@/stores/areaStore'
 import { STATIC_BADGE_DEFS, makeAreaBadgeDef, type BadgeDef } from '@/types/badge'
+import { useT } from '@/i18n'
+import type { Translations } from '@/i18n'
+import type { Area } from '@/types/area'
+import { getAreaDisplayName } from '@/utils/area'
 
-/** 从徽章ID查找定义（含动态区域徽章） */
-function resolveBadgeDef(id: string): BadgeDef | null {
+/** 从徽章ID查找定义（含动态区域徽章）。areas 用于将 category 解析为用户可见名称。 */
+function resolveBadgeDef(id: string, areas: Area[], t: Translations): BadgeDef | null {
   // 静态徽章
   const found = STATIC_BADGE_DEFS.find((d) => d.id === id)
   if (found) return found
@@ -14,7 +20,11 @@ function resolveBadgeDef(id: string): BadgeDef | null {
   if (areaMatch) {
     const category = areaMatch[1]
     const level = parseInt(areaMatch[2], 10)
-    if (level >= 2 && level <= 6) return makeAreaBadgeDef(category, level)
+    if (level >= 2 && level <= 6) {
+      const area = areas.find((a) => a.category === category)
+      const displayName = area ? getAreaDisplayName(area, t) : category
+      return makeAreaBadgeDef(category, level, displayName)
+    }
   }
 
   return null
@@ -31,6 +41,9 @@ interface ActiveNotif {
 
 export function BadgeNotificationLayer() {
   const { notifyQueue, dismissNotify } = useBadgeStore()
+  const { addEvent } = useGrowthEventStore()
+  const areas = useAreaStore((s) => s.areas)
+  const t = useT()
   const [active, setActive] = useState<ActiveNotif[]>([])
   const [lit, setLit] = useState<Set<string>>(new Set())
 
@@ -41,11 +54,19 @@ export function BadgeNotificationLayer() {
     // 如果已在显示中，跳过
     if (active.some((a) => a.id === id)) return
 
-    const def = resolveBadgeDef(id)
+    const def = resolveBadgeDef(id, areas, t)
     if (!def) {
       dismissNotify(id)
       return
     }
+
+    // 记录成长事件
+    addEvent({
+      type: 'badge_earned',
+      title: t.badge_earnedEvent(def.name),
+      details: { badgeId: id },
+      isMilestone: false,
+    })
 
     // 500ms 后变彩色发光
     const litTimer = setTimeout(() => {

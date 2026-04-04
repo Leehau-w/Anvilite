@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import type { Task } from '@/types/task'
+import type { Task, TaskGroup } from '@/types/task'
 import { getStoragePrefix } from './accountManager'
 import { generateId } from '@/utils/id'
 import { getTomorrowString } from '@/utils/time'
@@ -9,6 +9,8 @@ import { migrateCategory } from '@/utils/area'
 interface TaskStore {
   tasks: Task[]
   lastCategory: string
+  completedViewMode: 'month' | 'area' | 'custom'
+  customTaskGroups: TaskGroup[]
 
   addTask: (partial: Partial<Task> & { title: string }) => Task
   updateTask: (id: string, patch: Partial<Task>) => void
@@ -18,13 +20,20 @@ interface TaskStore {
 
   hideTask: (id: string) => void  // 隐藏已完成任务
 
-  completeTask: (id: string) => Task | null
+  completeTask: (id: string) => (Task & { allSiblingsDone: boolean }) | null
   undoComplete: (id: string) => void
 
   startTask: (id: string) => void
   pauseTask: (id: string) => void
 
   reorderTasks: (ids: string[]) => void
+
+  setCompletedViewMode: (mode: 'month' | 'area' | 'custom') => void
+  addCustomTaskGroup: (name: string) => TaskGroup
+  renameCustomTaskGroup: (id: string, name: string) => void
+  deleteCustomTaskGroup: (id: string) => void
+  moveTaskToGroup: (taskId: string, groupId: string) => void
+  removeTaskFromGroup: (taskId: string, groupId: string) => void
 
   getTasksByCategory: (category?: string) => Task[]
   getActiveTasks: () => Task[]
@@ -48,7 +57,6 @@ function makeDefaultTask(partial: Partial<Task> & { title: string }): Task {
     nestingLevel: partial.nestingLevel ?? 0,
     xpReward: 0, // 完成时动态计算
     actualMinutes: 0,
-    timerStartedAt: null,
     completedAt: null,
     deletedAt: null,
     isHidden: false,
@@ -78,6 +86,8 @@ export const useTaskStore = create<TaskStore>()(
     (set, get) => ({
       tasks: [],
       lastCategory: 'other',
+      completedViewMode: 'month',
+      customTaskGroups: [],
 
       addTask: (partial) => {
         const task = makeDefaultTask(partial)
@@ -87,9 +97,9 @@ export const useTaskStore = create<TaskStore>()(
           task.nestingLevel = parent.nestingLevel + 1
           if (!partial.category) task.category = parent.category
           set((s) => ({
-            tasks: [task, ...s.tasks.map((t) =>
+            tasks: s.tasks.map((t) =>
               t.id === task.parentId ? { ...t, childIds: [...t.childIds, task.id], updatedAt: new Date().toISOString() } : t
-            )],
+            ).concat(task),
             lastCategory: task.category,
           }))
           return task
@@ -145,22 +155,10 @@ export const useTaskStore = create<TaskStore>()(
         if (!task || task.status === 'done') return null
 
         const now = new Date().toISOString()
-        let actualMinutes = task.actualMinutes
-
-        // 如果正在计时，计算额外时间
-        if (task.timerStartedAt) {
-          const elapsed = Math.floor(
-            (Date.now() - new Date(task.timerStartedAt).getTime()) / 60000
-          )
-          actualMinutes += elapsed
-        }
-
         const updatedTask: Task = {
           ...task,
           status: 'done',
           completedAt: now,
-          timerStartedAt: null,
-          actualMinutes,
           updatedAt: now,
         }
 
@@ -168,7 +166,19 @@ export const useTaskStore = create<TaskStore>()(
           tasks: s.tasks.map((t) => (t.id === id ? updatedTask : t)),
         }))
 
-        return updatedTask
+        // 检查兄弟子任务是否全部完成
+        let allSiblingsDone = false
+        if (task.parentId) {
+          const parent = get().tasks.find((t) => t.id === task.parentId)
+          if (parent) {
+            allSiblingsDone = parent.childIds.every((cid) => {
+              const child = get().tasks.find((t) => t.id === cid)
+              return !child || child.status === 'done'
+            })
+          }
+        }
+
+        return { ...updatedTask, allSiblingsDone }
       },
 
       undoComplete: (id) => {
@@ -187,38 +197,25 @@ export const useTaskStore = create<TaskStore>()(
       },
 
       startTask: (id) => {
+        const task = get().tasks.find((t) => t.id === id)
+        const now = new Date().toISOString()
         set((s) => ({
-          tasks: s.tasks.map((t) =>
-            t.id === id
-              ? {
-                  ...t,
-                  status: 'doing',
-                  timerStartedAt: new Date().toISOString(),
-                  updatedAt: new Date().toISOString(),
-                }
-              : t
-          ),
+          tasks: s.tasks.map((t) => {
+            if (t.id === id) return { ...t, status: 'doing', updatedAt: now }
+            // 子任务 → doing 时，todo 状态的父任务自动跟随
+            if (task?.parentId && t.id === task.parentId && t.status === 'todo') {
+              return { ...t, status: 'doing', updatedAt: now }
+            }
+            return t
+          }),
         }))
       },
 
       pauseTask: (id) => {
-        const task = get().tasks.find((t) => t.id === id)
-        if (!task || !task.timerStartedAt) return
-
-        const elapsed = Math.floor(
-          (Date.now() - new Date(task.timerStartedAt).getTime()) / 60000
-        )
-
         set((s) => ({
           tasks: s.tasks.map((t) =>
             t.id === id
-              ? {
-                  ...t,
-                  status: 'todo',
-                  timerStartedAt: null,
-                  actualMinutes: t.actualMinutes + elapsed,
-                  updatedAt: new Date().toISOString(),
-                }
+              ? { ...t, status: 'todo', updatedAt: new Date().toISOString() }
               : t
           ),
         }))
@@ -236,6 +233,54 @@ export const useTaskStore = create<TaskStore>()(
           const rest = s.tasks.filter((t) => !reorderedIds.has(t.id))
           return { tasks: [...reordered, ...rest] }
         })
+      },
+
+      setCompletedViewMode: (mode) => {
+        set({ completedViewMode: mode })
+      },
+
+      addCustomTaskGroup: (name) => {
+        const group: TaskGroup = {
+          id: generateId(),
+          name,
+          type: 'custom',
+          taskIds: [],
+          createdAt: new Date().toISOString(),
+        }
+        set((s) => ({ customTaskGroups: [...s.customTaskGroups, group] }))
+        return group
+      },
+
+      renameCustomTaskGroup: (id, name) => {
+        set((s) => ({
+          customTaskGroups: s.customTaskGroups.map((g) =>
+            g.id === id ? { ...g, name } : g
+          ),
+        }))
+      },
+
+      deleteCustomTaskGroup: (id) => {
+        set((s) => ({ customTaskGroups: s.customTaskGroups.filter((g) => g.id !== id) }))
+      },
+
+      moveTaskToGroup: (taskId, groupId) => {
+        set((s) => ({
+          customTaskGroups: s.customTaskGroups.map((g) => {
+            if (g.id === groupId) {
+              return { ...g, taskIds: g.taskIds.includes(taskId) ? g.taskIds : [...g.taskIds, taskId] }
+            }
+            // Remove from other groups
+            return { ...g, taskIds: g.taskIds.filter((id) => id !== taskId) }
+          }),
+        }))
+      },
+
+      removeTaskFromGroup: (taskId, groupId) => {
+        set((s) => ({
+          customTaskGroups: s.customTaskGroups.map((g) =>
+            g.id === groupId ? { ...g, taskIds: g.taskIds.filter((id) => id !== taskId) } : g
+          ),
+        }))
       },
 
       getTasksByCategory: (category) => {
@@ -266,11 +311,24 @@ export const useTaskStore = create<TaskStore>()(
       name: `${getStoragePrefix()}-tasks`,
       onRehydrateStorage: () => (state) => {
         if (!state) return
-        state.tasks = state.tasks.map((t) => ({
-          ...t,
-          category: migrateCategory(t.category),
-        }))
+        state.tasks = state.tasks.map((t) => {
+          // 迁移：清理旧版计时器字段
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const legacy = t as any
+          if ('timerStartedAt' in legacy) delete legacy.timerStartedAt
+          if ('timerElapsed' in legacy) delete legacy.timerElapsed
+          // doing 状态保持，只是不再有计时器
+          return {
+            ...t,
+            category: migrateCategory(t.category),
+            actualMinutes: t.actualMinutes ?? 0,
+            sortOrder: t.sortOrder ?? 0,
+          }
+        })
         state.lastCategory = migrateCategory(state.lastCategory)
+        // New fields compat
+        if (!state.completedViewMode) state.completedViewMode = 'month'
+        if (!state.customTaskGroups) state.customTaskGroups = []
       },
     }
   )

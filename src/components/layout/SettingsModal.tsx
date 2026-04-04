@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useCharacterStore } from '@/stores/characterStore'
@@ -7,6 +7,8 @@ import { THEMES } from '@/types/settings'
 import { useT } from '@/i18n'
 import type { Translations } from '@/i18n/zh'
 import { getAccounts, getCurrentAccountId, createAccount, switchAccount, deleteAccount } from '@/stores/accountManager'
+import { exportData, importData } from '@/utils/dataExport'
+import { getStorageUsage, formatBytes } from '@/utils/storageMonitor'
 
 /** Map theme id → i18n key */
 const THEME_NAME_KEY: Record<string, keyof Translations> = {
@@ -55,6 +57,37 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
   const t = useT()
   const [nameInput, setNameInput] = useState(character.name)
   const [confirmTheme, setConfirmTheme] = useState<string | null>(null)
+
+  // ── 数据导出/导入 ──
+  const [importConfirm, setImportConfirm] = useState(false)
+  const [pendingImportFile, setPendingImportFile] = useState<File | null>(null)
+  const importInputRef = useRef<HTMLInputElement>(null)
+
+  async function handleExport() {
+    await exportData()
+  }
+
+  function handleImportSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setPendingImportFile(file)
+    setImportConfirm(true)
+    e.target.value = ''
+  }
+
+  async function handleImportConfirm() {
+    if (!pendingImportFile) return
+    const result = await importData(pendingImportFile)
+    setImportConfirm(false)
+    setPendingImportFile(null)
+    if (!result.success) {
+      const msg = result.error?.startsWith('version') ? t.data_importErrorVersion
+        : result.error === 'parse_error' ? t.data_importErrorParse
+        : t.data_importErrorFormat
+      showToast(msg)
+    }
+    // success: page reloads automatically
+  }
 
   // ── 账号管理 ──
   const accounts = getAccounts()
@@ -119,6 +152,11 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
   const confirmThemeInfo = confirmTheme ? THEMES.find((t) => t.id === confirmTheme) : null
   const confirmCost = confirmTheme ? (THEME_ORE_COST[confirmTheme] ?? 0) : 0
   const canAfford = character.ore >= confirmCost
+
+  const [storageUsage, setStorageUsage] = useState(() => getStorageUsage())
+  useEffect(() => {
+    if (open) setStorageUsage(getStorageUsage())
+  }, [open])
 
   return (
     <AnimatePresence>
@@ -370,8 +408,78 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
                   ))}
                 </div>
               </section>
+
+              {/* 数据管理 */}
+              <section>
+                <SectionTitle>{t.data_section}</SectionTitle>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button
+                    onClick={handleExport}
+                    style={{ flex: 1, padding: '8px 0', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', background: 'transparent', color: 'var(--color-text)', fontSize: 13, cursor: 'pointer', transition: 'border-color 0.15s' }}
+                    onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--color-accent)' }}
+                    onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--color-border)' }}
+                  >
+                    📤 {t.data_export}
+                  </button>
+                  <button
+                    onClick={() => importInputRef.current?.click()}
+                    style={{ flex: 1, padding: '8px 0', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', background: 'transparent', color: 'var(--color-text)', fontSize: 13, cursor: 'pointer', transition: 'border-color 0.15s' }}
+                    onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--color-accent)' }}
+                    onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--color-border)' }}
+                  >
+                    📥 {t.data_import}
+                  </button>
+                  <input ref={importInputRef} type="file" accept=".json" style={{ display: 'none' }} onChange={handleImportSelect} />
+                </div>
+              </section>
+
+              {/* 存储用量 */}
+              <section>
+                <SectionTitle>{t.settings_storage}</SectionTitle>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <div style={{ height: 6, borderRadius: 'var(--radius-full)', background: 'var(--color-border)', overflow: 'hidden' }}>
+                    <div
+                      style={{
+                        height: '100%',
+                        width: `${Math.min(storageUsage.usageRatio * 100, 100)}%`,
+                        borderRadius: 'var(--radius-full)',
+                        background: storageUsage.isWarning ? 'var(--color-danger)' : 'var(--color-accent)',
+                        transition: 'width 0.3s ease',
+                      }}
+                    />
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--color-text-dim)' }}>
+                    <span>{t.storage_used}: {formatBytes(storageUsage.usedBytes)}</span>
+                    <span>{t.storage_total}: {formatBytes(storageUsage.totalBytes)}</span>
+                  </div>
+                </div>
+              </section>
             </div>
           </motion.div>
+
+          {/* 导入确认弹窗 */}
+          <AnimatePresence>
+            {importConfirm && (
+              <motion.div
+                initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                style={{ position: 'fixed', inset: 0, zIndex: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                onClick={() => { setImportConfirm(false); setPendingImportFile(null) }}
+              >
+                <motion.div
+                  initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}
+                  onClick={(e) => e.stopPropagation()}
+                  style={{ width: 320, background: 'var(--color-surface)', borderRadius: 'var(--radius-xl)', border: '1px solid var(--color-border)', padding: 20, boxShadow: '0 8px 32px rgba(0,0,0,0.15)' }}
+                >
+                  <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 10 }}>⚠️ {t.data_importConfirmTitle}</div>
+                  <p style={{ fontSize: 13, color: 'var(--color-text-dim)', marginBottom: 16, lineHeight: 1.6 }}>{t.data_importConfirmMsg}</p>
+                  <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                    <button onClick={() => { setImportConfirm(false); setPendingImportFile(null) }} style={{ padding: '6px 14px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', background: 'transparent', color: 'var(--color-text-dim)', cursor: 'pointer', fontSize: 13 }}>{t.data_importCancel}</button>
+                    <button onClick={handleImportConfirm} style={{ padding: '6px 14px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-danger)', background: 'color-mix(in srgb, var(--color-danger) 12%, transparent)', color: 'var(--color-danger)', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>{t.data_importConfirm}</button>
+                  </div>
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {/* 账号操作确认弹窗 */}
           <AnimatePresence>

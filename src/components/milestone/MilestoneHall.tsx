@@ -36,8 +36,24 @@ function getTitleIndex(level: number): number {
 
 // ─── 主组件 ───────────────────────────────────────────────────────────────────
 
+const GLOBAL_STATUS_CYCLE = ['active', 'charging', 'resting', 'traveling', 'returning'] as const
+const STATUS_ICONS: Record<string, { icon: string; key: string }> = {
+  active:    { icon: '⚡', key: 'charCard_status_active' },
+  charging:  { icon: '🔋', key: 'charCard_status_charging' },
+  resting:   { icon: '💤', key: 'charCard_status_resting' },
+  traveling: { icon: '🌄', key: 'charCard_status_traveling' },
+  returning: { icon: '🌅', key: 'charCard_status_returning' },
+}
+const CATEGORY_STATUS: Record<string, { icon: string; key: string }> = {
+  library:  { icon: '📚', key: 'charCard_catStatus_library' },
+  forge:    { icon: '💼', key: 'charCard_catStatus_forge' },
+  arena:    { icon: '🏃', key: 'charCard_catStatus_arena' },
+  workshop: { icon: '✨', key: 'charCard_catStatus_workshop' },
+  home:     { icon: '🏠', key: 'charCard_catStatus_home' },
+}
+
 export function MilestoneHall() {
-  const { character, setTitlePreset } = useCharacterStore()
+  const { character, setTitlePreset, setGlobalStatus } = useCharacterStore()
   const { events, markMilestone, updateEventDetails } = useGrowthEventStore()
   const { tasks } = useTaskStore()
   const { habits } = useHabitStore()
@@ -63,6 +79,25 @@ export function MilestoneHall() {
     () => events.filter((e) => e.isMilestone || e.type === 'milestone' || e.type === 'custom_milestone'),
     [events]
   )
+
+  // 角色状态（与仪表盘 CharacterMiniCard 逻辑一致）
+  const priorityOrder = { urgent: 0, high: 1, medium: 2, low: 3 } as const
+  const topDoing = tasks.filter((tk) => tk.status === 'doing' && !tk.deletedAt)
+    .sort((a, b) => priorityOrder[a.priority] - priorityOrder[b.priority])[0]
+  const topDoingHabit = !topDoing ? habits.find((h) => !h.deletedAt && h.timerStartedAt !== null) : undefined
+  const topActive = topDoing ?? topDoingHabit ?? null
+  const statusEntry = STATUS_ICONS[character.globalStatus] ?? STATUS_ICONS.active
+  const catEntry = topActive ? (CATEGORY_STATUS[topActive.category] ?? null) : null
+  const statusIcon = topActive ? (catEntry?.icon ?? '📌') : statusEntry.icon
+  const statusLabel = topActive
+    ? (catEntry ? (t[catEntry.key as keyof typeof t] as string) : t.charCard_busy)
+    : (t[statusEntry.key as keyof typeof t] as string)
+
+  function cycleStatus() {
+    if (topActive) return
+    const idx = GLOBAL_STATUS_CYCLE.indexOf(character.globalStatus as typeof GLOBAL_STATUS_CYCLE[number])
+    setGlobalStatus(GLOBAL_STATUS_CYCLE[(idx + 1) % GLOBAL_STATUS_CYCLE.length])
+  }
 
   // 统计
   const totalTasks = tasks.filter((t) => t.status === 'done').length
@@ -191,6 +226,34 @@ export function MilestoneHall() {
                   {translatedTitle}
                 </span>
               </div>
+            </div>
+
+            {/* 角色状态 */}
+            <div
+              onClick={cycleStatus}
+              title={!topActive ? t.charCard_clickToChangeStatus : undefined}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 8, width: '100%',
+                padding: '8px 12px', borderRadius: 'var(--radius-md)',
+                border: '1px solid var(--color-border)',
+                background: topActive ? 'color-mix(in srgb, var(--color-accent) 5%, var(--color-bg))' : 'var(--color-bg)',
+                cursor: topActive ? 'default' : 'pointer',
+                transition: 'background 0.15s',
+                userSelect: 'none',
+              }}
+            >
+              <span style={{ fontSize: 18 }}>{statusIcon}</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1 }}>
+                <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text)' }}>{statusLabel}</span>
+                {topActive && (
+                  <span style={{ fontSize: 10, fontWeight: 500, color: 'var(--color-accent)', background: 'color-mix(in srgb, var(--color-accent) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--color-accent) 30%, transparent)', borderRadius: 'var(--radius-sm)', padding: '1px 5px', lineHeight: 1.4 }}>
+                    {t.charCard_statusAutoLabel}
+                  </span>
+                )}
+              </div>
+              {!topActive && (
+                <span style={{ fontSize: 10, color: 'var(--color-text-dim)', opacity: 0.6 }}>↻</span>
+              )}
             </div>
 
             {/* 经验条 */}

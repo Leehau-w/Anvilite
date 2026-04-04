@@ -242,6 +242,42 @@ export function TaskDrawer({ open, onClose, editTask, initialCategory }: TaskDra
           />
         </div>
 
+        {/* 实际用时（编辑时显示） */}
+        {editTask && (
+          <div className="flex flex-col gap-1.5">
+            <label style={{ fontSize: 12, color: 'var(--color-text-dim)' }}>{t.task_actualMinutes}</label>
+            {editTask.status === 'done' ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <input
+                  type="number"
+                  min={0}
+                  value={editTask.actualMinutes ?? 0}
+                  onChange={(e) => {
+                    const mins = Number(e.target.value)
+                    if (!isNaN(mins)) updateTask(editTask.id, { actualMinutes: mins })
+                  }}
+                  style={{
+                    width: 100,
+                    height: 36,
+                    padding: '0 12px',
+                    borderRadius: 'var(--radius-md)',
+                    border: '1px solid var(--color-border)',
+                    background: 'var(--color-bg)',
+                    color: 'var(--color-text)',
+                    fontSize: 14,
+                    outline: 'none',
+                  }}
+                />
+                <span style={{ fontSize: 13, color: 'var(--color-text-dim)' }}>{t.task_minuteUnit}</span>
+              </div>
+            ) : (
+              <div style={{ fontSize: 13, color: 'var(--color-text-dim)', padding: '8px 0' }}>
+                {t.task_actualMinutesPlaceholder}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* 备注 */}
         <div className="flex flex-col gap-1.5">
           <label style={{ fontSize: 12, color: 'var(--color-text-dim)' }}>{t.taskDrawer_notes}</label>
@@ -266,7 +302,7 @@ export function TaskDrawer({ open, onClose, editTask, initialCategory }: TaskDra
 
         {/* 子项管理（编辑时 + 层级 < 2） */}
         {editTask && editTask.nestingLevel < 2 && (() => {
-          const children = allTasks.filter((c) => !c.deletedAt && editTask.childIds.includes(c.id))
+          const children = allTasks.filter((c) => !c.deletedAt && c.parentId === editTask.id)
           return (
             <div className="flex flex-col gap-1.5">
               <label style={{ fontSize: 12, color: 'var(--color-text-dim)' }}>{t.subtask_add}</label>

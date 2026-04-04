@@ -2,7 +2,9 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { getStoragePrefix } from './accountManager'
 
-export type CardId = 'quickAdd' | 'stats' | 'tasks' | 'character' | 'habits' | 'growth'
+export type CardId = 'quickAdd' | 'stats' | 'tasks' | 'character' | 'habits' | 'growth' | 'inspiration'
+
+export const ALL_CARD_IDS: CardId[] = ['quickAdd', 'stats', 'tasks', 'character', 'habits', 'growth', 'inspiration']
 
 export interface CardLayout {
   id: CardId
@@ -17,17 +19,21 @@ export const ROW_H = 44    // px per row
 export const GAP = 8       // px gap between cells
 
 export const DEFAULT_LAYOUT: CardLayout[] = [
-  { id: 'quickAdd',  col: 0,  row: 0,  colSpan: 16, rowSpan: 2 },
-  { id: 'stats',     col: 16, row: 0,  colSpan: 8,  rowSpan: 2 },
-  { id: 'tasks',     col: 0,  row: 2,  colSpan: 8,  rowSpan: 8 },
-  { id: 'habits',    col: 8,  row: 2,  colSpan: 8,  rowSpan: 8 },
-  { id: 'character', col: 16, row: 2,  colSpan: 8,  rowSpan: 3 },
-  { id: 'growth',    col: 16, row: 5,  colSpan: 8,  rowSpan: 5 },
+  { id: 'quickAdd',     col: 0,  row: 0,  colSpan: 16, rowSpan: 2 },
+  { id: 'stats',        col: 16, row: 0,  colSpan: 8,  rowSpan: 2 },
+  { id: 'tasks',        col: 0,  row: 2,  colSpan: 8,  rowSpan: 8 },
+  { id: 'habits',       col: 8,  row: 2,  colSpan: 8,  rowSpan: 8 },
+  { id: 'character',    col: 16, row: 2,  colSpan: 8,  rowSpan: 3 },
+  { id: 'growth',       col: 16, row: 5,  colSpan: 8,  rowSpan: 5 },
+  { id: 'inspiration',  col: 0,  row: 10, colSpan: 8,  rowSpan: 5 },
 ]
 
 interface DashboardStore {
   layout: CardLayout[]
+  visibleCards: CardId[]
   updateCard: (id: CardId, patch: Partial<Omit<CardLayout, 'id'>>) => void
+  removeCard: (id: CardId) => void
+  addCard: (id: CardId) => void
   resetLayout: () => void
 }
 
@@ -35,20 +41,33 @@ export const useDashboardStore = create<DashboardStore>()(
   persist(
     (set) => ({
       layout: DEFAULT_LAYOUT,
+      visibleCards: ALL_CARD_IDS,
       updateCard: (id, patch) =>
         set((s) => ({
           layout: s.layout.map((c) => (c.id === id ? { ...c, ...patch } : c)),
         })),
-      resetLayout: () => set({ layout: DEFAULT_LAYOUT }),
+      removeCard: (id) =>
+        set((s) => ({ visibleCards: s.visibleCards.filter((c) => c !== id) })),
+      addCard: (id) =>
+        set((s) => {
+          if (s.visibleCards.includes(id)) return s
+          return { visibleCards: [...s.visibleCards, id] }
+        }),
+      resetLayout: () => set({ layout: DEFAULT_LAYOUT, visibleCards: ALL_CARD_IDS }),
     }),
     {
       name: `${getStoragePrefix()}-dashboard`,
-      version: 2,
+      version: 3,
       onRehydrateStorage: () => (state) => {
         if (!state) return
         const ids = new Set(state.layout.map((c) => c.id))
         const missing = DEFAULT_LAYOUT.filter((c) => !ids.has(c.id))
         if (missing.length) state.layout = [...state.layout, ...missing]
+        if (!state.visibleCards) {
+          state.visibleCards = ALL_CARD_IDS
+        } else if (!state.visibleCards.includes('inspiration')) {
+          state.visibleCards = [...state.visibleCards, 'inspiration']
+        }
       },
     }
   )

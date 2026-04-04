@@ -13,7 +13,6 @@ export interface Task {
   nestingLevel: number
   xpReward: number
   actualMinutes: number
-  timerStartedAt: string | null
   completedAt: string | null
   deletedAt: string | null
   isHidden: boolean
@@ -25,3 +24,11 @@ export interface Task {
 export type TaskStatus = Task['status']
 export type TaskPriority = Task['priority']
 export type TaskDifficulty = Task['difficulty']
+
+export interface TaskGroup {
+  id: string
+  name: string
+  type: 'custom'
+  taskIds: string[]
+  createdAt: string
+}
