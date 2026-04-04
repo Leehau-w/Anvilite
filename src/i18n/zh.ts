@@ -740,6 +740,23 @@ export const zh = {
   subtask_placeholder: '输入标题，回车创建',
   subtask_collapse: '收起',
   subtask_expand: '展开',
+
+  // Inspiration
+  inspiration_title: '灵感速记',
+  inspiration_placeholder: '记下这个想法…',
+  inspiration_save: '保存',
+  inspiration_list: '灵感列表',
+  inspiration_convertToTask: '转为任务',
+  inspiration_empty: '暂无灵感，按 Ctrl+Shift+N 快速记录',
+  inspiration_converted: '已转为任务',
+  inspiration_deleteConfirm: '删除这条灵感？',
+
+  // Storage
+  settings_storage: '存储用量',
+  storage_warning: '存储用量已超过 80%，建议导出备份',
+  storage_exportNow: '立即导出',
+  storage_used: '已使用',
+  storage_total: '共',
 }
 
 export type Translations = typeof zh

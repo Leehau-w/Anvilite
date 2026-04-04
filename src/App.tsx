@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { TopBar } from '@/components/layout/TopBar'
 import { Sidebar, type NavTab } from '@/components/layout/Sidebar'
 import { StatusBar } from '@/components/layout/StatusBar'
@@ -7,6 +7,7 @@ import { Dashboard } from '@/components/dashboard/Dashboard'
 import { TaskList } from '@/components/tasks/TaskList'
 import { MilestoneHall } from '@/components/milestone/MilestoneHall'
 import { WorldMap } from '@/components/worldmap/WorldMap'
+import { InspirationModal } from '@/components/ui/InspirationModal'
 import { ToastProvider } from '@/components/feedback/Toast'
 import { FeedbackProvider } from '@/components/feedback/FeedbackContext'
 import ErrorBoundary from '@/components/ui/ErrorBoundary'
@@ -16,12 +17,25 @@ import { useHabitStore } from '@/stores/habitStore'
 function App() {
   const [activeTab, setActiveTab] = useState<NavTab>('dashboard')
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [inspirationOpen, setInspirationOpen] = useState(false)
 
   useEffect(() => {
     return startDateWatcher(() => {
       useHabitStore.getState().resetDailyHabits()
     })
   }, [])
+
+  const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    if (e.ctrlKey && e.shiftKey && e.key === 'N') {
+      e.preventDefault()
+      setInspirationOpen((v) => !v)
+    }
+  }, [])
+
+  useEffect(() => {
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [handleKeyDown])
 
   return (
     <ToastProvider>
@@ -44,7 +58,10 @@ function App() {
               <main style={{ flex: 1, overflow: 'hidden' }}>
                 <ErrorBoundary>
                   {activeTab === 'dashboard' && (
-                    <Dashboard onNavigate={(tab) => setActiveTab(tab as NavTab)} />
+                    <Dashboard
+                      onNavigate={(tab) => setActiveTab(tab as NavTab)}
+                      onOpenInspiration={() => setInspirationOpen(true)}
+                    />
                   )}
                   {activeTab === 'tasks' && <TaskList />}
                   {activeTab === 'worldmap' && <WorldMap />}
@@ -57,6 +74,7 @@ function App() {
           </div>
 
           <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+          <InspirationModal open={inspirationOpen} onClose={() => setInspirationOpen(false)} />
         </ErrorBoundary>
       </FeedbackProvider>
     </ToastProvider>

@@ -742,4 +742,21 @@ export const en: Translations = {
   subtask_placeholder: 'Title, press Enter',
   subtask_collapse: 'Collapse',
   subtask_expand: 'Expand',
+
+  // Inspiration
+  inspiration_title: 'Quick Note',
+  inspiration_placeholder: 'Capture this idea…',
+  inspiration_save: 'Save',
+  inspiration_list: 'Inspirations',
+  inspiration_convertToTask: 'Convert to Task',
+  inspiration_empty: 'No ideas yet — press Ctrl+Shift+N to capture',
+  inspiration_converted: 'Converted to task',
+  inspiration_deleteConfirm: 'Delete this inspiration?',
+
+  // Storage
+  settings_storage: 'Storage Usage',
+  storage_warning: 'Storage usage exceeds 80% — consider exporting a backup',
+  storage_exportNow: 'Export Now',
+  storage_used: 'Used',
+  storage_total: 'Total',
 }

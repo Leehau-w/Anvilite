@@ -17,6 +17,7 @@ import { TaskDrawer } from '@/components/tasks/TaskDrawer'
 import { HabitDrawer } from '@/components/dashboard/HabitDrawer'
 import { HabitManageModal } from '@/components/dashboard/HabitManageModal'
 import { DecoShop } from './DecoShop'
+import { ArchiveSpace } from './ArchiveSpace'
 import { ALL_DECORATIONS } from '@/types/decoration'
 import { isOverdue, formatRelativeDate } from '@/utils/time'
 import { useT } from '@/i18n'
@@ -34,6 +35,10 @@ function delay(ms: number) {
 export function InteriorSpace({ area, prosperity, onExit }: InteriorSpaceProps) {
   const t = useT()
   const isMilestone = area.category === '_milestone'
+
+  if (isMilestone) {
+    return <ArchiveSpace area={area} prosperity={prosperity} onExit={onExit} />
+  }
   const emoji = area.templateId
     ? AREA_TEMPLATES[area.templateId].prosperityEmojis[prosperity.prosperityLevel - 1]
     : '🏗️'
@@ -55,9 +60,7 @@ export function InteriorSpace({ area, prosperity, onExit }: InteriorSpaceProps) 
   const { showToast } = useToast()
 
   // ── 区域数据 ──────────────────────────────────────────────────────
-  const areaTasks = isMilestone
-    ? []
-    : tasks.filter((t) => !t.deletedAt && !t.isHidden && !t.parentId && t.category === area.category)
+  const areaTasks = tasks.filter((t) => !t.deletedAt && !t.isHidden && !t.parentId && t.category === area.category)
 
   const activeTasks = areaTasks.filter((t) => t.status === 'doing')
   const todoTasks = areaTasks.filter((t) => t.status === 'todo')
@@ -67,9 +70,7 @@ export function InteriorSpace({ area, prosperity, onExit }: InteriorSpaceProps) 
     ? [...activeTasks, ...todoTasks, ...doneTasks]
     : [...activeTasks, ...todoTasks].slice(0, 6)
 
-  const areaHabits = isMilestone
-    ? []
-    : habits.filter((h) => h.status !== 'archived' && !h.parentId && h.category === area.category)
+  const areaHabits = habits.filter((h) => h.status !== 'archived' && !h.parentId && h.category === area.category)
 
   const todayHabits = areaHabits.filter((h) => h.status === 'active')
   const completedHabits = habits.filter((h) => h.status === 'completed_today' && !h.parentId && h.category === area.category)
@@ -248,13 +249,7 @@ export function InteriorSpace({ area, prosperity, onExit }: InteriorSpaceProps) 
         >
           <div style={{ flex: 1, overflowY: 'auto', padding: '16px 14px', display: 'flex', flexDirection: 'column', gap: 20 }}>
 
-            {isMilestone ? (
-              <div style={{ textAlign: 'center', padding: '48px 0', color: 'var(--color-text-dim)', fontSize: 13 }}>
-                <div style={{ fontSize: 32, marginBottom: 8 }}>🏆</div>
-                {t.interior_milestoneEmpty}
-              </div>
-            ) : (
-              <>
+            <>
                 {/* ─ 任务区 ─ */}
                 <PanelSection
                   title={t.interior_panelTasks}
@@ -336,8 +331,7 @@ export function InteriorSpace({ area, prosperity, onExit }: InteriorSpaceProps) 
                     </button>
                   )}
                 </PanelSection>
-              </>
-            )}
+            </>
           </div>
         </div>
 
