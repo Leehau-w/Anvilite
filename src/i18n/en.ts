@@ -67,6 +67,8 @@ export const en: Translations = {
   dash_habitManage: 'Manage',
   dash_addHabit: 'Add Habit',
   dash_growth: 'Growth Trend',
+  dash_editLayout: 'Edit Layout',
+  dash_doneEditing: 'Done',
   dash_resetLayout: 'Reset Layout',
   dash_stats: "Today's Stats",
   dash_character: 'Character',
