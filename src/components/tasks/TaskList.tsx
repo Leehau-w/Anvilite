@@ -33,6 +33,18 @@ export function TaskList() {
   const [habitDrawerOpen, setHabitDrawerOpen] = useState(false)
   const [editHabit, setEditHabit] = useState<Habit | null>(null)
 
+  const visible = useMemo(() => tasks.filter((task) => {
+    if (task.deletedAt) return false
+    if (task.isHidden) return false
+    if (task.parentId) return false
+    if (activeCategory !== 'ALL' && task.category !== activeCategory) return false
+    return true
+  }), [tasks, activeCategory])
+
+  const doing = useMemo(() => sortTasksInGroup(visible.filter((t) => t.status === 'doing')), [visible])
+  const todo = useMemo(() => sortTasksInGroup(visible.filter((t) => t.status === 'todo')), [visible])
+  const done = useMemo(() => visible.filter((t) => t.status === 'done'), [visible])
+
   // 拖拽排序的本地状态
   const [localDoing, setLocalDoing] = useState<Task[]>([])
   const [localTodo, setLocalTodo] = useState<Task[]>([])
@@ -60,18 +72,6 @@ export function TaskList() {
     isDraggingRef.current = false
     reorderTasks([...localDoing, ...localTodo].map((t) => t.id))
   }, [localDoing, localTodo, reorderTasks])
-
-  const visible = useMemo(() => tasks.filter((task) => {
-    if (task.deletedAt) return false
-    if (task.isHidden) return false
-    if (task.parentId) return false
-    if (activeCategory !== 'ALL' && task.category !== activeCategory) return false
-    return true
-  }), [tasks, activeCategory])
-
-  const doing = useMemo(() => sortTasksInGroup(visible.filter((t) => t.status === 'doing')), [visible])
-  const todo = useMemo(() => sortTasksInGroup(visible.filter((t) => t.status === 'todo')), [visible])
-  const done = useMemo(() => visible.filter((t) => t.status === 'done'), [visible])
 
   // 已删除任务（30天内）
   const deleted = tasks
