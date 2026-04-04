@@ -97,7 +97,7 @@ export function CharacterMiniCard({ onClickMilestone }: CharacterMiniCardProps) 
       {/* 状态行 */}
       <div
         style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: !topDoing ? 'pointer' : 'default' }}
-        onClick={!topDoing ? cycleStatus : undefined}
+        onClick={!topDoing ? (e) => { e.stopPropagation(); cycleStatus() } : (e) => e.stopPropagation()}
         title={!topDoing ? t.charCard_clickToChangeStatus : undefined}
       >
         <span style={{ fontSize: 22 }}>{statusInfo.icon}</span>
