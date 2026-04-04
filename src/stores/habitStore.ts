@@ -27,6 +27,7 @@ interface HabitStore {
   skipHabit: (id: string) => { newStreak: number } | null
   missHabit: (id: string) => { usedTolerance: boolean; newStreak: number } | null
 
+  resetDailyHabits: () => void
   getTodayHabits: () => Habit[]
   getHabitsByCategory: (category: string) => Habit[]
   getTodayStats: () => { completed: number; totalXP: number }
@@ -267,6 +268,34 @@ export const useHabitStore = create<HabitStore>()(
         }))
 
         return { usedTolerance, newStreak: usedTolerance ? habit.consecutiveCount : newStreak }
+      },
+
+      resetDailyHabits: () => {
+        const now = new Date()
+        const today = now.toISOString().split('T')[0]
+        const dow = now.getDay() === 0 ? 7 : now.getDay()
+        const monday = new Date(now)
+        monday.setDate(now.getDate() - (dow - 1))
+        monday.setHours(0, 0, 0, 0)
+
+        set((s) => ({
+          habits: s.habits.map((h) => {
+            const staleCompleted =
+              h.status === 'completed_today' &&
+              (!h.lastCompletedAt || !h.lastCompletedAt.startsWith(today))
+            const weeklyCount = h.weeklyCompletionCount ?? 0
+            const weeklyStale =
+              weeklyCount > 0 &&
+              (!h.lastCompletedAt || new Date(h.lastCompletedAt) < monday)
+            if (!staleCompleted && !weeklyStale) return h
+            return {
+              ...h,
+              status: staleCompleted ? ('active' as const) : h.status,
+              weeklyCompletionCount: weeklyStale ? 0 : weeklyCount,
+              updatedAt: new Date().toISOString(),
+            }
+          }),
+        }))
       },
 
       getTodayHabits: () => {

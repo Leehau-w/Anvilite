@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { TopBar } from '@/components/layout/TopBar'
 import { Sidebar, type NavTab } from '@/components/layout/Sidebar'
 import { StatusBar } from '@/components/layout/StatusBar'
@@ -10,10 +10,18 @@ import { WorldMap } from '@/components/worldmap/WorldMap'
 import { ToastProvider } from '@/components/feedback/Toast'
 import { FeedbackProvider } from '@/components/feedback/FeedbackContext'
 import ErrorBoundary from '@/components/ui/ErrorBoundary'
+import { startDateWatcher } from '@/utils/dateWatcher'
+import { useHabitStore } from '@/stores/habitStore'
 
 function App() {
   const [activeTab, setActiveTab] = useState<NavTab>('dashboard')
   const [settingsOpen, setSettingsOpen] = useState(false)
+
+  useEffect(() => {
+    return startDateWatcher(() => {
+      useHabitStore.getState().resetDailyHabits()
+    })
+  }, [])
 
   return (
     <ToastProvider>
