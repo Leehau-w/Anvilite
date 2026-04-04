@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react'
+import type { Task } from '@/types/task'
 import { useTaskStore } from '@/stores/taskStore'
 import { useCharacterStore } from '@/stores/characterStore'
 import { useHabitStore } from '@/stores/habitStore'
@@ -25,7 +26,7 @@ import { HabitCard } from './HabitCard'
 import { HabitDrawer } from './HabitDrawer'
 import { HabitManageModal } from './HabitManageModal'
 import { Heatmap } from './Heatmap'
-import { AnimatePresence } from 'framer-motion'
+import { AnimatePresence, Reorder } from 'framer-motion'
 import type { Habit } from '@/types/habit'
 import type { Task } from '@/types/task'
 
@@ -36,7 +37,7 @@ interface DashboardProps {
 }
 
 export function Dashboard({ onNavigate }: DashboardProps) {
-  const { tasks, getTodayStats } = useTaskStore()
+  const { tasks, getTodayStats, reorderTasks } = useTaskStore()
   const { character } = useCharacterStore()
   const { getTodayStats: getHabitStats } = useHabitStore()
   const t = useT()
@@ -48,6 +49,10 @@ export function Dashboard({ onNavigate }: DashboardProps) {
   const [habitDrawerOpen, setHabitDrawerOpen] = useState(false)
   const [editHabit, setEditHabit] = useState<Habit | null>(null)
   const [habitManageOpen, setHabitManageOpen] = useState(false)
+
+  const [localDoing, setLocalDoing] = useState<Task[]>([])
+  const [localTodo, setLocalTodo] = useState<Task[]>([])
+  const isDraggingTaskRef = useRef(false)
 
   const containerRef = useRef<HTMLDivElement>(null)
   const [cw, setCw] = useState(800)
@@ -83,6 +88,29 @@ export function Dashboard({ onNavigate }: DashboardProps) {
     () => tasks.filter((t) => !t.deletedAt && !t.parentId && t.status === 'done').slice(0, 8),
     [tasks]
   )
+
+  // sync drag-sort local state from store
+  useEffect(() => {
+    if (!isDraggingTaskRef.current) {
+      setLocalDoing(doingTasks)
+      setLocalTodo(todoTasks)
+    }
+  }, [doingTasks, todoTasks])
+
+  const handleDoingReorder = useCallback((newOrder: Task[]) => {
+    isDraggingTaskRef.current = true
+    setLocalDoing(newOrder)
+  }, [])
+
+  const handleTodoReorder = useCallback((newOrder: Task[]) => {
+    isDraggingTaskRef.current = true
+    setLocalTodo(newOrder)
+  }, [])
+
+  const handleTaskDragEnd = useCallback(() => {
+    isDraggingTaskRef.current = false
+    reorderTasks([...localDoing, ...localTodo].map((t) => t.id))
+  }, [localDoing, localTodo, reorderTasks])
 
   function getCard(id: CardId) {
     return layout.find((c) => c.id === id) ?? DEFAULT_LAYOUT.find((c) => c.id === id)!
@@ -148,21 +176,33 @@ export function Dashboard({ onNavigate }: DashboardProps) {
             >
               <div style={{ overflowY: 'auto', height: '100%', scrollbarWidth: 'thin', scrollbarColor: 'var(--color-border) transparent' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  {doingTasks.length > 0 && (
+                  {localDoing.length > 0 && (
                     <>
                       <SectionLabel label={t.dash_doing} color="var(--color-accent)" />
-                      <AnimatePresence mode="popLayout">
-                        {doingTasks.map((task) => <TaskItem key={task.id} task={task} compact onEdit={openEditTask} />)}
-                      </AnimatePresence>
+                      <Reorder.Group axis="y" values={localDoing} onReorder={handleDoingReorder} style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+                        <AnimatePresence mode="popLayout">
+                          {localDoing.map((task) => (
+                            <Reorder.Item key={task.id} value={task} onDragEnd={handleTaskDragEnd} style={{ listStyle: 'none' }}>
+                              <TaskItem task={task} compact onEdit={openEditTask} />
+                            </Reorder.Item>
+                          ))}
+                        </AnimatePresence>
+                      </Reorder.Group>
                     </>
                   )}
-                  {todoTasks.length > 0 && (
+                  {localTodo.length > 0 && (
                     <>
-                      {doingTasks.length > 0 && <div style={{ height: 4 }} />}
+                      {localDoing.length > 0 && <div style={{ height: 4 }} />}
                       <SectionLabel label={t.dash_todo} />
-                      <AnimatePresence mode="popLayout">
-                        {todoTasks.slice(0, 10).map((task) => <TaskItem key={task.id} task={task} compact onEdit={openEditTask} />)}
-                      </AnimatePresence>
+                      <Reorder.Group axis="y" values={localTodo} onReorder={handleTodoReorder} style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+                        <AnimatePresence mode="popLayout">
+                          {localTodo.slice(0, 10).map((task) => (
+                            <Reorder.Item key={task.id} value={task} onDragEnd={handleTaskDragEnd} style={{ listStyle: 'none' }}>
+                              <TaskItem task={task} compact onEdit={openEditTask} />
+                            </Reorder.Item>
+                          ))}
+                        </AnimatePresence>
+                      </Reorder.Group>
                     </>
                   )}
                   {doneTasks.length > 0 && (
@@ -174,7 +214,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
                       </AnimatePresence>
                     </>
                   )}
-                  {doingTasks.length === 0 && todoTasks.length === 0 && doneTasks.length === 0 && (
+                  {localDoing.length === 0 && localTodo.length === 0 && doneTasks.length === 0 && (
                     <Empty>{t.dash_empty}</Empty>
                   )}
                 </div>
