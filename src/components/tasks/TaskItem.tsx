@@ -382,12 +382,6 @@ export function TaskItem({ task, compact, onEdit }: TaskItemProps) {
                       ⏱
                     </ActionButton>
                   )}
-                  <ActionButton onClick={handleInscribe} color="var(--color-xp)">
-                    ⭐ {t.task_inscribe}
-                  </ActionButton>
-                  <ActionButton onClick={handleHide} color="var(--color-text-dim)">
-                    {t.task_hide}
-                  </ActionButton>
                   <ActionButton
                     onClick={handleDeleteDone}
                     color={deleteConfirm ? 'var(--color-danger)' : 'var(--color-text-dim)'}
@@ -436,6 +430,42 @@ export function TaskItem({ task, compact, onEdit }: TaskItemProps) {
         >
           {formatRelativeDate(task.dueDate)}
         </span>
+      )}
+
+      {/* 铭刻 + 隐藏（非compact时始终显示） */}
+      {!compact && (
+        <>
+          <button
+            onClick={handleInscribe}
+            title={t.task_inscribe}
+            style={{
+              width: 26, height: 26, borderRadius: 'var(--radius-sm)',
+              border: '1px solid var(--color-border)',
+              background: 'transparent', color: 'var(--color-xp)',
+              cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              flexShrink: 0, fontSize: 12, transition: 'all 0.15s', opacity: 0.6,
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.opacity = '1' }}
+            onMouseLeave={(e) => { e.currentTarget.style.opacity = '0.6' }}
+          >
+            ⭐
+          </button>
+          <button
+            onClick={handleHide}
+            title={t.task_hide}
+            style={{
+              width: 26, height: 26, borderRadius: 'var(--radius-sm)',
+              border: '1px solid var(--color-border)',
+              background: 'transparent', color: 'var(--color-text-dim)',
+              cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              flexShrink: 0, fontSize: 11, transition: 'all 0.15s', opacity: 0.6,
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.opacity = '1' }}
+            onMouseLeave={(e) => { e.currentTarget.style.opacity = '0.6' }}
+          >
+            👁
+          </button>
+        </>
       )}
 
       {/* 进行中/开始按钮（非已完成） */}
