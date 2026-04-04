@@ -570,7 +570,7 @@ function HabitsTab({
   onAdd: () => void
   onEdit: (h: Habit) => void
 }) {
-  const { habits, pauseHabit, resumeHabit, hideHabit, unhideHabit, deleteHabit, restoreHabit, permanentlyDeleteHabit, masterHabit } = useHabitStore()
+  const { habits, pauseHabit, resumeHabit, hideHabit, unhideHabit, deleteHabit, restoreHabit, permanentlyDeleteHabit, masterHabit, startHabitTimer, pauseHabitTimer } = useHabitStore()
   const { addEvent } = useGrowthEventStore()
   const areas = useAreaStore((s) => s.areas)
   const tr = useT()
@@ -762,6 +762,7 @@ function HabitsTab({
                     onEdit={onEdit} onPause={() => pauseHabit(h.id)}
                     onHide={() => handleHide(h.id)} onDelete={() => handleDelete(h.id)}
                     onMaster={() => handleMaster(h)} onInscribe={() => handleInscribe(h)}
+                    onStartPause={() => h.timerStartedAt ? pauseHabitTimer(h.id) : startHabitTimer(h.id)}
                   />
                 ))}
               </AnimatePresence>
@@ -818,6 +819,7 @@ function HabitRow({
   onDelete,
   onMaster,
   onInscribe,
+  onStartPause,
   dim,
 }: {
   habit: Habit
@@ -828,6 +830,7 @@ function HabitRow({
   onDelete?: () => void
   onMaster?: () => void
   onInscribe?: () => void
+  onStartPause?: () => void
   dim?: boolean
 }) {
   const tr = useT()
@@ -838,6 +841,7 @@ function HabitRow({
   const [hovered, setHovered] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState(false)
   const deleteTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const isDoing = !!habit.timerStartedAt
 
   const children = allHabits.filter((c) => !c.deletedAt && !c.isHidden && (habit.childIds ?? []).includes(c.id))
 
@@ -877,12 +881,38 @@ function HabitRow({
             <span style={{ fontSize: 10, color: 'var(--color-text-dim)', flexShrink: 0 }}>▶</span>
           )}
           <span style={{
-            fontSize: 14, color: dim ? 'var(--color-text-dim)' : 'var(--color-text)',
+            fontSize: 14, color: dim ? 'var(--color-text-dim)' : isDoing ? 'var(--color-accent)' : 'var(--color-text)',
             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1,
             textDecoration: dim ? 'line-through' : 'none',
+            fontWeight: isDoing ? 600 : 400,
           }}>
             {habit.title}
           </span>
+          {onStartPause && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onStartPause() }}
+              title={isDoing ? tr.habit_pauseDoing : tr.habit_startDoing}
+              style={{
+                width: 26, height: 26, borderRadius: 'var(--radius-sm)',
+                border: `1px solid ${isDoing ? 'var(--color-accent)' : 'var(--color-border)'}`,
+                background: isDoing ? 'color-mix(in srgb, var(--color-accent) 15%, transparent)' : 'transparent',
+                color: isDoing ? 'var(--color-accent)' : 'var(--color-text-dim)',
+                cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                flexShrink: 0, transition: 'all 0.15s', padding: 0,
+              }}
+            >
+              {isDoing ? (
+                <svg width="9" height="9" viewBox="0 0 10 10" fill="currentColor">
+                  <rect x="2" y="2" width="2.5" height="6" rx="0.5"/>
+                  <rect x="5.5" y="2" width="2.5" height="6" rx="0.5"/>
+                </svg>
+              ) : (
+                <svg width="9" height="9" viewBox="0 0 10 10" fill="currentColor">
+                  <path d="M3 2l5 3-5 3V2z"/>
+                </svg>
+              )}
+            </button>
+          )}
         </div>
         {/* 元信息行 */}
         <div style={{ fontSize: 12, color: 'var(--color-text-dim)', marginTop: 4, display: 'flex', gap: 12 }}>
