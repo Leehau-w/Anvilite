@@ -78,17 +78,15 @@ describe('calculateTaskXP', () => {
     expect(calculateTaskXP(task, 0).xp).toBe(3)
   })
 
-  it('无截止日视为按时 → 不加 20%', () => {
+  it('无截止日视为未按时 → 不加 20%', () => {
     const task = makeTask({ difficulty: 3, dueDate: null })
     expect(calculateTaskXP(task, 0).xp).toBe(3)
   })
 
-  it('难度5 + 7天连续 + 按时完成', () => {
+  it('难度5 + 7天连续 + 按时完成 → 乘法公式', () => {
     const task = makeTask({ difficulty: 5, dueDate: '2099-12-31' })
-    // round(8 × 1.5 × 1.2 × 1.2) = round(8 × 2.16) = round(17.28) = 17
-    // 实际公式: round(8 × (1 + 0.20_ontime + 0.20_streak + 0.50_high))
-    // = round(8 × 1.9) = round(15.2) = 15
-    const expected = Math.round(8 * (1 + 0.20 + 0.20 + 0.50))
+    // v2 乘法: round(8 × 1.5_diff × 1.2_ontime × 1.2_streak) = round(17.28) = 17
+    const expected = Math.round(8 * 1.5 * 1.2 * 1.2)
     expect(calculateTaskXP(task, 7).xp).toBe(expected)
   })
 

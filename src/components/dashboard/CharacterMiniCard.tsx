@@ -102,10 +102,15 @@ export function CharacterMiniCard({ onClickMilestone }: CharacterMiniCardProps) 
       >
         <span style={{ fontSize: 22 }}>{statusInfo.icon}</span>
         <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text)' }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: 6 }}>
             {statusInfo.label}
+            {topDoing && (
+              <span style={{ fontSize: 10, fontWeight: 500, color: 'var(--color-accent)', background: 'color-mix(in srgb, var(--color-accent) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--color-accent) 30%, transparent)', borderRadius: 'var(--radius-sm)', padding: '1px 5px', lineHeight: 1.4 }}>
+                {t.charCard_statusAutoLabel}
+              </span>
+            )}
             {statusInfo.extra && (
-              <span style={{ fontSize: 11, color: 'var(--color-text-dim)', marginLeft: 6, fontWeight: 400 }}>
+              <span style={{ fontSize: 11, color: 'var(--color-text-dim)', fontWeight: 400 }}>
                 · {statusInfo.extra}
               </span>
             )}

@@ -1,4 +1,5 @@
-import { app, BrowserWindow, ipcMain } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog } from 'electron'
+import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
 
@@ -37,6 +38,19 @@ function createWindow() {
     else win.maximize()
   })
   ipcMain.on('window-close', () => win.close())
+
+  // Data export: show save dialog and write file
+  ipcMain.handle('save-file', async (_event, content: string, defaultName: string) => {
+    const { filePath } = await dialog.showSaveDialog(win, {
+      defaultPath: defaultName,
+      filters: [{ name: 'JSON', extensions: ['json'] }],
+    })
+    if (filePath) {
+      fs.writeFileSync(filePath, content, 'utf-8')
+      return { success: true }
+    }
+    return { success: false }
+  })
 }
 
 app.whenReady().then(createWindow)

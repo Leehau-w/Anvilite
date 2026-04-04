@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx tsc:*)",
+      "Bash(grep -o t.[a-zA-Z_]* /d/Project/Anvilite/anvilite/src/components/**/*.tsx /d/Project/Anvilite/anvilite/src/**/*.ts)",
+      "Bash(grep -n \"startDate.*=\\\\|endDate.*=\" /d/Project/Anvilite/anvilite/src/components/**/*.tsx)",
+      "Bash(grep:*)",
+      "Bash(for f:*)",
+      "Bash(do head:*)",
+      "Bash(done)",
+      "Bash(grep -n ['']\\\\\\([^'']*[u4e00-u9fa5][^'']*\\\\\\)[''] /d/Project/Anvilite/anvilite/src/stores/accountManager.ts /d/Project/Anvilite/anvilite/src/stores/characterStore.ts /d/Project/Anvilite/anvilite/src/stores/areaStore.ts)",
+      "Bash(find /d/Project/Anvilite/anvilite/src -type f \\\\\\(-name *.ts -o -name *.tsx \\\\\\))",
+      "Bash(sort -k2)",
+      "Bash(gh auth:*)",
+      "Bash(npm run:*)",
+      "Bash(ls:*)",
+      "Bash(npx vite:*)",
+      "Bash(npm install:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m ':*)",
+      "Bash(npm test:*)"
+    ]
+  }
+}
