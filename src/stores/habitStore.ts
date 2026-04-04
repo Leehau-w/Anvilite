@@ -27,6 +27,7 @@ interface HabitStore {
   skipHabit: (id: string) => { newStreak: number } | null
   missHabit: (id: string) => { usedTolerance: boolean; newStreak: number } | null
 
+  reorderHabits: (ids: string[]) => void
   resetDailyHabits: () => void
   getTodayHabits: () => Habit[]
   getHabitsByCategory: (category: string) => Habit[]
@@ -69,6 +70,7 @@ function makeDefaultHabit(partial: Parameters<HabitStore['addHabit']>[0]): Habit
     currentCycleCount: 0,
     lastCompletedAt: null,
     lastDueAt: null,
+    sortOrder: Date.now(),
     createdAt: now,
     updatedAt: now,
   }
@@ -270,6 +272,18 @@ export const useHabitStore = create<HabitStore>()(
         return { usedTolerance, newStreak: usedTolerance ? habit.consecutiveCount : newStreak }
       },
 
+      reorderHabits: (ids) => {
+        set((s) => {
+          const reorderedIds = new Set(ids)
+          const reordered = ids.map((id, idx) => {
+            const h = s.habits.find((h) => h.id === id)
+            return h ? { ...h, sortOrder: idx } : null
+          }).filter(Boolean) as Habit[]
+          const rest = s.habits.filter((h) => !reorderedIds.has(h.id))
+          return { habits: [...reordered, ...rest] }
+        })
+      },
+
       resetDailyHabits: () => {
         const now = new Date()
         const today = now.toISOString().split('T')[0]
@@ -346,6 +360,7 @@ export const useHabitStore = create<HabitStore>()(
           const weeklyStale = weeklyCount > 0 &&
             (!h.lastCompletedAt || new Date(h.lastCompletedAt) < monday)
           const patched: Habit = {
+            sortOrder: h.sortOrder ?? Date.now(),
             isHidden: h.isHidden ?? (h.status === 'archived'),
             deletedAt: h.deletedAt ?? null,
             timerStartedAt: h.timerStartedAt ?? null,

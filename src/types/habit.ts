@@ -31,6 +31,7 @@ export interface Habit {
   weeklyCompletionCount: number       // 本周已完成次数（仅 weekly flexible 使用）
   lastCompletedAt: string | null
   lastDueAt: string | null
+  sortOrder: number
   createdAt: string
   updatedAt: string
 }
