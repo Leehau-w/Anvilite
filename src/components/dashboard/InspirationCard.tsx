@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useInspirationStore } from '@/stores/inspirationStore'
 import { useTaskStore } from '@/stores/taskStore'
@@ -7,7 +7,7 @@ import { useT } from '@/i18n'
 import type { Inspiration } from '@/types/inspiration'
 
 export function InspirationCard({ onOpenModal }: { onOpenModal?: () => void }) {
-  const { inspirations, deleteInspiration, markConverted } = useInspirationStore()
+  const { inspirations, deleteInspiration, markConverted, updateInspiration } = useInspirationStore()
   const { addTask } = useTaskStore()
   const { showToast } = useToast()
   const t = useT()
@@ -40,6 +40,7 @@ export function InspirationCard({ onOpenModal }: { onOpenModal?: () => void }) {
             item={item}
             onConvert={handleConvert}
             onDelete={() => deleteInspiration(item.id)}
+            onUpdate={(content) => updateInspiration(item.id, content)}
             t={t}
           />
         ))}
@@ -57,14 +58,38 @@ function InspirationRow({
   item,
   onConvert,
   onDelete,
+  onUpdate,
   t,
 }: {
   item: Inspiration
   onConvert: (item: Inspiration) => void
   onDelete: () => void
+  onUpdate: (content: string) => void
   t: ReturnType<typeof useT>
 }) {
   const [hovered, setHovered] = useState(false)
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(item.content)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
+
+  useEffect(() => {
+    if (editing) {
+      inputRef.current?.focus()
+      inputRef.current?.select()
+    }
+  }, [editing])
+
+  function commitEdit() {
+    const trimmed = draft.trim()
+    if (trimmed && trimmed !== item.content) onUpdate(trimmed)
+    else setDraft(item.content)
+    setEditing(false)
+  }
+
+  function cancelEdit() {
+    setDraft(item.content)
+    setEditing(false)
+  }
 
   return (
     <motion.div
@@ -83,15 +108,44 @@ function InspirationRow({
           gap: 6,
           padding: '6px 2px',
           borderBottom: '1px solid var(--color-border)',
-          background: hovered ? 'var(--color-surface-hover)' : 'transparent',
+          background: editing ? 'var(--color-surface-hover)' : hovered ? 'var(--color-surface-hover)' : 'transparent',
           transition: 'background 0.1s',
         }}
       >
-        <span style={{ fontSize: 11, color: 'var(--color-text-dim)', marginTop: 2, flexShrink: 0 }}>💡</span>
-        <span style={{ flex: 1, fontSize: 12, color: 'var(--color-text)', lineHeight: 1.5, wordBreak: 'break-word' }}>
-          {item.content}
-        </span>
-        {hovered && (
+        <span style={{ fontSize: 11, color: 'var(--color-text-dim)', marginTop: editing ? 6 : 2, flexShrink: 0 }}>💡</span>
+        {editing ? (
+          <textarea
+            ref={inputRef}
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={commitEdit}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); commitEdit() }
+              if (e.key === 'Escape') cancelEdit()
+            }}
+            rows={2}
+            style={{
+              flex: 1,
+              fontSize: 12,
+              color: 'var(--color-text)',
+              lineHeight: 1.5,
+              background: 'transparent',
+              border: 'none',
+              outline: 'none',
+              resize: 'none',
+              fontFamily: 'var(--font-zh)',
+              padding: 0,
+            }}
+          />
+        ) : (
+          <span
+            onClick={() => { setDraft(item.content); setEditing(true) }}
+            style={{ flex: 1, fontSize: 12, color: 'var(--color-text)', lineHeight: 1.5, wordBreak: 'break-word', cursor: 'text' }}
+          >
+            {item.content}
+          </span>
+        )}
+        {!editing && hovered && (
           <div style={{ display: 'flex', gap: 3, flexShrink: 0 }}>
             <button
               onClick={() => onConvert(item)}

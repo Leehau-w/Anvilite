@@ -7,6 +7,7 @@ import { generateId } from '@/utils/id'
 interface InspirationStore {
   inspirations: Inspiration[]
   addInspiration: (content: string) => Inspiration
+  updateInspiration: (id: string, content: string) => void
   deleteInspiration: (id: string) => void
   markConverted: (id: string, taskId: string) => void
 }
@@ -24,6 +25,14 @@ export const useInspirationStore = create<InspirationStore>()(
         }
         set((s) => ({ inspirations: [item, ...s.inspirations] }))
         return item
+      },
+
+      updateInspiration: (id, content) => {
+        set((s) => ({
+          inspirations: s.inspirations.map((i) =>
+            i.id === id ? { ...i, content: content.trim() } : i
+          ),
+        }))
       },
 
       deleteInspiration: (id) => {

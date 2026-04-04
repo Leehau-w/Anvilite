@@ -12,7 +12,7 @@ interface InspirationModalProps {
 }
 
 export function InspirationModal({ open, onClose }: InspirationModalProps) {
-  const { inspirations, addInspiration, deleteInspiration, markConverted } = useInspirationStore()
+  const { inspirations, addInspiration, deleteInspiration, markConverted, updateInspiration } = useInspirationStore()
   const { addTask } = useTaskStore()
   const { showToast } = useToast()
   const t = useT()
@@ -189,6 +189,7 @@ export function InspirationModal({ open, onClose }: InspirationModalProps) {
                         item={item}
                         onConvert={handleConvertToTask}
                         onDelete={handleDelete}
+                        onUpdate={(content) => updateInspiration(item.id, content)}
                         t={t}
                       />
                     ))}
@@ -205,6 +206,7 @@ export function InspirationModal({ open, onClose }: InspirationModalProps) {
                             item={item}
                             onConvert={handleConvertToTask}
                             onDelete={handleDelete}
+                            onUpdate={(content) => updateInspiration(item.id, content)}
                             t={t}
                           />
                         ))}
@@ -225,15 +227,39 @@ function InspirationRow({
   item,
   onConvert,
   onDelete,
+  onUpdate,
   t,
 }: {
   item: Inspiration
   onConvert: (item: Inspiration) => void
   onDelete: (id: string) => void
+  onUpdate: (content: string) => void
   t: ReturnType<typeof useT>
 }) {
   const [hovered, setHovered] = useState(false)
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(item.content)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
   const isConverted = !!item.convertedTaskId
+
+  useEffect(() => {
+    if (editing) {
+      inputRef.current?.focus()
+      inputRef.current?.select()
+    }
+  }, [editing])
+
+  function commitEdit() {
+    const trimmed = draft.trim()
+    if (trimmed && trimmed !== item.content) onUpdate(trimmed)
+    else setDraft(item.content)
+    setEditing(false)
+  }
+
+  function cancelEdit() {
+    setDraft(item.content)
+    setEditing(false)
+  }
 
   return (
     <motion.div
@@ -251,23 +277,53 @@ function InspirationRow({
           alignItems: 'flex-start',
           gap: 8,
           padding: '8px 16px',
-          background: hovered ? 'var(--color-surface-hover)' : 'transparent',
+          background: editing || hovered ? 'var(--color-surface-hover)' : 'transparent',
           opacity: isConverted ? 0.5 : 1,
           transition: 'background 0.1s',
         }}
       >
-        <span style={{ fontSize: 12, color: 'var(--color-text-dim)', marginTop: 2, flexShrink: 0 }}>💡</span>
-        <span style={{
-          flex: 1,
-          fontSize: 13,
-          color: 'var(--color-text)',
-          lineHeight: 1.5,
-          textDecoration: isConverted ? 'line-through' : 'none',
-          wordBreak: 'break-word',
-        }}>
-          {item.content}
-        </span>
-        {hovered && (
+        <span style={{ fontSize: 12, color: 'var(--color-text-dim)', marginTop: editing ? 4 : 2, flexShrink: 0 }}>💡</span>
+        {editing && !isConverted ? (
+          <textarea
+            ref={inputRef}
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={commitEdit}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); commitEdit() }
+              if (e.key === 'Escape') cancelEdit()
+            }}
+            rows={2}
+            style={{
+              flex: 1,
+              fontSize: 13,
+              color: 'var(--color-text)',
+              lineHeight: 1.5,
+              background: 'transparent',
+              border: 'none',
+              outline: 'none',
+              resize: 'none',
+              fontFamily: 'var(--font-zh)',
+              padding: 0,
+            }}
+          />
+        ) : (
+          <span
+            onClick={() => { if (!isConverted) { setDraft(item.content); setEditing(true) } }}
+            style={{
+              flex: 1,
+              fontSize: 13,
+              color: 'var(--color-text)',
+              lineHeight: 1.5,
+              textDecoration: isConverted ? 'line-through' : 'none',
+              wordBreak: 'break-word',
+              cursor: isConverted ? 'default' : 'text',
+            }}
+          >
+            {item.content}
+          </span>
+        )}
+        {!editing && hovered && (
           <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
             {!isConverted && (
               <button
