@@ -6,7 +6,6 @@ import { useGrowthEventStore } from '@/stores/growthEventStore'
 import { useFeedback } from '@/components/feedback/FeedbackContext'
 import { useToast } from '@/components/feedback/Toast'
 import { getNextRefreshText } from '@/engines/habitEngine'
-import { formatTimer, getElapsedSeconds } from '@/utils/time'
 import type { Habit } from '@/types/habit'
 import { useT } from '@/i18n'
 
@@ -113,7 +112,7 @@ export function HabitCard({ onEdit }: { onEdit?: (habit: Habit) => void }) {
                 habit={habit}
                 onComplete={() => handleComplete(habit)}
                 onSkip={() => handleSkip(habit)}
-                onTimerToggle={() => habit.timerStartedAt ? pauseHabitTimer(habit.id) : startHabitTimer(habit.id)}
+                onStartPause={() => habit.timerStartedAt ? pauseHabitTimer(habit.id) : startHabitTimer(habit.id)}
                 onEdit={onEdit ? () => onEdit(habit) : undefined}
               />
               {children.length > 0 && (
@@ -124,7 +123,7 @@ export function HabitCard({ onEdit }: { onEdit?: (habit: Habit) => void }) {
                       habit={child}
                       onComplete={() => handleComplete(child)}
                       onSkip={() => handleSkip(child)}
-                      onTimerToggle={() => child.timerStartedAt ? pauseHabitTimer(child.id) : startHabitTimer(child.id)}
+                      onStartPause={() => child.timerStartedAt ? pauseHabitTimer(child.id) : startHabitTimer(child.id)}
                       onEdit={onEdit ? () => onEdit(child) : undefined}
                     />
                   ))}
@@ -142,29 +141,18 @@ function HabitItem({
   habit,
   onComplete,
   onSkip,
-  onTimerToggle,
+  onStartPause,
   onEdit,
 }: {
   habit: Habit
   onComplete: () => void
   onSkip: () => void
-  onTimerToggle: () => void
+  onStartPause: () => void
   onEdit?: () => void
 }) {
   const refreshText = getNextRefreshText(habit)
   const t = useT()
-  const isTiming = !!habit.timerStartedAt
-  const [elapsed, setElapsed] = useState(0)
-
-  useEffect(() => {
-    if (!isTiming || !habit.timerStartedAt) { setElapsed(0); return }
-    const update = () => {
-      setElapsed((habit.actualMinutes ?? 0) * 60 + getElapsedSeconds(habit.timerStartedAt!))
-    }
-    update()
-    const id = setInterval(update, 1000)
-    return () => clearInterval(id)
-  }, [isTiming, habit.timerStartedAt, habit.actualMinutes])
+  const isDoing = !!habit.timerStartedAt
 
   return (
     <motion.div
@@ -178,6 +166,10 @@ function HabitItem({
         gap: 8,
         padding: '8px 0',
         borderBottom: '1px solid var(--color-border)',
+        background: isDoing ? 'color-mix(in srgb, var(--color-accent) 4%, transparent)' : 'transparent',
+        borderRadius: isDoing ? 'var(--radius-sm)' : undefined,
+        paddingLeft: isDoing ? 6 : undefined,
+        paddingRight: isDoing ? 6 : undefined,
       }}
     >
       {/* 完成按钮 */}
@@ -218,10 +210,11 @@ function HabitItem({
         <div
           style={{
             fontSize: 14,
-            color: 'var(--color-text)',
+            color: isDoing ? 'var(--color-accent)' : 'var(--color-text)',
             overflow: 'hidden',
             textOverflow: 'ellipsis',
             whiteSpace: 'nowrap',
+            fontWeight: isDoing ? 600 : 400,
           }}
         >
           {habit.title}
@@ -233,35 +226,24 @@ function HabitItem({
         )}
       </div>
 
-      {/* 计时显示（计时中 or 暂停后累计） */}
-      {isTiming ? (
-        <span style={{ fontSize: 11, color: 'var(--color-accent)', fontFamily: 'var(--font-num)', fontWeight: 600, whiteSpace: 'nowrap' }}>
-          ⏱ {formatTimer(elapsed)}
-        </span>
-      ) : (habit.actualMinutes ?? 0) > 0 ? (
-        <span style={{ fontSize: 11, color: 'var(--color-text-dim)', fontFamily: 'var(--font-num)', fontWeight: 600, whiteSpace: 'nowrap' }}>
-          ⏱ {formatTimer((habit.actualMinutes ?? 0) * 60)}
-        </span>
-      ) : null}
-
       {/* 连续次数 */}
-      {!isTiming && habit.consecutiveCount > 0 && (
+      {habit.consecutiveCount > 0 && (
         <span style={{ fontSize: 11, color: 'var(--color-xp)', fontFamily: 'var(--font-num)', fontWeight: 600, whiteSpace: 'nowrap' }}>
           🔥{habit.consecutiveCount}
         </span>
       )}
 
-      {/* 计时开始/暂停 */}
+      {/* 开始/暂停按钮 */}
       <button
-        onClick={onTimerToggle}
-        title={isTiming ? t.task_timerPause : t.task_timerStart}
+        onClick={onStartPause}
+        title={isDoing ? t.task_pauseDoing : t.task_startDoing}
         style={{
           width: 24,
           height: 24,
           borderRadius: 'var(--radius-sm)',
-          border: `1px solid ${isTiming ? 'var(--color-accent)' : 'var(--color-border)'}`,
-          background: isTiming ? 'color-mix(in srgb, var(--color-accent) 15%, transparent)' : 'transparent',
-          color: isTiming ? 'var(--color-accent)' : 'var(--color-text-dim)',
+          border: `1px solid ${isDoing ? 'var(--color-accent)' : 'var(--color-border)'}`,
+          background: isDoing ? 'color-mix(in srgb, var(--color-accent) 15%, transparent)' : 'transparent',
+          color: isDoing ? 'var(--color-accent)' : 'var(--color-text-dim)',
           cursor: 'pointer',
           display: 'flex',
           alignItems: 'center',
@@ -271,7 +253,7 @@ function HabitItem({
           padding: 0,
         }}
       >
-        {isTiming ? (
+        {isDoing ? (
           <svg width="9" height="9" viewBox="0 0 10 10" fill="currentColor">
             <rect x="2" y="2" width="2.5" height="6" rx="0.5"/>
             <rect x="5.5" y="2" width="2.5" height="6" rx="0.5"/>

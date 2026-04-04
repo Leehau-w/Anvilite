@@ -154,13 +154,7 @@ export const useHabitStore = create<HabitStore>()(
       },
 
       pauseHabitTimer: (id) => {
-        const habit = get().habits.find((h) => h.id === id)
-        if (!habit || !habit.timerStartedAt) return
-        const elapsed = Math.floor((Date.now() - new Date(habit.timerStartedAt).getTime()) / 60000)
-        get().updateHabit(id, {
-          timerStartedAt: null,
-          actualMinutes: (habit.actualMinutes ?? 0) + elapsed,
-        })
+        get().updateHabit(id, { timerStartedAt: null })
       },
 
       completeHabit: (id) => {
