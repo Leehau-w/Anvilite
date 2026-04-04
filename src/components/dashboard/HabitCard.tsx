@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
+import { motion, AnimatePresence, Reorder } from 'framer-motion'
 import { useHabitStore } from '@/stores/habitStore'
 import { useCharacterStore } from '@/stores/characterStore'
 import { useGrowthEventStore } from '@/stores/growthEventStore'
@@ -11,15 +11,34 @@ import type { Habit } from '@/types/habit'
 import { useT } from '@/i18n'
 
 export function HabitCard({ onEdit }: { onEdit?: (habit: Habit) => void }) {
-  const { getTodayHabits, completeHabit, skipHabit, habits, startHabitTimer, pauseHabitTimer } = useHabitStore()
+  const { getTodayHabits, completeHabit, skipHabit, habits, startHabitTimer, pauseHabitTimer, reorderHabits } = useHabitStore()
   const { gainXPAndOre, recordActivity } = useCharacterStore()
   const { addEvent } = useGrowthEventStore()
   const { triggerFeedback } = useFeedback()
   const { showToast } = useToast()
   const t = useT()
 
-  const todayHabits = getTodayHabits()
+  const todayHabits = getTodayHabits().sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
   const allActive = habits.filter((h) => h.status === 'active')
+
+  const [localHabits, setLocalHabits] = useState<Habit[]>(todayHabits)
+  const isDraggingRef = useRef(false)
+
+  // sync from store when not dragging
+  useEffect(() => {
+    if (!isDraggingRef.current) setLocalHabits(todayHabits)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [habits])
+
+  const handleReorder = useCallback((newOrder: Habit[]) => {
+    isDraggingRef.current = true
+    setLocalHabits(newOrder)
+  }, [])
+
+  const handleDragEnd = useCallback(() => {
+    isDraggingRef.current = false
+    reorderHabits(localHabits.map((h) => h.id))
+  }, [localHabits, reorderHabits])
 
   function handleComplete(habit: Habit) {
     const result = completeHabit(habit.id)
@@ -66,24 +85,30 @@ export function HabitCard({ onEdit }: { onEdit?: (habit: Habit) => void }) {
   }
 
   if (allActive.length === 0) {
-    return (
-      <EmptyState message={t.habitCard_empty} />
-    )
+    return <EmptyState message={t.habitCard_empty} />
   }
 
   if (todayHabits.length === 0) {
-    return (
-      <EmptyState message={t.habitCard_allDone} />
-    )
+    return <EmptyState message={t.habitCard_allDone} />
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+    <Reorder.Group
+      axis="y"
+      values={localHabits}
+      onReorder={handleReorder}
+      style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 0 }}
+    >
       <AnimatePresence mode="popLayout">
-        {todayHabits.map((habit) => {
+        {localHabits.map((habit) => {
           const children = habits.filter((c) => !c.deletedAt && (habit.childIds ?? []).includes(c.id))
           return (
-            <div key={habit.id}>
+            <Reorder.Item
+              key={habit.id}
+              value={habit}
+              onDragEnd={handleDragEnd}
+              style={{ listStyle: 'none' }}
+            >
               <HabitItem
                 habit={habit}
                 onComplete={() => handleComplete(habit)}
@@ -105,11 +130,11 @@ export function HabitCard({ onEdit }: { onEdit?: (habit: Habit) => void }) {
                   ))}
                 </div>
               )}
-            </div>
+            </Reorder.Item>
           )
         })}
       </AnimatePresence>
-    </div>
+    </Reorder.Group>
   )
 }
 
