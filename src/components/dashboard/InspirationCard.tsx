@@ -47,7 +47,7 @@ export function InspirationCard({ onOpenModal }: { onOpenModal?: () => void }) {
       </AnimatePresence>
       {unconverted.length === 0 && inspirations.length > 0 && (
         <p style={{ fontSize: 12, color: 'var(--color-text-dim)', textAlign: 'center', padding: '16px 0' }}>
-          {t.inspiration_converted} ✓
+          {t.inspiration_allConverted} ✓
         </p>
       )}
     </div>

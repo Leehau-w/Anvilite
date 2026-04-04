@@ -594,12 +594,12 @@ function ScrollTimeline() {
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       {/* 图例 */}
       <div style={{ display: 'flex', gap: 16, padding: '10px 20px', borderBottom: '1px solid var(--color-border)', flexShrink: 0 }}>
-        {Object.entries(eventSymbolConfig).filter(([k]) => ['level_up','milestone','badge_earned','area_level_up'].includes(k)).map(([k, cfg]) => (
+        {(['milestone','badge_earned','level_up','area_level_up'] as const).map((k) => { const cfg = eventSymbolConfig[k]; if (!cfg) return null; return (
           <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
             <span style={{ fontSize: 11, fontWeight: 700, color: cfg.color, fontFamily: 'var(--font-num)', width: 14, textAlign: 'center' }}>{cfg.symbol}</span>
             <span style={{ fontSize: 11, color: 'var(--color-text-dim)' }}>{cfg.label}</span>
           </div>
-        ))}
+        )})}
         <span style={{ fontSize: 11, color: 'var(--color-text-dim)', marginLeft: 'auto', fontStyle: 'italic' }}>
           {t.archive_scrollHint}
         </span>
@@ -613,18 +613,19 @@ function ScrollTimeline() {
           overflowY: 'hidden',
           display: 'flex',
           alignItems: 'stretch',
-          padding: '20px 24px',
+          padding: '0 24px',
           gap: 0,
         }}
       >
         {/* 时间轴线 */}
         <div style={{ position: 'relative', display: 'flex', alignItems: 'center', minWidth: months.length * 180 }}>
-          <div style={{ position: 'absolute', top: '35%', left: 0, right: 0, height: 2, background: 'var(--color-border)', transform: 'translateY(-50%)', zIndex: 0 }} />
+          <div style={{ position: 'absolute', top: '50%', left: 0, right: 0, height: 2, background: 'var(--color-border)', transform: 'translateY(-50%)', zIndex: 0 }} />
 
           {months.map((block, idx) => (
             <MonthBlockCard
               key={block.key}
               block={block}
+              isAbove={idx % 2 === 0}
               isActive={activeKey === block.key}
               isLocked={lockedKey === block.key}
               onHover={() => { if (!lockedKey) setExpandedKey(block.key) }}
@@ -647,6 +648,7 @@ function ScrollTimeline() {
 
 function MonthBlockCard({
   block,
+  isAbove,
   isActive,
   isLocked,
   onHover,
@@ -654,6 +656,7 @@ function MonthBlockCard({
   onClick,
 }: {
   block: MonthBlock
+  isAbove: boolean
   isActive: boolean
   isLocked: boolean
   onHover: () => void
@@ -670,10 +673,73 @@ function MonthBlockCard({
   const topEvents = isLocked ? sortedEvents : isActive ? sortedEvents.slice(0, 12) : sortedEvents.slice(0, 3)
 
   const summaryParts: string[] = []
-  if (block.levelUps > 0) summaryParts.push(`⬆×${block.levelUps}`)
   if (block.milestones > 0) summaryParts.push(`⭐×${block.milestones}`)
   if (block.badges > 0) summaryParts.push(`🏆×${block.badges}`)
+  if (block.levelUps > 0) summaryParts.push(`⬆×${block.levelUps}`)
   if (block.areaLevelUps > 0) summaryParts.push(`🏘×${block.areaLevelUps}`)
+
+  const cardContent = (
+    <div
+      style={{
+        background: isActive
+          ? 'color-mix(in srgb, var(--color-accent) 8%, var(--color-surface))'
+          : 'var(--color-surface)',
+        border: `1px solid ${isActive ? 'color-mix(in srgb, var(--color-accent) 30%, transparent)' : 'var(--color-border)'}`,
+        borderRadius: 'var(--radius-lg)',
+        padding: '10px 12px',
+        boxShadow: isActive ? '0 4px 16px color-mix(in srgb, var(--color-accent) 10%, transparent)' : 'none',
+        transition: 'all 0.2s',
+        // flex 布局让内部可自适应收缩，不超出半区容器
+        display: 'flex',
+        flexDirection: 'column',
+        minHeight: 0,
+        overflow: 'hidden',
+      }}
+    >
+      {/* 标题行：固定高度，不参与收缩 */}
+      <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+        <span style={{ fontSize: 12, fontWeight: 700, color: isActive ? 'var(--color-accent)' : 'var(--color-text)' }}>
+          {monthLabel}
+        </span>
+        {isLocked && <span style={{ fontSize: 9, color: 'var(--color-accent)', opacity: 0.7 }}>{t.archive_scrollLocked}</span>}
+      </div>
+
+      {/* 事件列表：flex: 1 吸收剩余空间，超出则滚动 */}
+      <div
+        style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', gap: 4, overflowY: isActive || isLocked ? 'auto' : 'hidden' }}
+        onClick={(e) => { if (isLocked) e.stopPropagation() }}
+      >
+        {topEvents.map((e) => (
+          <div key={e.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 5, flexShrink: 0 }}>
+            <span style={{ fontSize: 11, flexShrink: 0, marginTop: 1, color: getEventColor(e), fontFamily: 'var(--font-num)', fontWeight: 700 }}>{getEventDisplaySymbol(e)}</span>
+            <span style={{ fontSize: 11, color: e.isMilestone ? 'var(--color-accent)' : 'var(--color-text-dim)', fontWeight: e.isMilestone ? 600 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+              {e.title.replace(/^.+[：:]\s*/, '')}
+            </span>
+          </div>
+        ))}
+        {!isActive && !isLocked && block.events.length > 3 && (
+          <span style={{ fontSize: 10, color: 'var(--color-text-dim)', opacity: 0.6, flexShrink: 0 }}>
+            {t.archive_scrollMore(block.events.length - 3)}
+          </span>
+        )}
+      </div>
+
+      {/* 摘要行：固定高度，不参与收缩 */}
+      {summaryParts.length > 0 && (
+        <div style={{ flexShrink: 0, marginTop: 8, paddingTop: 6, borderTop: '1px solid var(--color-border)', display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+          {summaryParts.map((p, i) => {
+            const sym = [...p][0] ?? ''
+            const color = EVENT_SYMBOL_COLORS[sym]
+            return (
+              <span key={i} style={{ fontSize: 10, fontFamily: 'var(--font-num)', fontWeight: 600, color: color ?? 'var(--color-text-dim)' }}>
+                {p}
+              </span>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
 
   return (
     <motion.div
@@ -694,9 +760,9 @@ function MonthBlockCard({
         padding: '0 8px',
       }}
     >
-      {/* 连接点 */}
+      {/* 连接点（轴线中央） */}
       <div style={{
-        position: 'absolute', left: '50%', top: '35%',
+        position: 'absolute', left: '50%', top: '50%',
         transform: 'translate(-50%, -50%)',
         width: 10, height: 10,
         borderRadius: '50%',
@@ -707,88 +773,28 @@ function MonthBlockCard({
         zIndex: 2,
       }} />
 
-      {/* 上半：月份标题 + 事件列表 */}
-      <div
-        style={{
-          flex: 1,
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'flex-start',
-          paddingTop: 4,
-          paddingBottom: 10,
-          gap: 4,
-          overflow: isLocked ? 'visible' : 'hidden',
-        }}
-      >
-        <div
-          style={{
-            background: isActive
-              ? 'color-mix(in srgb, var(--color-accent) 8%, var(--color-surface))'
-              : 'var(--color-surface)',
-            border: `1px solid ${isActive ? 'color-mix(in srgb, var(--color-accent) 30%, transparent)' : 'var(--color-border)'}`,
-            borderRadius: 'var(--radius-lg)',
-            padding: '10px 12px',
-            boxShadow: isActive ? '0 4px 16px color-mix(in srgb, var(--color-accent) 10%, transparent)' : 'none',
-            transition: 'all 0.2s',
-          }}
-        >
-          {/* 月份标题 */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: isActive ? 'var(--color-accent)' : 'var(--color-text)' }}>
-              {monthLabel}
-            </span>
-            {isLocked && <span style={{ fontSize: 9, color: 'var(--color-accent)', opacity: 0.7 }}>{t.archive_scrollLocked}</span>}
-          </div>
+      {/* 上半区域 */}
+      <div style={{
+        height: '50%',
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'flex-end',
+        paddingBottom: 14,
+        overflow: 'hidden',
+      }}>
+        {isAbove && cardContent}
+      </div>
 
-          {/* Top 事件 */}
-          <div
-            style={{
-              display: 'flex', flexDirection: 'column', gap: 4,
-              maxHeight: isLocked ? 300 : 'none',
-              overflowY: isLocked ? 'auto' : 'hidden',
-            }}
-            onClick={(e) => { if (isLocked) e.stopPropagation() }}
-          >
-            {topEvents.map((e) => (
-              <div key={e.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 5 }}>
-                <span style={{ fontSize: 11, flexShrink: 0, marginTop: 1, color: getEventColor(e), fontFamily: 'var(--font-num)', fontWeight: 700 }}>{getEventDisplaySymbol(e)}</span>
-                <span
-                  style={{
-                    fontSize: 11,
-                    color: e.isMilestone ? 'var(--color-accent)' : 'var(--color-text-dim)',
-                    fontWeight: e.isMilestone ? 600 : 400,
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                    flex: 1,
-                  }}
-                >
-                  {e.title.replace(/^.+[：:]\s*/, '')}
-                </span>
-              </div>
-            ))}
-            {!isActive && !isLocked && block.events.length > 3 && (
-              <span style={{ fontSize: 10, color: 'var(--color-text-dim)', opacity: 0.6 }}>
-                {t.archive_scrollMore(block.events.length - 3)}
-              </span>
-            )}
-          </div>
-
-          {/* 事件计数摘要 */}
-          {summaryParts.length > 0 && (
-            <div style={{ marginTop: 8, paddingTop: 6, borderTop: '1px solid var(--color-border)', display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-              {summaryParts.map((p, i) => {
-                const sym = p[0]
-                const color = EVENT_SYMBOL_COLORS[sym]
-                return (
-                  <span key={i} style={{ fontSize: 10, fontFamily: 'var(--font-num)', fontWeight: 600, color: color ?? 'var(--color-text-dim)' }}>
-                    {p}
-                  </span>
-                )
-              })}
-            </div>
-          )}
-        </div>
+      {/* 下半区域 */}
+      <div style={{
+        height: '50%',
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'flex-start',
+        paddingTop: 14,
+        overflow: 'hidden',
+      }}>
+        {!isAbove && cardContent}
       </div>
     </motion.div>
   )

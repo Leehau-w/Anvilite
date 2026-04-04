@@ -279,6 +279,25 @@ export const zh = {
   habitCard_eventTitle: (title: string) => `习惯完成：${title}`,
   habitCard_eventSkip: (title: string) => `习惯跳过：${title}`,
 
+  // ─── Phase 4 additions ────────────────────────────────────────────────────
+  task_groupByMonth: '按月',
+  task_groupByArea: '按区域',
+  task_groupCustom: '自定义',
+  task_newGroup: '新建分组',
+  task_groupNamePlaceholder: '输入分组名称',
+  task_ungrouped: '未分组',
+  task_uncategorized: '未分类',
+  task_moveToGroup: '移至分组',
+  task_removeFromGroup: '移出分组',
+  task_dropHere: '拖放到此处',
+  habit_completed: '已完成习惯',
+  dashboard_todayCompleted: '今日已完成',
+  dashboard_cycleCompleted: '本周期已完成',
+  common_undo: '撤销',
+  habit_undoComplete: '撤销完成',
+  habit_undoneToast: (name: string) => `已撤销「${name}」的完成`,
+  habit_completedToast: (name: string, xp: number) => `${name} 完成！+${xp} XP`,
+
   // ─── Heatmap ─────────────────────────────────────────────────────────────
   heatmap_month: '本月',
   heatmap_week: '本周',
@@ -750,6 +769,7 @@ export const zh = {
   inspiration_convertToTask: '转为任务',
   inspiration_empty: '暂无灵感，按 Ctrl+Shift+N 快速记录',
   inspiration_converted: '已转为任务',
+  inspiration_allConverted: '所有灵感已转为任务',
   inspiration_deleteConfirm: '删除这条灵感？',
 
   // Storage

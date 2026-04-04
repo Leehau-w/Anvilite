@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import type { Task } from '@/types/task'
+import type { Task, TaskGroup } from '@/types/task'
 import { getStoragePrefix } from './accountManager'
 import { generateId } from '@/utils/id'
 import { getTomorrowString } from '@/utils/time'
@@ -9,6 +9,8 @@ import { migrateCategory } from '@/utils/area'
 interface TaskStore {
   tasks: Task[]
   lastCategory: string
+  completedViewMode: 'month' | 'area' | 'custom'
+  customTaskGroups: TaskGroup[]
 
   addTask: (partial: Partial<Task> & { title: string }) => Task
   updateTask: (id: string, patch: Partial<Task>) => void
@@ -25,6 +27,13 @@ interface TaskStore {
   pauseTask: (id: string) => void
 
   reorderTasks: (ids: string[]) => void
+
+  setCompletedViewMode: (mode: 'month' | 'area' | 'custom') => void
+  addCustomTaskGroup: (name: string) => TaskGroup
+  renameCustomTaskGroup: (id: string, name: string) => void
+  deleteCustomTaskGroup: (id: string) => void
+  moveTaskToGroup: (taskId: string, groupId: string) => void
+  removeTaskFromGroup: (taskId: string, groupId: string) => void
 
   getTasksByCategory: (category?: string) => Task[]
   getActiveTasks: () => Task[]
@@ -77,6 +86,8 @@ export const useTaskStore = create<TaskStore>()(
     (set, get) => ({
       tasks: [],
       lastCategory: 'other',
+      completedViewMode: 'month',
+      customTaskGroups: [],
 
       addTask: (partial) => {
         const task = makeDefaultTask(partial)
@@ -224,6 +235,54 @@ export const useTaskStore = create<TaskStore>()(
         })
       },
 
+      setCompletedViewMode: (mode) => {
+        set({ completedViewMode: mode })
+      },
+
+      addCustomTaskGroup: (name) => {
+        const group: TaskGroup = {
+          id: generateId(),
+          name,
+          type: 'custom',
+          taskIds: [],
+          createdAt: new Date().toISOString(),
+        }
+        set((s) => ({ customTaskGroups: [...s.customTaskGroups, group] }))
+        return group
+      },
+
+      renameCustomTaskGroup: (id, name) => {
+        set((s) => ({
+          customTaskGroups: s.customTaskGroups.map((g) =>
+            g.id === id ? { ...g, name } : g
+          ),
+        }))
+      },
+
+      deleteCustomTaskGroup: (id) => {
+        set((s) => ({ customTaskGroups: s.customTaskGroups.filter((g) => g.id !== id) }))
+      },
+
+      moveTaskToGroup: (taskId, groupId) => {
+        set((s) => ({
+          customTaskGroups: s.customTaskGroups.map((g) => {
+            if (g.id === groupId) {
+              return { ...g, taskIds: g.taskIds.includes(taskId) ? g.taskIds : [...g.taskIds, taskId] }
+            }
+            // Remove from other groups
+            return { ...g, taskIds: g.taskIds.filter((id) => id !== taskId) }
+          }),
+        }))
+      },
+
+      removeTaskFromGroup: (taskId, groupId) => {
+        set((s) => ({
+          customTaskGroups: s.customTaskGroups.map((g) =>
+            g.id === groupId ? { ...g, taskIds: g.taskIds.filter((id) => id !== taskId) } : g
+          ),
+        }))
+      },
+
       getTasksByCategory: (category) => {
         const { tasks } = get()
         return tasks.filter((t) => {
@@ -267,6 +326,9 @@ export const useTaskStore = create<TaskStore>()(
           }
         })
         state.lastCategory = migrateCategory(state.lastCategory)
+        // New fields compat
+        if (!state.completedViewMode) state.completedViewMode = 'month'
+        if (!state.customTaskGroups) state.customTaskGroups = []
       },
     }
   )

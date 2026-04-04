@@ -281,6 +281,25 @@ export const en: Translations = {
   habitCard_eventTitle: (title: string) => `Habit done: ${title}`,
   habitCard_eventSkip: (title: string) => `Habit skipped: ${title}`,
 
+  // ─── Phase 4 additions ────────────────────────────────────────────────────
+  task_groupByMonth: 'By Month',
+  task_groupByArea: 'By Area',
+  task_groupCustom: 'Custom',
+  task_newGroup: 'New Group',
+  task_groupNamePlaceholder: 'Group name',
+  task_ungrouped: 'Ungrouped',
+  task_uncategorized: 'Uncategorized',
+  task_moveToGroup: 'Move to Group',
+  task_removeFromGroup: 'Remove from Group',
+  task_dropHere: 'Drop here',
+  habit_completed: 'Completed Habits',
+  dashboard_todayCompleted: 'Completed Today',
+  dashboard_cycleCompleted: 'Completed This Cycle',
+  common_undo: 'Undo',
+  habit_undoComplete: 'Undo Completion',
+  habit_undoneToast: (name: string) => `Undid completion of "${name}"`,
+  habit_completedToast: (name: string, xp: number) => `${name} done! +${xp} XP`,
+
   // ─── Heatmap ─────────────────────────────────────────────────────────────
   heatmap_month: 'Month',
   heatmap_week: 'Week',
@@ -752,6 +771,7 @@ export const en: Translations = {
   inspiration_convertToTask: 'Convert to Task',
   inspiration_empty: 'No ideas yet — press Ctrl+Shift+N to capture',
   inspiration_converted: 'Converted to task',
+  inspiration_allConverted: 'All ideas converted to tasks',
   inspiration_deleteConfirm: 'Delete this inspiration?',
 
   // Storage

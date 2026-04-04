@@ -8,6 +8,7 @@ import { TaskItem } from './TaskItem'
 import { QuickInput } from './QuickInput'
 import { TaskDrawer } from './TaskDrawer'
 import { HabitDrawer } from '@/components/dashboard/HabitDrawer'
+import { CollapsibleGroup } from '@/components/ui/CollapsibleGroup'
 import { useToast } from '@/components/feedback/Toast'
 import type { Task } from '@/types/task'
 import type { Habit } from '@/types/habit'
@@ -17,7 +18,13 @@ import { sortTasksInGroup } from '@/utils/task'
 
 
 export function TaskList() {
-  const { tasks, restoreTask, permanentlyDeleteTask, updateTask } = useTaskStore()
+  const {
+    tasks, restoreTask, permanentlyDeleteTask, updateTask,
+    completedViewMode, setCompletedViewMode,
+    customTaskGroups, addCustomTaskGroup, renameCustomTaskGroup, deleteCustomTaskGroup,
+    moveTaskToGroup, removeTaskFromGroup,
+    reorderTasks,
+  } = useTaskStore()
   const getAreaCategories = useAreaStore((s) => s.getAreaCategories)
   const areas = useAreaStore((s) => s.areas)
   const tr = useT()
@@ -25,7 +32,8 @@ export function TaskList() {
   const catLabel = (cat: string) => resolveCatLabel(cat, areas, tr)
   const [mainTab, setMainTab] = useState<'tasks' | 'habits'>('tasks')
   const [activeCategory, setActiveCategory] = useState('ALL')
-  const { reorderTasks } = useTaskStore()
+  const [newGroupName, setNewGroupName] = useState('')
+  const [addingGroup, setAddingGroup] = useState(false)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [editTask, setEditTask] = useState<Task | null>(null)
   const [trashMode, setTrashMode] = useState(false)
@@ -448,13 +456,24 @@ export function TaskList() {
             )}
 
             {done.length > 0 && (
-              <Section title={tr.tasklist_done} count={done.length} dim>
-                <AnimatePresence mode="popLayout">
-                  {done.map((task) => (
-                    <TaskItem key={task.id} task={task} onEdit={openEdit} />
-                  ))}
-                </AnimatePresence>
-              </Section>
+              <CompletedSection
+                done={done}
+                completedViewMode={completedViewMode}
+                setCompletedViewMode={setCompletedViewMode}
+                customTaskGroups={customTaskGroups}
+                addCustomTaskGroup={addCustomTaskGroup}
+                renameCustomTaskGroup={renameCustomTaskGroup}
+                deleteCustomTaskGroup={deleteCustomTaskGroup}
+                moveTaskToGroup={moveTaskToGroup}
+                removeTaskFromGroup={removeTaskFromGroup}
+                catLabel={catLabel}
+                onEdit={openEdit}
+                tr={tr}
+                addingGroup={addingGroup}
+                setAddingGroup={setAddingGroup}
+                newGroupName={newGroupName}
+                setNewGroupName={setNewGroupName}
+              />
             )}
 
             {visible.length === 0 && (
@@ -477,6 +496,442 @@ export function TaskList() {
       />
       </>
       )}
+    </div>
+  )
+}
+
+// ─── Completed Tasks Section (FEAT-06) ─────────────────────────────────────
+
+function CompletedSection({
+  done,
+  completedViewMode,
+  setCompletedViewMode,
+  customTaskGroups,
+  addCustomTaskGroup,
+  renameCustomTaskGroup,
+  deleteCustomTaskGroup,
+  moveTaskToGroup,
+  removeTaskFromGroup,
+  catLabel,
+  onEdit,
+  tr,
+  addingGroup,
+  setAddingGroup,
+  newGroupName,
+  setNewGroupName,
+}: {
+  done: Task[]
+  completedViewMode: 'month' | 'area' | 'custom'
+  setCompletedViewMode: (mode: 'month' | 'area' | 'custom') => void
+  customTaskGroups: ReturnType<typeof useTaskStore>['customTaskGroups']
+  addCustomTaskGroup: (name: string) => ReturnType<typeof useTaskStore>['customTaskGroups'][number]
+  renameCustomTaskGroup: (id: string, name: string) => void
+  deleteCustomTaskGroup: (id: string) => void
+  moveTaskToGroup: (taskId: string, groupId: string) => void
+  removeTaskFromGroup: (taskId: string, groupId: string) => void
+  catLabel: (cat: string) => string
+  onEdit: (task: Task) => void
+  tr: ReturnType<typeof useT>
+  addingGroup: boolean
+  setAddingGroup: (v: boolean) => void
+  newGroupName: string
+  setNewGroupName: (v: string) => void
+}) {
+  const modes: Array<{ key: 'month' | 'area' | 'custom'; label: string }> = [
+    { key: 'month', label: tr.task_groupByMonth },
+    { key: 'area', label: tr.task_groupByArea },
+    { key: 'custom', label: tr.task_groupCustom },
+  ]
+
+  // Group by month
+  const byMonth = useMemo(() => {
+    const map = new Map<string, Task[]>()
+    const sorted = [...done].sort((a, b) => {
+      const aTime = a.completedAt ? new Date(a.completedAt).getTime() : 0
+      const bTime = b.completedAt ? new Date(b.completedAt).getTime() : 0
+      return bTime - aTime
+    })
+    for (const task of sorted) {
+      if (!task.completedAt) continue
+      const d = new Date(task.completedAt)
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+      if (!map.has(key)) map.set(key, [])
+      map.get(key)!.push(task)
+    }
+    return map
+  }, [done])
+
+  // Group by area
+  const byArea = useMemo(() => {
+    const map = new Map<string, Task[]>()
+    for (const task of done) {
+      const key = task.category ?? 'other'
+      if (!map.has(key)) map.set(key, [])
+      map.get(key)!.push(task)
+    }
+    return map
+  }, [done])
+
+  // Custom groups
+  const allGroupedIds = useMemo(() => {
+    const ids = new Set<string>()
+    for (const g of customTaskGroups) g.taskIds.forEach((id) => ids.add(id))
+    return ids
+  }, [customTaskGroups])
+
+  const ungrouped = useMemo(
+    () => done.filter((t) => !allGroupedIds.has(t.id)),
+    [done, allGroupedIds]
+  )
+
+  // ── Drag-and-drop state ────────────────────────────────────────────────────
+  const [dragOverGroupId, setDragOverGroupId] = useState<string | null>(null)
+
+  function handleGroupDragOver(e: React.DragEvent, groupId: string) {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    setDragOverGroupId(groupId)
+  }
+
+  function handleGroupDragLeave(e: React.DragEvent) {
+    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+      setDragOverGroupId(null)
+    }
+  }
+
+  function handleGroupDrop(e: React.DragEvent, targetGroupId: string) {
+    e.preventDefault()
+    setDragOverGroupId(null)
+    const taskId = e.dataTransfer.getData('taskId')
+    const fromGroupId = e.dataTransfer.getData('fromGroupId') // '' means ungrouped
+    if (!taskId) return
+    if (targetGroupId === '__ungrouped') {
+      if (fromGroupId) removeTaskFromGroup(taskId, fromGroupId)
+    } else {
+      if (targetGroupId !== fromGroupId) {
+        moveTaskToGroup(taskId, targetGroupId)
+      }
+    }
+  }
+
+  function handleAddGroup() {
+    const name = newGroupName.trim()
+    if (!name) return
+    addCustomTaskGroup(name)
+    setNewGroupName('')
+    setAddingGroup(false)
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      {/* Header with mode switcher */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text-dim)', letterSpacing: '0.02em', marginRight: 4 }}>
+          {tr.tasklist_done}
+        </span>
+        <span style={{ fontSize: 11, color: 'var(--color-text-dim)', background: 'var(--color-surface-hover)', padding: '1px 6px', borderRadius: 'var(--radius-full)' }}>
+          {done.length}
+        </span>
+        <div style={{ flex: 1 }} />
+        <div style={{ display: 'flex', gap: 2 }}>
+          {modes.map((m) => (
+            <button
+              key={m.key}
+              onClick={() => setCompletedViewMode(m.key)}
+              style={{
+                fontSize: 11,
+                padding: '2px 8px',
+                borderRadius: 'var(--radius-full)',
+                border: 'none',
+                background: completedViewMode === m.key
+                  ? 'color-mix(in srgb, var(--color-accent) 15%, transparent)'
+                  : 'transparent',
+                color: completedViewMode === m.key ? 'var(--color-accent)' : 'var(--color-text-dim)',
+                cursor: 'pointer',
+                fontWeight: completedViewMode === m.key ? 600 : 400,
+                transition: 'all 0.15s',
+              }}
+            >
+              {m.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* By Month */}
+      {completedViewMode === 'month' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {Array.from(byMonth.entries()).map(([month, tasks]) => (
+            <CollapsibleGroup key={month} label={month} count={tasks.length} defaultOpen={true}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <AnimatePresence mode="popLayout">
+                  {tasks.map((task) => <TaskItem key={task.id} task={task} onEdit={onEdit} />)}
+                </AnimatePresence>
+              </div>
+            </CollapsibleGroup>
+          ))}
+        </div>
+      )}
+
+      {/* By Area */}
+      {completedViewMode === 'area' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {Array.from(byArea.entries()).map(([area, tasks]) => (
+            <CollapsibleGroup key={area} label={catLabel(area)} count={tasks.length} defaultOpen={true}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <AnimatePresence mode="popLayout">
+                  {tasks.map((task) => <TaskItem key={task.id} task={task} onEdit={onEdit} />)}
+                </AnimatePresence>
+              </div>
+            </CollapsibleGroup>
+          ))}
+        </div>
+      )}
+
+      {/* Custom */}
+      {completedViewMode === 'custom' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {customTaskGroups.map((group) => {
+            const groupTasks = done.filter((t) => group.taskIds.includes(t.id))
+            const isOver = dragOverGroupId === group.id
+            return (
+              <div
+                key={group.id}
+                onDragOver={(e) => handleGroupDragOver(e, group.id)}
+                onDragLeave={handleGroupDragLeave}
+                onDrop={(e) => handleGroupDrop(e, group.id)}
+                style={{
+                  borderRadius: 'var(--radius-md)',
+                  border: `1.5px dashed ${isOver ? 'var(--color-accent)' : 'transparent'}`,
+                  background: isOver ? 'color-mix(in srgb, var(--color-accent) 5%, transparent)' : 'transparent',
+                  padding: isOver ? '0 4px 4px' : '0',
+                  transition: 'border-color 0.12s, background 0.12s, padding 0.12s',
+                }}
+              >
+                <CollapsibleGroup
+                  label={group.name}
+                  count={groupTasks.length}
+                  defaultOpen={true}
+                  onRename={(name) => renameCustomTaskGroup(group.id, name)}
+                  onDelete={() => deleteCustomTaskGroup(group.id)}
+                >
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <AnimatePresence mode="popLayout">
+                      {groupTasks.map((task) => (
+                        <DoneTaskWithGroupMenu
+                          key={task.id}
+                          task={task}
+                          groups={customTaskGroups}
+                          currentGroupId={group.id}
+                          onEdit={onEdit}
+                          onMove={moveTaskToGroup}
+                          onRemove={removeTaskFromGroup}
+                          tr={tr}
+                        />
+                      ))}
+                    </AnimatePresence>
+                    {groupTasks.length === 0 && isOver && (
+                      <div style={{
+                        height: 32,
+                        borderRadius: 'var(--radius-sm)',
+                        border: '1.5px dashed var(--color-accent)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: 11,
+                        color: 'var(--color-accent)',
+                        opacity: 0.7,
+                      }}>
+                        {tr.task_dropHere}
+                      </div>
+                    )}
+                  </div>
+                </CollapsibleGroup>
+              </div>
+            )
+          })}
+
+          {/* Ungrouped */}
+          {(ungrouped.length > 0 || dragOverGroupId === '__ungrouped') && (
+            <div
+              onDragOver={(e) => handleGroupDragOver(e, '__ungrouped')}
+              onDragLeave={handleGroupDragLeave}
+              onDrop={(e) => handleGroupDrop(e, '__ungrouped')}
+              style={{
+                borderRadius: 'var(--radius-md)',
+                border: `1.5px dashed ${dragOverGroupId === '__ungrouped' ? 'var(--color-border)' : 'transparent'}`,
+                background: dragOverGroupId === '__ungrouped' ? 'var(--color-surface-hover)' : 'transparent',
+                padding: dragOverGroupId === '__ungrouped' ? '0 4px 4px' : '0',
+                transition: 'border-color 0.12s, background 0.12s, padding 0.12s',
+              }}
+            >
+            <CollapsibleGroup label={tr.task_ungrouped} count={ungrouped.length} defaultOpen={true}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <AnimatePresence mode="popLayout">
+                  {ungrouped.map((task) => (
+                    <DoneTaskWithGroupMenu
+                      key={task.id}
+                      task={task}
+                      groups={customTaskGroups}
+                      currentGroupId={null}
+                      onEdit={onEdit}
+                      onMove={moveTaskToGroup}
+                      onRemove={removeTaskFromGroup}
+                      tr={tr}
+                    />
+                  ))}
+                </AnimatePresence>
+              </div>
+            </CollapsibleGroup>
+            </div>
+          )}
+
+          {/* Add group button */}
+          {addingGroup ? (
+            <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+              <input
+                autoFocus
+                value={newGroupName}
+                onChange={(e) => setNewGroupName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleAddGroup()
+                  if (e.key === 'Escape') { setAddingGroup(false); setNewGroupName('') }
+                }}
+                placeholder={tr.task_groupNamePlaceholder}
+                style={{
+                  flex: 1,
+                  fontSize: 12,
+                  padding: '4px 8px',
+                  borderRadius: 'var(--radius-sm)',
+                  border: '1px solid var(--color-accent)',
+                  background: 'var(--color-surface)',
+                  color: 'var(--color-text)',
+                  outline: 'none',
+                }}
+              />
+              <button
+                onClick={handleAddGroup}
+                style={{ fontSize: 12, padding: '4px 10px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-accent)', background: 'color-mix(in srgb, var(--color-accent) 12%, transparent)', color: 'var(--color-accent)', cursor: 'pointer' }}
+              >
+                ✓
+              </button>
+              <button
+                onClick={() => { setAddingGroup(false); setNewGroupName('') }}
+                style={{ fontSize: 12, padding: '4px 10px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', background: 'transparent', color: 'var(--color-text-dim)', cursor: 'pointer' }}
+              >
+                ✕
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setAddingGroup(true)}
+              style={{
+                fontSize: 12, padding: '4px 12px', borderRadius: 'var(--radius-sm)',
+                border: '1px dashed var(--color-border)', background: 'transparent',
+                color: 'var(--color-text-dim)', cursor: 'pointer', alignSelf: 'flex-start',
+                transition: 'all 0.15s',
+              }}
+            >
+              + {tr.task_newGroup}
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function DoneTaskWithGroupMenu({
+  task,
+  groups,
+  currentGroupId,
+  onEdit,
+  onMove,
+  onRemove,
+  tr,
+}: {
+  task: Task
+  groups: ReturnType<typeof useTaskStore>['customTaskGroups']
+  currentGroupId: string | null
+  onEdit: (t: Task) => void
+  onMove: (taskId: string, groupId: string) => void
+  onRemove: (taskId: string, groupId: string) => void
+  tr: ReturnType<typeof useT>
+}) {
+  const [menuOpen, setMenuOpen] = useState(false)
+
+  return (
+    <div
+      style={{ position: 'relative' }}
+      draggable
+      onDragStart={(e) => {
+        e.dataTransfer.setData('taskId', task.id)
+        e.dataTransfer.setData('fromGroupId', currentGroupId ?? '')
+        e.dataTransfer.effectAllowed = 'move'
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'grab' }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <TaskItem task={task} onEdit={onEdit} />
+        </div>
+        {groups.length > 0 && (
+          <button
+            onClick={(e) => { e.stopPropagation(); setMenuOpen((v) => !v) }}
+            title={tr.task_moveToGroup}
+            style={{
+              fontSize: 10, padding: '2px 6px', borderRadius: 'var(--radius-sm)',
+              border: '1px solid var(--color-border)', background: 'transparent',
+              color: 'var(--color-text-dim)', cursor: 'pointer', flexShrink: 0,
+            }}
+          >
+            ⋯
+          </button>
+        )}
+      </div>
+      <AnimatePresence>
+        {menuOpen && (
+          <motion.div
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            style={{
+              position: 'absolute', right: 0, top: '100%', zIndex: 100,
+              background: 'var(--color-surface)', border: '1px solid var(--color-border)',
+              borderRadius: 'var(--radius-md)', boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+              minWidth: 140, padding: 4,
+            }}
+          >
+            {groups.map((g) => (
+              <button
+                key={g.id}
+                onClick={() => { onMove(task.id, g.id); setMenuOpen(false) }}
+                disabled={g.id === currentGroupId}
+                style={{
+                  display: 'block', width: '100%', textAlign: 'left', padding: '5px 10px',
+                  fontSize: 12, background: 'transparent', border: 'none',
+                  color: g.id === currentGroupId ? 'var(--color-text-dim)' : 'var(--color-text)',
+                  cursor: g.id === currentGroupId ? 'default' : 'pointer',
+                  borderRadius: 'var(--radius-sm)',
+                }}
+              >
+                {g.name}
+              </button>
+            ))}
+            {currentGroupId && (
+              <button
+                onClick={() => { onRemove(task.id, currentGroupId); setMenuOpen(false) }}
+                style={{
+                  display: 'block', width: '100%', textAlign: 'left', padding: '5px 10px',
+                  fontSize: 12, background: 'transparent', border: 'none', borderTop: '1px solid var(--color-border)',
+                  color: 'var(--color-text-dim)', cursor: 'pointer', borderRadius: 'var(--radius-sm)', marginTop: 2,
+                }}
+              >
+                {tr.task_removeFromGroup}
+              </button>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }
@@ -570,7 +1025,12 @@ function HabitsTab({
   onAdd: () => void
   onEdit: (h: Habit) => void
 }) {
-  const { habits, pauseHabit, resumeHabit, hideHabit, unhideHabit, deleteHabit, restoreHabit, permanentlyDeleteHabit, masterHabit, startHabitTimer, pauseHabitTimer } = useHabitStore()
+  const {
+    habits, pauseHabit, resumeHabit, hideHabit, unhideHabit, deleteHabit, restoreHabit, permanentlyDeleteHabit, masterHabit, startHabitTimer, pauseHabitTimer,
+    completedHabitViewMode, setCompletedHabitViewMode,
+    customHabitGroups, addCustomHabitGroup, renameCustomHabitGroup, deleteCustomHabitGroup,
+    moveHabitToGroup, removeHabitFromGroup,
+  } = useHabitStore()
   const { addEvent } = useGrowthEventStore()
   const areas = useAreaStore((s) => s.areas)
   const tr = useT()
@@ -578,6 +1038,8 @@ function HabitsTab({
   const { showToast } = useToast()
   const [hiddenMode, setHiddenMode] = useState(false)
   const [trashMode, setTrashMode] = useState(false)
+  const [addingHabitGroup, setAddingHabitGroup] = useState(false)
+  const [newHabitGroupName, setNewHabitGroupName] = useState('')
 
   const active = habits.filter((h) => !h.deletedAt && !h.isHidden && !h.parentId && (h.status === 'active' || h.status === 'completed_today'))
   const paused = habits.filter((h) => !h.deletedAt && !h.isHidden && !h.parentId && h.status === 'paused')
@@ -784,17 +1246,220 @@ function HabitsTab({
           )}
 
           {mastered.length > 0 && (
-            <HabitSection title={tr.habits_mastered} count={mastered.length}>
-              <AnimatePresence mode="popLayout">
-                {mastered.map((h) => (
-                  <HabitRow key={h.id} habit={h} onEdit={onEdit} onDelete={() => handleDelete(h.id)} onInscribe={() => handleInscribe(h)} dim />
-                ))}
-              </AnimatePresence>
-            </HabitSection>
+            <CompletedHabitsSection
+              mastered={mastered}
+              completedHabitViewMode={completedHabitViewMode}
+              setCompletedHabitViewMode={setCompletedHabitViewMode}
+              customHabitGroups={customHabitGroups}
+              addCustomHabitGroup={addCustomHabitGroup}
+              renameCustomHabitGroup={renameCustomHabitGroup}
+              deleteCustomHabitGroup={deleteCustomHabitGroup}
+              moveHabitToGroup={moveHabitToGroup}
+              removeHabitFromGroup={removeHabitFromGroup}
+              catLabel={catLabel}
+              onEdit={onEdit}
+              onDelete={handleDelete}
+              onInscribe={handleInscribe}
+              tr={tr}
+              addingHabitGroup={addingHabitGroup}
+              setAddingHabitGroup={setAddingHabitGroup}
+              newHabitGroupName={newHabitGroupName}
+              setNewHabitGroupName={setNewHabitGroupName}
+            />
           )}
         </div>
       )}
     </>
+  )
+}
+
+// ─── Completed Habits Section (FEAT-07) ─────────────────────────────────────
+
+function CompletedHabitsSection({
+  mastered,
+  completedHabitViewMode,
+  setCompletedHabitViewMode,
+  customHabitGroups,
+  addCustomHabitGroup,
+  renameCustomHabitGroup,
+  deleteCustomHabitGroup,
+  moveHabitToGroup,
+  removeHabitFromGroup,
+  catLabel,
+  onEdit,
+  onDelete,
+  onInscribe,
+  tr,
+  addingHabitGroup,
+  setAddingHabitGroup,
+  newHabitGroupName,
+  setNewHabitGroupName,
+}: {
+  mastered: Habit[]
+  completedHabitViewMode: 'area' | 'custom'
+  setCompletedHabitViewMode: (mode: 'area' | 'custom') => void
+  customHabitGroups: ReturnType<typeof useHabitStore>['customHabitGroups']
+  addCustomHabitGroup: (name: string) => ReturnType<typeof useHabitStore>['customHabitGroups'][number]
+  renameCustomHabitGroup: (id: string, name: string) => void
+  deleteCustomHabitGroup: (id: string) => void
+  moveHabitToGroup: (habitId: string, groupId: string) => void
+  removeHabitFromGroup: (habitId: string, groupId: string) => void
+  catLabel: (cat: string) => string
+  onEdit: (h: Habit) => void
+  onDelete: (id: string) => void
+  onInscribe: (h: Habit) => void
+  tr: ReturnType<typeof useT>
+  addingHabitGroup: boolean
+  setAddingHabitGroup: (v: boolean) => void
+  newHabitGroupName: string
+  setNewHabitGroupName: (v: string) => void
+}) {
+  const modes: Array<{ key: 'area' | 'custom'; label: string }> = [
+    { key: 'area', label: tr.task_groupByArea },
+    { key: 'custom', label: tr.task_groupCustom },
+  ]
+
+  const byArea = useMemo(() => {
+    const map = new Map<string, Habit[]>()
+    for (const h of mastered) {
+      const key = h.category ?? 'other'
+      if (!map.has(key)) map.set(key, [])
+      map.get(key)!.push(h)
+    }
+    return map
+  }, [mastered])
+
+  const allGroupedIds = useMemo(() => {
+    const ids = new Set<string>()
+    for (const g of customHabitGroups) g.habitIds.forEach((id) => ids.add(id))
+    return ids
+  }, [customHabitGroups])
+
+  const ungrouped = useMemo(
+    () => mastered.filter((h) => !allGroupedIds.has(h.id)),
+    [mastered, allGroupedIds]
+  )
+
+  function handleAddGroup() {
+    const name = newHabitGroupName.trim()
+    if (!name) return
+    addCustomHabitGroup(name)
+    setNewHabitGroupName('')
+    setAddingHabitGroup(false)
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      {/* Header with mode switcher */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text)', letterSpacing: '0.02em', marginRight: 4 }}>
+          {tr.habits_mastered}
+        </span>
+        <span style={{ fontSize: 11, color: 'var(--color-text-dim)', background: 'var(--color-surface-hover)', padding: '1px 6px', borderRadius: 'var(--radius-full)' }}>
+          {mastered.length}
+        </span>
+        <div style={{ flex: 1 }} />
+        <div style={{ display: 'flex', gap: 2 }}>
+          {modes.map((m) => (
+            <button
+              key={m.key}
+              onClick={() => setCompletedHabitViewMode(m.key)}
+              style={{
+                fontSize: 11, padding: '2px 8px', borderRadius: 'var(--radius-full)', border: 'none',
+                background: completedHabitViewMode === m.key ? 'color-mix(in srgb, var(--color-accent) 15%, transparent)' : 'transparent',
+                color: completedHabitViewMode === m.key ? 'var(--color-accent)' : 'var(--color-text-dim)',
+                cursor: 'pointer', fontWeight: completedHabitViewMode === m.key ? 600 : 400, transition: 'all 0.15s',
+              }}
+            >
+              {m.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* By Area */}
+      {completedHabitViewMode === 'area' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {Array.from(byArea.entries()).map(([area, habits]) => (
+            <CollapsibleGroup key={area} label={catLabel(area)} count={habits.length} defaultOpen={true}>
+              <AnimatePresence mode="popLayout">
+                {habits.map((h) => (
+                  <HabitRow key={h.id} habit={h} onEdit={onEdit} onDelete={() => onDelete(h.id)} onInscribe={() => onInscribe(h)} dim />
+                ))}
+              </AnimatePresence>
+            </CollapsibleGroup>
+          ))}
+        </div>
+      )}
+
+      {/* Custom */}
+      {completedHabitViewMode === 'custom' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {customHabitGroups.map((group) => {
+            const groupHabits = mastered.filter((h) => group.habitIds.includes(h.id))
+            return (
+              <CollapsibleGroup
+                key={group.id}
+                label={group.name}
+                count={groupHabits.length}
+                defaultOpen={true}
+                onRename={(name) => renameCustomHabitGroup(group.id, name)}
+                onDelete={() => deleteCustomHabitGroup(group.id)}
+              >
+                <AnimatePresence mode="popLayout">
+                  {groupHabits.map((h) => (
+                    <HabitRow key={h.id} habit={h} onEdit={onEdit} onDelete={() => onDelete(h.id)} onInscribe={() => onInscribe(h)} dim />
+                  ))}
+                </AnimatePresence>
+              </CollapsibleGroup>
+            )
+          })}
+
+          {ungrouped.length > 0 && (
+            <CollapsibleGroup label={tr.task_ungrouped} count={ungrouped.length} defaultOpen={true}>
+              <AnimatePresence mode="popLayout">
+                {ungrouped.map((h) => (
+                  <HabitRow key={h.id} habit={h} onEdit={onEdit} onDelete={() => onDelete(h.id)} onInscribe={() => onInscribe(h)} dim />
+                ))}
+              </AnimatePresence>
+            </CollapsibleGroup>
+          )}
+
+          {addingHabitGroup ? (
+            <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+              <input
+                autoFocus
+                value={newHabitGroupName}
+                onChange={(e) => setNewHabitGroupName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleAddGroup()
+                  if (e.key === 'Escape') { setAddingHabitGroup(false); setNewHabitGroupName('') }
+                }}
+                placeholder={tr.task_groupNamePlaceholder}
+                style={{
+                  flex: 1, fontSize: 12, padding: '4px 8px', borderRadius: 'var(--radius-sm)',
+                  border: '1px solid var(--color-accent)', background: 'var(--color-surface)',
+                  color: 'var(--color-text)', outline: 'none',
+                }}
+              />
+              <button onClick={handleAddGroup} style={{ fontSize: 12, padding: '4px 10px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-accent)', background: 'color-mix(in srgb, var(--color-accent) 12%, transparent)', color: 'var(--color-accent)', cursor: 'pointer' }}>✓</button>
+              <button onClick={() => { setAddingHabitGroup(false); setNewHabitGroupName('') }} style={{ fontSize: 12, padding: '4px 10px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', background: 'transparent', color: 'var(--color-text-dim)', cursor: 'pointer' }}>✕</button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setAddingHabitGroup(true)}
+              style={{
+                fontSize: 12, padding: '4px 12px', borderRadius: 'var(--radius-sm)',
+                border: '1px dashed var(--color-border)', background: 'transparent',
+                color: 'var(--color-text-dim)', cursor: 'pointer', alignSelf: 'flex-start', transition: 'all 0.15s',
+              }}
+            >
+              + {tr.task_newGroup}
+            </button>
+          )}
+        </div>
+      )}
+    </div>
   )
 }
 

@@ -24,3 +24,11 @@ export interface Task {
 export type TaskStatus = Task['status']
 export type TaskPriority = Task['priority']
 export type TaskDifficulty = Task['difficulty']
+
+export interface TaskGroup {
+  id: string
+  name: string
+  type: 'custom'
+  taskIds: string[]
+  createdAt: string
+}

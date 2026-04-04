@@ -28,6 +28,7 @@ import { HabitManageModal } from './HabitManageModal'
 import { Heatmap } from './Heatmap'
 import { InspirationCard } from './InspirationCard'
 import { AnimatePresence, Reorder } from 'framer-motion'
+import { CollapsibleGroup } from '@/components/ui/CollapsibleGroup'
 import type { Habit } from '@/types/habit'
 import type { Task } from '@/types/task'
 
@@ -87,10 +88,12 @@ export function Dashboard({ onNavigate, onOpenInspiration }: DashboardProps) {
     () => sortTasksInGroup(tasks.filter((t) => !t.deletedAt && !t.parentId && t.status === 'todo')),
     [tasks]
   )
-  const doneTasks = useMemo(
-    () => tasks.filter((t) => !t.deletedAt && !t.parentId && t.status === 'done').slice(0, 8),
-    [tasks]
-  )
+  const doneTasks = useMemo(() => {
+    const today = new Date().toISOString().split('T')[0]
+    return tasks
+      .filter((t) => !t.deletedAt && !t.parentId && t.status === 'done' && t.completedAt && t.completedAt.startsWith(today))
+      .slice(0, 8)
+  }, [tasks])
 
   // sync drag-sort local state from store
   useEffect(() => {
@@ -249,10 +252,15 @@ export function Dashboard({ onNavigate, onOpenInspiration }: DashboardProps) {
                   {doneTasks.length > 0 && (
                     <>
                       <div style={{ height: 4, borderTop: '1px solid var(--color-border)', marginTop: 4 }} />
-                      <SectionLabel label={t.dash_done} dim />
-                      <AnimatePresence mode="popLayout">
-                        {doneTasks.map((task) => <TaskItem key={task.id} task={task} compact onEdit={openEditTask} />)}
-                      </AnimatePresence>
+                      <CollapsibleGroup
+                        label={t.dashboard_todayCompleted}
+                        count={doneTasks.length}
+                        defaultOpen={true}
+                      >
+                        <AnimatePresence mode="popLayout">
+                          {doneTasks.map((task) => <TaskItem key={task.id} task={task} compact onEdit={openEditTask} />)}
+                        </AnimatePresence>
+                      </CollapsibleGroup>
                     </>
                   )}
                   {localDoing.length === 0 && localTodo.length === 0 && doneTasks.length === 0 && (

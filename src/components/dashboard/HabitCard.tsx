@@ -5,12 +5,19 @@ import { useCharacterStore } from '@/stores/characterStore'
 import { useGrowthEventStore } from '@/stores/growthEventStore'
 import { useFeedback } from '@/components/feedback/FeedbackContext'
 import { useToast } from '@/components/feedback/Toast'
+import { UndoToast } from '@/components/feedback/UndoToast'
+import { CollapsibleGroup } from '@/components/ui/CollapsibleGroup'
 import { getNextRefreshText } from '@/engines/habitEngine'
 import type { Habit } from '@/types/habit'
 import { useT } from '@/i18n'
 
+interface UndoEntry {
+  habitId: string
+  message: string
+}
+
 export function HabitCard({ onEdit }: { onEdit?: (habit: Habit) => void }) {
-  const { getTodayHabits, completeHabit, skipHabit, habits, startHabitTimer, pauseHabitTimer, reorderHabits } = useHabitStore()
+  const { getTodayHabits, completeHabit, skipHabit, habits, startHabitTimer, pauseHabitTimer, reorderHabits, undoComplete } = useHabitStore()
   const { gainXPAndOre, recordActivity } = useCharacterStore()
   const { addEvent } = useGrowthEventStore()
   const { triggerFeedback } = useFeedback()
@@ -20,8 +27,16 @@ export function HabitCard({ onEdit }: { onEdit?: (habit: Habit) => void }) {
   const todayHabits = getTodayHabits().sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
   const allActive = habits.filter((h) => h.status === 'active')
 
+  // Completed today habits (for the collapsible group at bottom of dashboard)
+  const completedTodayHabits = habits.filter(
+    (h) => !h.deletedAt && !h.isHidden && !h.parentId && h.status === 'completed_today'
+  )
+
   const [localHabits, setLocalHabits] = useState<Habit[]>(todayHabits)
   const isDraggingRef = useRef(false)
+
+  // UndoToast state — only one at a time
+  const [undoEntry, setUndoEntry] = useState<UndoEntry | null>(null)
 
   // sync from store when not dragging
   useEffect(() => {
@@ -66,7 +81,12 @@ export function HabitCard({ onEdit }: { onEdit?: (habit: Habit) => void }) {
     })
 
     triggerFeedback({ xp: result.xp, ore: result.ore, leveledUp, oldLevel, newLevel, oldStreakDays: oldStreak, newStreakDays: newStreak, prestigeUnlocked })
-    showToast(t.habitCard_toastComplete(habit.title, result.newStreak))
+
+    // Show undo toast
+    setUndoEntry({
+      habitId: habit.id,
+      message: t.habit_completedToast(habit.title, result.xp),
+    })
   }
 
   function handleSkip(habit: Habit) {
@@ -83,57 +103,194 @@ export function HabitCard({ onEdit }: { onEdit?: (habit: Habit) => void }) {
     showToast(t.habitCard_toastSkip(habit.title))
   }
 
-  if (allActive.length === 0) {
+  function handleUndoComplete(habit: Habit) {
+    undoComplete(habit.id)
+    showToast(t.habit_undoneToast(habit.title))
+  }
+
+  if (allActive.length === 0 && completedTodayHabits.length === 0) {
     return <EmptyState message={t.habitCard_empty} />
   }
 
-  if (todayHabits.length === 0) {
+  if (todayHabits.length === 0 && completedTodayHabits.length === 0) {
     return <EmptyState message={t.habitCard_allDone} />
   }
 
   return (
-    <Reorder.Group
-      axis="y"
-      values={localHabits}
-      onReorder={handleReorder}
-      style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 0 }}
-    >
-      <AnimatePresence mode="popLayout">
-        {localHabits.map((habit) => {
-          const children = habits.filter((c) => !c.deletedAt && (habit.childIds ?? []).includes(c.id))
-          return (
-            <Reorder.Item
-              key={habit.id}
-              value={habit}
-              onDragEnd={handleDragEnd}
-              style={{ listStyle: 'none' }}
-            >
-              <HabitItem
-                habit={habit}
-                onComplete={() => handleComplete(habit)}
-                onSkip={() => handleSkip(habit)}
-                onStartPause={() => habit.timerStartedAt ? pauseHabitTimer(habit.id) : startHabitTimer(habit.id)}
-                onEdit={onEdit ? () => onEdit(habit) : undefined}
-              />
-              {children.length > 0 && (
-                <div style={{ paddingLeft: 16, marginTop: 2, display: 'flex', flexDirection: 'column', gap: 2, borderLeft: '2px solid var(--color-border)', marginLeft: 8 }}>
-                  {children.map((child) => (
-                    <HabitItem
-                      key={child.id}
-                      habit={child}
-                      onComplete={() => handleComplete(child)}
-                      onSkip={() => handleSkip(child)}
-                      onStartPause={() => child.timerStartedAt ? pauseHabitTimer(child.id) : startHabitTimer(child.id)}
-                      onEdit={onEdit ? () => onEdit(child) : undefined}
-                    />
-                  ))}
-                </div>
-              )}
-            </Reorder.Item>
-          )
-        })}
+    <>
+      {todayHabits.length > 0 && (
+        <Reorder.Group
+          axis="y"
+          values={localHabits}
+          onReorder={handleReorder}
+          style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 0 }}
+        >
+          <AnimatePresence mode="popLayout">
+            {localHabits.map((habit) => {
+              const children = habits.filter((c) => !c.deletedAt && (habit.childIds ?? []).includes(c.id))
+              return (
+                <Reorder.Item
+                  key={habit.id}
+                  value={habit}
+                  onDragEnd={handleDragEnd}
+                  style={{ listStyle: 'none' }}
+                >
+                  <HabitItem
+                    habit={habit}
+                    onComplete={() => handleComplete(habit)}
+                    onSkip={() => handleSkip(habit)}
+                    onStartPause={() => habit.timerStartedAt ? pauseHabitTimer(habit.id) : startHabitTimer(habit.id)}
+                    onEdit={onEdit ? () => onEdit(habit) : undefined}
+                  />
+                  {children.length > 0 && (
+                    <div style={{ paddingLeft: 16, marginTop: 2, display: 'flex', flexDirection: 'column', gap: 2, borderLeft: '2px solid var(--color-border)', marginLeft: 8 }}>
+                      {children.map((child) => (
+                        <HabitItem
+                          key={child.id}
+                          habit={child}
+                          onComplete={() => handleComplete(child)}
+                          onSkip={() => handleSkip(child)}
+                          onStartPause={() => child.timerStartedAt ? pauseHabitTimer(child.id) : startHabitTimer(child.id)}
+                          onEdit={onEdit ? () => onEdit(child) : undefined}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </Reorder.Item>
+              )
+            })}
+          </AnimatePresence>
+        </Reorder.Group>
+      )}
+
+      {/* Completed today section */}
+      {completedTodayHabits.length > 0 && (
+        <div style={{ marginTop: todayHabits.length > 0 ? 8 : 0 }}>
+          <CollapsibleGroup
+            label={t.dashboard_cycleCompleted}
+            count={completedTodayHabits.length}
+            defaultOpen={true}
+          >
+            <AnimatePresence mode="popLayout">
+              {completedTodayHabits.map((habit) => (
+                <CompletedHabitItem
+                  key={habit.id}
+                  habit={habit}
+                  onUndo={() => handleUndoComplete(habit)}
+                  undoLabel={t.common_undo}
+                />
+              ))}
+            </AnimatePresence>
+          </CollapsibleGroup>
+        </div>
+      )}
+
+      {/* Undo Toast */}
+      <AnimatePresence>
+        {undoEntry && (
+          <UndoToast
+            key={undoEntry.habitId}
+            message={undoEntry.message}
+            undoLabel={t.common_undo}
+            duration={5000}
+            onUndo={() => {
+              const habit = habits.find((h) => h.id === undoEntry.habitId)
+              if (habit) handleUndoComplete(habit)
+              setUndoEntry(null)
+            }}
+            onExpire={() => setUndoEntry(null)}
+          />
+        )}
       </AnimatePresence>
-    </Reorder.Group>
+    </>
+  )
+}
+
+function CompletedHabitItem({
+  habit,
+  onUndo,
+  undoLabel,
+}: {
+  habit: Habit
+  onUndo: () => void
+  undoLabel: string
+}) {
+  const [hovered, setHovered] = useState(false)
+
+  return (
+    <motion.div
+      layout
+      initial={{ opacity: 0, y: -4 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, height: 0, marginBottom: 0 }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 8,
+        padding: '6px 0',
+        borderBottom: '1px solid var(--color-border)',
+        opacity: 0.7,
+      }}
+    >
+      {/* Done checkmark */}
+      <span
+        style={{
+          width: 28,
+          height: 28,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          flexShrink: 0,
+          color: 'var(--color-success)',
+          fontSize: 14,
+        }}
+      >
+        ✓
+      </span>
+
+      {/* Title */}
+      <span
+        style={{
+          flex: 1,
+          fontSize: 13,
+          color: 'var(--color-text-dim)',
+          textDecoration: 'line-through',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        {habit.title}
+      </span>
+
+      {/* Undo button on hover */}
+      <AnimatePresence>
+        {hovered && (
+          <motion.button
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.1 }}
+            onClick={onUndo}
+            style={{
+              fontSize: 11,
+              padding: '2px 8px',
+              borderRadius: 'var(--radius-sm)',
+              border: '1px solid var(--color-border)',
+              background: 'transparent',
+              color: 'var(--color-text-dim)',
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+              flexShrink: 0,
+            }}
+          >
+            ↩ {undoLabel}
+          </motion.button>
+        )}
+      </AnimatePresence>
+    </motion.div>
   )
 }
 

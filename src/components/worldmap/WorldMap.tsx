@@ -105,7 +105,7 @@ export function WorldMap() {
   function getAreaProsperity(area: Area): ProsperityInfo {
     if (area.category === '_milestone') {
       const skillLevel = character.level
-      const pl = skillLevel === 0 ? 1 : skillLevel <= 3 ? 2 : skillLevel <= 8 ? 3 : skillLevel <= 15 ? 4 : skillLevel <= 25 ? 5 : 6
+      const pl = skillLevel <= 3 ? 1 : skillLevel <= 8 ? 2 : skillLevel <= 15 ? 3 : skillLevel <= 25 ? 4 : skillLevel <= 40 ? 5 : 6
       return { skillLevel, prosperityLevel: pl, prosperityName: PROSPERITY_NAMES[pl - 1], subLevelCurrent: 0, subLevelTotal: 1, subLevelFraction: 0, totalSkillXP: 0 }
     }
     return getProsperityInfo(getAreaSkillXP(tasks, area.category))
