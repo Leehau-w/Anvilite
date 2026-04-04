@@ -501,29 +501,34 @@ export function TaskItem({ task, compact, onEdit }: TaskItemProps) {
       {/* 高难度确认提示 */}
       <AnimatePresence>
         {confirmHigh && (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.9 }}
+          <div
             style={{
               position: 'absolute',
               right: 8,
               top: '50%',
               transform: 'translateY(-50%)',
-              background: 'var(--color-surface)',
-              border: '1px solid var(--color-warning)',
-              borderRadius: 'var(--radius-md)',
-              padding: '4px 10px',
-              fontSize: 11,
-              color: 'var(--color-warning)',
-              fontWeight: 500,
-              whiteSpace: 'nowrap',
-              boxShadow: 'var(--shadow-md)',
               zIndex: 10,
             }}
           >
-            {t.task_confirmComplete}
-          </motion.div>
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              style={{
+                background: 'var(--color-surface)',
+                border: '1px solid var(--color-warning)',
+                borderRadius: 'var(--radius-md)',
+                padding: '4px 10px',
+                fontSize: 11,
+                color: 'var(--color-warning)',
+                fontWeight: 500,
+                whiteSpace: 'nowrap',
+                boxShadow: 'var(--shadow-md)',
+              }}
+            >
+              {t.task_confirmComplete}
+            </motion.div>
+          </div>
         )}
       </AnimatePresence>
     </motion.div>
