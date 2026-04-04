@@ -10,7 +10,7 @@ import type { Habit } from '@/types/habit'
 import { useT } from '@/i18n'
 
 export function HabitCard({ onEdit }: { onEdit?: (habit: Habit) => void }) {
-  const { getTodayHabits, completeHabit, skipHabit, habits, startHabitTimer, pauseHabitTimer, reorderHabits, hideHabit } = useHabitStore()
+  const { getTodayHabits, completeHabit, skipHabit, habits, startHabitTimer, pauseHabitTimer, reorderHabits } = useHabitStore()
   const { gainXPAndOre, recordActivity } = useCharacterStore()
   const { addEvent } = useGrowthEventStore()
   const { triggerFeedback } = useFeedback()
@@ -69,29 +69,6 @@ export function HabitCard({ onEdit }: { onEdit?: (habit: Habit) => void }) {
     showToast(t.habitCard_toastComplete(habit.title, result.newStreak))
   }
 
-  function handleInscribe(habit: Habit) {
-    const days = Math.floor((Date.now() - new Date(habit.createdAt).getTime()) / 86400000)
-    addEvent({
-      type: 'custom_milestone',
-      title: habit.title,
-      details: {
-        sourceType: 'habit',
-        categoryName: habit.category,
-        difficulty: habit.difficulty,
-        consecutiveCount: habit.consecutiveCount,
-        totalCompletions: habit.totalCompletions,
-        durationDays: days,
-      },
-      isMilestone: true,
-    })
-    showToast(`⭐ ${habit.title}`)
-  }
-
-  function handleHide(habit: Habit) {
-    hideHabit(habit.id)
-    showToast(t.habit_toastHidden)
-  }
-
   function handleSkip(habit: Habit) {
     const result = skipHabit(habit.id)
     if (!result) return
@@ -136,8 +113,6 @@ export function HabitCard({ onEdit }: { onEdit?: (habit: Habit) => void }) {
                 onComplete={() => handleComplete(habit)}
                 onSkip={() => handleSkip(habit)}
                 onStartPause={() => habit.timerStartedAt ? pauseHabitTimer(habit.id) : startHabitTimer(habit.id)}
-                onInscribe={() => handleInscribe(habit)}
-                onHide={() => handleHide(habit)}
                 onEdit={onEdit ? () => onEdit(habit) : undefined}
               />
               {children.length > 0 && (
@@ -149,8 +124,6 @@ export function HabitCard({ onEdit }: { onEdit?: (habit: Habit) => void }) {
                       onComplete={() => handleComplete(child)}
                       onSkip={() => handleSkip(child)}
                       onStartPause={() => child.timerStartedAt ? pauseHabitTimer(child.id) : startHabitTimer(child.id)}
-                      onInscribe={() => handleInscribe(child)}
-                      onHide={() => handleHide(child)}
                       onEdit={onEdit ? () => onEdit(child) : undefined}
                     />
                   ))}
@@ -169,16 +142,12 @@ function HabitItem({
   onComplete,
   onSkip,
   onStartPause,
-  onInscribe,
-  onHide,
   onEdit,
 }: {
   habit: Habit
   onComplete: () => void
   onSkip: () => void
   onStartPause: () => void
-  onInscribe: () => void
-  onHide: () => void
   onEdit?: () => void
 }) {
   const refreshText = getNextRefreshText(habit)
@@ -264,22 +233,25 @@ function HabitItem({
         </span>
       )}
 
-      {/* 铭刻里程碑 */}
-      <HabitIconBtn onClick={onInscribe} title={t.habit_inscribe} color="var(--color-xp)">
-        ⭐
-      </HabitIconBtn>
-
-      {/* 隐藏 */}
-      <HabitIconBtn onClick={onHide} title={t.habit_hide} color="var(--color-text-dim)">
-        👁
-      </HabitIconBtn>
-
-      {/* 开始/暂停 */}
-      <HabitIconBtn
+      {/* 开始/暂停按钮 */}
+      <button
         onClick={onStartPause}
-        title={isDoing ? t.habit_pauseDoing : t.habit_startDoing}
-        color={isDoing ? 'var(--color-accent)' : 'var(--color-text-dim)'}
-        active={isDoing}
+        title={isDoing ? t.task_pauseDoing : t.task_startDoing}
+        style={{
+          width: 24,
+          height: 24,
+          borderRadius: 'var(--radius-sm)',
+          border: `1px solid ${isDoing ? 'var(--color-accent)' : 'var(--color-border)'}`,
+          background: isDoing ? 'color-mix(in srgb, var(--color-accent) 15%, transparent)' : 'transparent',
+          color: isDoing ? 'var(--color-accent)' : 'var(--color-text-dim)',
+          cursor: 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          flexShrink: 0,
+          transition: 'all 0.15s',
+          padding: 0,
+        }}
       >
         {isDoing ? (
           <svg width="9" height="9" viewBox="0 0 10 10" fill="currentColor">
@@ -291,7 +263,7 @@ function HabitItem({
             <path d="M3 2l5 3-5 3V2z"/>
           </svg>
         )}
-      </HabitIconBtn>
+      </button>
 
       {/* 跳过按钮 */}
       <button
@@ -313,40 +285,6 @@ function HabitItem({
         {t.habitCard_skip}
       </button>
     </motion.div>
-  )
-}
-
-function HabitIconBtn({
-  children, onClick, title, color, active,
-}: {
-  children: React.ReactNode
-  onClick: () => void
-  title: string
-  color: string
-  active?: boolean
-}) {
-  return (
-    <button
-      onClick={(e) => { e.stopPropagation(); onClick() }}
-      title={title}
-      style={{
-        width: 26, height: 26,
-        borderRadius: 'var(--radius-sm)',
-        border: `1px solid ${active ? color : 'var(--color-border)'}`,
-        background: active ? `color-mix(in srgb, ${color} 15%, transparent)` : 'transparent',
-        color,
-        cursor: 'pointer',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        flexShrink: 0, fontSize: 11,
-        transition: 'all 0.15s',
-        padding: 0,
-        opacity: active ? 1 : 0.6,
-      }}
-      onMouseEnter={(e) => { e.currentTarget.style.opacity = '1' }}
-      onMouseLeave={(e) => { e.currentTarget.style.opacity = active ? '1' : '0.6' }}
-    >
-      {children}
-    </button>
   )
 }
 
