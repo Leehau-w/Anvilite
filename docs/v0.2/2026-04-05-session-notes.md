@@ -195,4 +195,7 @@ onDrop(targetGroupId):
 - 将 v0.1 开发文档归档至 `docs/v0.1_history/`
 - 新建 `docs/user-guide.md`（v0.2 版用户指南）
 - 新建 `docs/CHANGELOG.md`（版本更新记录）
-- 清理 `docs/` 根目录，仅保留面向用户的文档
+- 清理 `docs/` 根目录，仅保留面向用户的文档（`user-guide.md`、`CHANGELOG.md`）
+- `docs/v0.1_history/` 及 `docs/CLAUDE.md` 副本已从工作目录删除，但完整保留在 git 历史中
+  - 溯源方式：`git show 624caa8:docs/v0.1_history/<文件名>`
+  - 或在 GitHub 浏览：`https://github.com/Leehau-w/Anvilite/tree/624caa8/docs/v0.1_history`
