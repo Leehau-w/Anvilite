@@ -503,6 +503,18 @@ const EVENT_SYMBOL_COLORS: Record<string, string> = {
   '🏘': 'var(--color-success)',
 }
 
+function getEventColor(e: GrowthEvent): string {
+  switch (e.type) {
+    case 'level_up':         return 'var(--color-accent)'
+    case 'milestone':
+    case 'custom_milestone': return 'var(--color-xp)'
+    case 'badge_earned':     return 'var(--color-secondary)'
+    case 'area_level_up':    return 'var(--color-success)'
+    case 'prestige':         return 'var(--color-secondary)'
+    default:                 return 'var(--color-text-dim)'
+  }
+}
+
 type EventSymbolConfig = Record<string, { symbol: string; label: string; color: string }>
 
 function getEventSymbolConfig(t: ReturnType<typeof useT>): EventSymbolConfig {
@@ -743,7 +755,7 @@ function MonthBlockCard({
           >
             {topEvents.map((e) => (
               <div key={e.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 5 }}>
-                <span style={{ fontSize: 11, flexShrink: 0, marginTop: 1 }}>{getEventIcon(e)}</span>
+                <span style={{ fontSize: 11, flexShrink: 0, marginTop: 1, color: getEventColor(e) }}>{getEventIcon(e)}</span>
                 <span
                   style={{
                     fontSize: 11,
