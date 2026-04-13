@@ -2,6 +2,8 @@ import React, { useMemo, useState } from 'react'
 import type { SOP } from '@/types/sop'
 import { useSOPStore } from '@/stores/sopStore'
 import { useT } from '@/i18n'
+import { useSettingsStore } from '@/stores/settingsStore'
+import { getSystemFolder, getSystemSOPs } from '@/data/systemSOPs'
 
 function getSOPTypeIcon(type: SOP['type']): string {
   const icons: Record<SOP['type'], string> = {
@@ -19,6 +21,7 @@ interface Props {
 
 export function SOPTree({ onNewSOP }: Props) {
   const t = useT()
+  const lang = useSettingsStore((s) => s.settings.language)
   const { folders, sops, selectedSOPId, selectSOP, addFolder, renameFolder, deleteFolder } = useSOPStore()
   const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(new Set())
   const [newFolderInput, setNewFolderInput] = useState(false)
@@ -26,21 +29,22 @@ export function SOPTree({ onNewSOP }: Props) {
   const [renamingId, setRenamingId] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState('')
 
-  const tree = useMemo(
-    () =>
-      [...folders]
-        .sort((a, b) => {
-          if (a.isSystem !== b.isSystem) return a.isSystem ? -1 : 1
-          return a.sortOrder - b.sortOrder
-        })
-        .map((folder) => ({
-          folder,
-          items: sops
-            .filter((s) => s.folderId === folder.id)
-            .sort((a, b) => a.sortOrder - b.sortOrder),
-        })),
-    [folders, sops]
-  )
+  const systemFolder = useMemo(() => getSystemFolder(lang), [lang])
+  const systemSOPs = useMemo(() => getSystemSOPs(lang), [lang])
+
+  const tree = useMemo(() => {
+    const allFolders = [systemFolder, ...folders].sort((a, b) => {
+      if (a.isSystem !== b.isSystem) return a.isSystem ? -1 : 1
+      return a.sortOrder - b.sortOrder
+    })
+    const allSOPs = [...systemSOPs, ...sops]
+    return allFolders.map((folder) => ({
+      folder,
+      items: allSOPs
+        .filter((s) => s.folderId === folder.id)
+        .sort((a, b) => a.sortOrder - b.sortOrder),
+    }))
+  }, [systemFolder, systemSOPs, folders, sops])
 
   function toggleFolder(id: string) {
     setCollapsedFolders((prev) => {

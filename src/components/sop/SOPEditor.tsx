@@ -102,12 +102,18 @@ export function SOPEditor({ sopId, defaultFolderId = '', onSave, onCancel }: Pro
         />
       </div>
 
-      {/* 类型选择（MVP 只支持 workflow / itemlist） */}
+      {/* 类型选择 */}
       <div style={{ marginBottom: 16 }}>
-        <label style={labelStyle}>类型</label>
-        <div style={{ display: 'flex', gap: 8 }}>
-          {(['workflow', 'itemlist'] as const).map((tp) => {
+        <label style={labelStyle}>{t.sop_typeLabel}</label>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {(['workflow', 'checklist', 'schedule', 'itemlist'] as const).map((tp) => {
             const isActive = type === tp
+            const labels: Record<typeof tp, string> = {
+              workflow: t.sop_type_workflow,
+              checklist: t.sop_type_checklist,
+              schedule: t.sop_type_schedule,
+              itemlist: t.sop_type_itemlist,
+            }
             return (
               <button
                 key={tp}
@@ -126,7 +132,7 @@ export function SOPEditor({ sopId, defaultFolderId = '', onSave, onCancel }: Pro
                   fontWeight: isActive ? 500 : 400,
                 }}
               >
-                {tp === 'workflow' ? t.sop_type_workflow : t.sop_type_itemlist}
+                {labels[tp]}
               </button>
             )
           })}
@@ -182,18 +188,36 @@ export function SOPEditor({ sopId, defaultFolderId = '', onSave, onCancel }: Pro
                 </span>
               )}
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}>
-                <input
-                  value={step.title}
-                  onChange={(e) => handleUpdateStep(idx, { title: e.target.value })}
-                  placeholder={t.sop_stepPlaceholder}
-                  style={inputStyle}
-                />
+                <div style={{ display: 'flex', gap: 8 }}>
+                  {type === 'schedule' && (
+                    <input
+                      type="time"
+                      value={step.time ?? ''}
+                      onChange={(e) => handleUpdateStep(idx, { time: e.target.value || null })}
+                      style={{ ...inputStyle, width: 110, flexShrink: 0 }}
+                    />
+                  )}
+                  <input
+                    value={step.title}
+                    onChange={(e) => handleUpdateStep(idx, { title: e.target.value })}
+                    placeholder={t.sop_stepPlaceholder}
+                    style={inputStyle}
+                  />
+                </div>
                 {type !== 'itemlist' && (
                   <input
                     value={step.note}
                     onChange={(e) => handleUpdateStep(idx, { note: e.target.value })}
                     placeholder={t.sop_notePlaceholder}
                     style={{ ...inputStyle, height: 30, fontSize: 13 }}
+                  />
+                )}
+                {(type === 'checklist' || type === 'schedule') && (
+                  <input
+                    value={step.warning}
+                    onChange={(e) => handleUpdateStep(idx, { warning: e.target.value })}
+                    placeholder={t.sop_warningPlaceholder}
+                    style={{ ...inputStyle, height: 30, fontSize: 13, color: 'var(--color-warning)' }}
                   />
                 )}
               </div>

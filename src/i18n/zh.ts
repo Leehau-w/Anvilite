@@ -808,6 +808,14 @@ export const zh = {
   sop_confirmConvert: '从 SOP 创建任务',
   sop_selectSteps: '包含以下步骤',
   sop_viewComingSoon: '该视图类型即将推出',
+  sop_typeLabel: '类型',
+  sop_warningPlaceholder: '警告（⚠️，可选）',
+  sop_systemFolder: '系统模板',
+  sop_systemBadge: '系统模板',
+  sop_executionMode: '执行模式',
+  sop_startExecution: '开始执行',
+  sop_endExecution: '结束执行',
+  sop_progress: (done: number, total: number) => `${done}/${total} 已完成`,
 }
 
 export type Translations = typeof zh

@@ -1,16 +1,23 @@
-import React, { useState } from 'react'
+import React, { useMemo, useState } from 'react'
 import { useSOPStore } from '@/stores/sopStore'
 import { useT } from '@/i18n'
+import { useSettingsStore } from '@/stores/settingsStore'
+import { getSystemSOPs } from '@/data/systemSOPs'
 import { SOPTree } from './SOPTree'
 import { SOPContent } from './SOPContent'
 import { SOPEditor } from './SOPEditor'
 
 export function SOPPage() {
   const t = useT()
+  const lang = useSettingsStore((s) => s.settings.language)
   const { sops, selectedSOPId } = useSOPStore()
-  const selectedSOP = sops.find((s) => s.id === selectedSOPId) ?? null
 
-  // editing state: null = not editing, '' = new SOP, folderId = new SOP in folder
+  const systemSOPs = useMemo(() => getSystemSOPs(lang), [lang])
+  const selectedSOP = useMemo(
+    () => [...systemSOPs, ...sops].find((s) => s.id === selectedSOPId) ?? null,
+    [systemSOPs, sops, selectedSOPId]
+  )
+
   const [creatingInFolder, setCreatingInFolder] = useState<string | null>(null)
 
   if (creatingInFolder !== null) {

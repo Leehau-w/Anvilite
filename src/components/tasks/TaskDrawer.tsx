@@ -27,6 +27,7 @@ type FormData = {
   dueDate: string
   hasDueDate: boolean
   description: string
+  actualMinutes: string
 }
 
 export function TaskDrawer({ open, onClose, editTask, initialCategory }: TaskDrawerProps) {
@@ -47,6 +48,7 @@ export function TaskDrawer({ open, onClose, editTask, initialCategory }: TaskDra
     dueDate: editTask?.dueDate ?? getTomorrowString(),
     hasDueDate: editTask ? editTask.dueDate !== null : true,
     description: editTask?.description ?? '',
+    actualMinutes: editTask?.actualMinutes ? String(editTask.actualMinutes) : '',
   }
 
   const [form, setForm] = useState<FormData>(defaultForm)
@@ -61,6 +63,7 @@ export function TaskDrawer({ open, onClose, editTask, initialCategory }: TaskDra
         dueDate: editTask?.dueDate ?? getTomorrowString(),
         hasDueDate: editTask ? editTask.dueDate !== null : true,
         description: editTask?.description ?? '',
+        actualMinutes: editTask?.actualMinutes ? String(editTask.actualMinutes) : '',
       })
       setSubtaskInput('')
     }
@@ -82,6 +85,9 @@ export function TaskDrawer({ open, onClose, editTask, initialCategory }: TaskDra
       priority: form.priority,
       dueDate: form.hasDueDate ? form.dueDate : null,
       description: form.description,
+      ...(editTask?.status === 'done' && form.actualMinutes !== ''
+        ? { actualMinutes: Number(form.actualMinutes) }
+        : {}),
     }
 
     if (editTask) {
@@ -227,11 +233,8 @@ export function TaskDrawer({ open, onClose, editTask, initialCategory }: TaskDra
                 <input
                   type="number"
                   min={0}
-                  value={editTask.actualMinutes ?? 0}
-                  onChange={(e) => {
-                    const mins = Number(e.target.value)
-                    if (!isNaN(mins)) updateTask(editTask.id, { actualMinutes: mins })
-                  }}
+                  value={form.actualMinutes}
+                  onChange={(e) => setForm((f) => ({ ...f, actualMinutes: e.target.value }))}
                   style={{
                     width: 100, height: 36, padding: '0 12px',
                     borderRadius: 'var(--radius-md)',

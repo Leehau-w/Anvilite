@@ -810,4 +810,12 @@ export const en: Translations = {
   sop_confirmConvert: 'Create task from SOP',
   sop_selectSteps: 'Include these steps',
   sop_viewComingSoon: 'This view type is coming soon',
+  sop_typeLabel: 'Type',
+  sop_warningPlaceholder: 'Warning (⚠️, optional)',
+  sop_systemFolder: 'System Templates',
+  sop_systemBadge: 'System',
+  sop_executionMode: 'Execution Mode',
+  sop_startExecution: 'Start Execution',
+  sop_endExecution: 'End Execution',
+  sop_progress: (done: number, total: number) => `${done}/${total} completed`,
 }
