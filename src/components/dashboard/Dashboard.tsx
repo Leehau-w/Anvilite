@@ -81,17 +81,17 @@ export function Dashboard({ onNavigate, onOpenInspiration }: DashboardProps) {
   const totalXP = taskStats.totalXP + habitStats.totalXP
 
   const doingTasks = useMemo(
-    () => sortTasksInGroup(tasks.filter((t) => !t.deletedAt && !t.parentId && t.status === 'doing')),
+    () => sortTasksInGroup(tasks.filter((t) => !t.deletedAt && t.status === 'doing')),
     [tasks]
   )
   const todoTasks = useMemo(
-    () => sortTasksInGroup(tasks.filter((t) => !t.deletedAt && !t.parentId && t.status === 'todo')),
+    () => sortTasksInGroup(tasks.filter((t) => !t.deletedAt && t.status === 'todo')),
     [tasks]
   )
   const doneTasks = useMemo(() => {
     const today = new Date().toISOString().split('T')[0]
     return tasks
-      .filter((t) => !t.deletedAt && !t.parentId && t.status === 'done' && t.completedAt && t.completedAt.startsWith(today))
+      .filter((t) => !t.deletedAt && t.status === 'done' && t.completedAt && t.completedAt.startsWith(today))
       .slice(0, 8)
   }, [tasks])
 

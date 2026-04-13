@@ -351,6 +351,7 @@ export const zh = {
   milestone_editSave: '保存',
 
   // ─── World Map ────────────────────────────────────────────────────────────
+  worldmap_title: '世界地图',
   worldmap_resetView: '重置视角',
   worldmap_edit: '编辑',
   worldmap_editDone: '完成',

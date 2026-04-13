@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useTaskStore } from '@/stores/taskStore'
 import { useHabitStore } from '@/stores/habitStore'
 import { useGrowthEventStore } from '@/stores/growthEventStore'
+import { normalizeTitle } from '@/utils/normalizeTitle'
 import { useAreaStore } from '@/stores/areaStore'
 import { useT } from '@/i18n'
 import type { GrowthEvent } from '@/types/growthEvent'
@@ -420,18 +421,20 @@ function RoutineSection({ tasks, habitEvents, habits }: {
   const t = useT()
   const groups: Record<string, { count: number; totalMinutes: number }> = {}
 
-  tasks.forEach((t) => {
-    if (!t.title) return
-    if (!groups[t.title]) groups[t.title] = { count: 0, totalMinutes: 0 }
-    groups[t.title].count++
-    groups[t.title].totalMinutes += t.actualMinutes ?? 0
+  tasks.forEach((task) => {
+    if (!task.title) return
+    const key = normalizeTitle(task.title) || task.title
+    if (!groups[key]) groups[key] = { count: 0, totalMinutes: 0 }
+    groups[key].count++
+    groups[key].totalMinutes += task.actualMinutes ?? 0
   })
 
   habitEvents.forEach((e) => {
-    const title = e.title.replace(/^.+[：:]\s*/, '')
-    if (!groups[title]) groups[title] = { count: 0, totalMinutes: 0 }
-    groups[title].count++
-    groups[title].totalMinutes += e.details.actualMinutes ?? 0
+    const rawTitle = e.title.replace(/^.+[：:]\s*/, '')
+    const key = normalizeTitle(rawTitle) || rawTitle
+    if (!groups[key]) groups[key] = { count: 0, totalMinutes: 0 }
+    groups[key].count++
+    groups[key].totalMinutes += e.details.actualMinutes ?? 0
   })
 
   const sorted = Object.entries(groups)

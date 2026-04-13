@@ -168,7 +168,7 @@ export const useCharacterStore = create<CharacterStore>()(
         // 追溯重算：v2 乘法公式上线，重算所有已完成任务的 XP
         if ((state.character.xpFormulaVersion ?? 0) < 2) {
           const tasks = useTaskStore.getState().tasks
-          const doneTasks = tasks.filter((t) => t.status === 'done' && !t.deletedAt && !t.parentId)
+          const doneTasks = tasks.filter((t) => t.status === 'done' && !t.deletedAt)
           let totalXP = 0
           doneTasks.forEach((task) => {
             const { xp } = calculateTaskXP(task, 0) // 历史记录无 streakDays，用 0

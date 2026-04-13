@@ -7,7 +7,8 @@ export interface Area {
   templateId: AreaTemplateId | null  // null = 空白自定义
   name: string
   category: string   // 对应任务/习惯分类；里程碑殿堂用 '_milestone'
-  position: { x: number; y: number }
+  position: { x: number; y: number }  // legacy, UI 不再使用
+  sortOrder: number  // v0.3: 卡片网格排序
   isPreset: boolean  // 预设区域（不可移动）
   canDelete: boolean // 家园 + 里程碑殿堂不可删；其余均可删
   canMove: boolean   // 用户新增区域可拖拽

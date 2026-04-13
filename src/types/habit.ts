@@ -1,3 +1,12 @@
+export interface SubHabit {
+  id: string
+  title: string
+  completed: boolean
+  sortOrder: number
+  subHabits: SubHabit[]
+  createdAt: string
+}
+
 export interface Habit {
   id: string
   title: string
@@ -16,9 +25,7 @@ export interface Habit {
   endDate: string | null
   reminderTime: string | null        // HH:mm
   description: string
-  parentId: string | null
-  childIds: string[]
-  nestingLevel: number              // 0=根, 1=子, 2=孙（最多3层）
+  subHabits: SubHabit[]
   status: 'active' | 'completed_today' | 'paused' | 'archived' | 'mastered'
   isHidden: boolean
   deletedAt: string | null

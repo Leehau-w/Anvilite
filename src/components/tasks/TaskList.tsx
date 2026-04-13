@@ -44,7 +44,7 @@ export function TaskList() {
   const visible = useMemo(() => tasks.filter((task) => {
     if (task.deletedAt) return false
     if (task.isHidden) return false
-    if (task.parentId) return false
+    // v0.3: subTasks are embedded, no more parentId in tasks[]
     if (activeCategory !== 'ALL' && task.category !== activeCategory) return false
     return true
   }), [tasks, activeCategory])
@@ -1500,7 +1500,7 @@ function HabitRow({
 }) {
   const tr = useT()
   const areas = useAreaStore((s) => s.areas)
-  const allHabits = useHabitStore((s) => s.habits)
+  // v0.3: subHabits are embedded in habit, allHabits no longer needed here
   const catLabel = (cat: string) => resolveCatLabel(cat, areas, tr)
   const repeatLabel = getHabitRepeatLabel(habit, tr)
   const [hovered, setHovered] = useState(false)
@@ -1508,7 +1508,7 @@ function HabitRow({
   const deleteTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const isDoing = !!habit.timerStartedAt
 
-  const children = allHabits.filter((c) => !c.deletedAt && !c.isHidden && (habit.childIds ?? []).includes(c.id))
+  const subHabits = habit.subHabits ?? []
 
   function handleDeleteClick() {
     if (!deleteConfirm) {
@@ -1542,7 +1542,7 @@ function HabitRow({
       >
         {/* 标题行 */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          {children.length > 0 && (
+          {subHabits.length > 0 && (
             <span style={{ fontSize: 10, color: 'var(--color-text-dim)', flexShrink: 0 }}>▶</span>
           )}
           <span style={{
@@ -1586,8 +1586,8 @@ function HabitRow({
           {habit.consecutiveCount > 0 && (
             <span style={{ color: 'var(--color-xp)', fontFamily: 'var(--font-num)', fontWeight: 600 }}>🔥{habit.consecutiveCount}</span>
           )}
-          {(habit.childIds ?? []).length > 0 && (
-            <span>{tr.task_subtasks((habit.childIds ?? []).length)}</span>
+          {subHabits.length > 0 && (
+            <span>{tr.task_subtasks(subHabits.length)}</span>
           )}
         </div>
         {/* hover 操作栏（和 TaskItem 一致的文字按钮风格） */}
@@ -1620,11 +1620,14 @@ function HabitRow({
         </AnimatePresence>
       </motion.div>
 
-      {/* 子习惯 */}
-      {children.length > 0 && (
-        <div style={{ paddingLeft: 20, marginTop: 4, display: 'flex', flexDirection: 'column', gap: 4, borderLeft: '2px solid var(--color-border)', marginLeft: 8 }}>
-          {children.map((child) => (
-            <HabitRow key={child.id} habit={child} onEdit={onEdit} dim={dim} />
+      {/* 子步骤（内嵌 subHabits，只显示名称和完成状态） */}
+      {subHabits.length > 0 && (
+        <div style={{ paddingLeft: 20, marginTop: 4, display: 'flex', flexDirection: 'column', gap: 2, borderLeft: '2px solid var(--color-border)', marginLeft: 8 }}>
+          {subHabits.map((sub) => (
+            <div key={sub.id} style={{ fontSize: 12, color: sub.completed ? 'var(--color-text-dim)' : 'var(--color-text)', display: 'flex', alignItems: 'center', gap: 4, textDecoration: sub.completed ? 'line-through' : 'none' }}>
+              <span>{sub.completed ? '✓' : '○'}</span>
+              <span>{sub.title}</span>
+            </div>
           ))}
         </div>
       )}

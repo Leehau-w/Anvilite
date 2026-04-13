@@ -60,7 +60,7 @@ export function InteriorSpace({ area, prosperity, onExit }: InteriorSpaceProps) 
   const { showToast } = useToast()
 
   // ── 区域数据 ──────────────────────────────────────────────────────
-  const areaTasks = tasks.filter((t) => !t.deletedAt && !t.isHidden && !t.parentId && t.category === area.category)
+  const areaTasks = tasks.filter((t) => !t.deletedAt && !t.isHidden && t.category === area.category)
 
   const activeTasks = areaTasks.filter((t) => t.status === 'doing')
   const todoTasks = areaTasks.filter((t) => t.status === 'todo')

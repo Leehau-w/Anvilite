@@ -353,6 +353,7 @@ export const en: Translations = {
   milestone_editSave: 'Save',
 
   // ─── World Map ────────────────────────────────────────────────────────────
+  worldmap_title: 'World Map',
   worldmap_resetView: 'Reset View',
   worldmap_edit: 'Edit',
   worldmap_editDone: 'Done',

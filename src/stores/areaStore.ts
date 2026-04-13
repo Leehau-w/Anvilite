@@ -12,12 +12,12 @@ export const CANVAS_H = 1000
 function createDefaultAreas(): Area[] {
   const now = new Date().toISOString()
   return [
-    { id: 'area-home', templateId: 'home', name: '家园', category: 'home', position: { x: 700, y: 360 }, isPreset: true, canDelete: false, canMove: false, createdAt: now },
-    { id: 'area-arena', templateId: 'arena', name: '竞技场', category: 'arena', position: { x: 260, y: 190 }, isPreset: true, canDelete: true, canMove: false, createdAt: now },
-    { id: 'area-library', templateId: 'library', name: '藏书阁', category: 'library', position: { x: 1060, y: 140 }, isPreset: true, canDelete: true, canMove: false, createdAt: now },
-    { id: 'area-workshop', templateId: 'workshop', name: '灵感工坊', category: 'workshop', position: { x: 280, y: 520 }, isPreset: true, canDelete: true, canMove: false, createdAt: now },
-    { id: 'area-forge', templateId: 'forge', name: '锻造坊', category: 'forge', position: { x: 920, y: 580 }, isPreset: true, canDelete: true, canMove: false, createdAt: now },
-    { id: 'area-milestone', templateId: 'milestone', name: '档案馆', category: '_milestone', position: { x: 1220, y: 700 }, isPreset: true, canDelete: false, canMove: false, createdAt: now },
+    { id: 'area-home', templateId: 'home', name: '家园', category: 'home', position: { x: 700, y: 360 }, sortOrder: 0, isPreset: true, canDelete: false, canMove: false, createdAt: now },
+    { id: 'area-arena', templateId: 'arena', name: '竞技场', category: 'arena', position: { x: 260, y: 190 }, sortOrder: 1, isPreset: true, canDelete: true, canMove: false, createdAt: now },
+    { id: 'area-library', templateId: 'library', name: '藏书阁', category: 'library', position: { x: 1060, y: 140 }, sortOrder: 2, isPreset: true, canDelete: true, canMove: false, createdAt: now },
+    { id: 'area-workshop', templateId: 'workshop', name: '灵感工坊', category: 'workshop', position: { x: 280, y: 520 }, sortOrder: 3, isPreset: true, canDelete: true, canMove: false, createdAt: now },
+    { id: 'area-forge', templateId: 'forge', name: '锻造坊', category: 'forge', position: { x: 920, y: 580 }, sortOrder: 4, isPreset: true, canDelete: true, canMove: false, createdAt: now },
+    { id: 'area-milestone', templateId: 'milestone', name: '档案馆', category: '_milestone', position: { x: 1220, y: 700 }, sortOrder: 5, isPreset: true, canDelete: false, canMove: false, createdAt: now },
   ]
 }
 
@@ -25,8 +25,9 @@ interface AreaStore {
   areas: Area[]
 
   addArea: (templateId: AreaTemplateId | null, customName?: string) => Area | null
-  updateArea: (id: string, patch: Partial<Pick<Area, 'name' | 'position'>>) => void
+  updateArea: (id: string, patch: Partial<Pick<Area, 'name' | 'position' | 'sortOrder'>>) => void
   removeArea: (id: string) => void
+  reorderAreas: (ids: string[]) => void
   canAddMore: () => boolean
   getUsedTemplateIds: () => AreaTemplateId[]
   /** 返回可作为任务/习惯分类的区域名称列表（不含里程碑殿堂，追加"其他"） */
@@ -71,6 +72,7 @@ export const useAreaStore = create<AreaStore>()(
           name,
           category,
           position: { x: 600 + Math.random() * 300, y: 300 + Math.random() * 200 },
+          sortOrder: get().areas.length,
           isPreset: false,
           canDelete: true,
           canMove: true,
@@ -90,6 +92,19 @@ export const useAreaStore = create<AreaStore>()(
       removeArea: (id) => {
         set((s) => ({ areas: s.areas.filter((a) => a.id !== id) }))
       },
+
+      reorderAreas: (ids) => {
+        set((s) => {
+          const areaMap = new Map(s.areas.map((a) => [a.id, a]))
+          const reordered = ids.map((id, idx) => {
+            const a = areaMap.get(id)
+            return a ? { ...a, sortOrder: idx } : null
+          }).filter(Boolean) as Area[]
+          const reorderedIds = new Set(ids)
+          const rest = s.areas.filter((a) => !reorderedIds.has(a.id))
+          return { areas: [...reordered, ...rest] }
+        })
+      },
     }),
     {
       name: `${getStoragePrefix()}-areas`,
@@ -97,9 +112,11 @@ export const useAreaStore = create<AreaStore>()(
       onRehydrateStorage: () => (state) => {
         if (!state) return
         // Migrate all area categories to English keys
-        state.areas = state.areas.map((a) => ({
+        state.areas = state.areas.map((a, i) => ({
           ...a,
           category: a.category === '_milestone' ? '_milestone' : migrateCategory(a.category),
+          // v0.3: position_x/y → sortOrder（用原有顺序赋初值）
+          sortOrder: a.sortOrder !== undefined ? a.sortOrder : i,
         }))
         const milestone = state.areas.find((a) => a.id === 'area-milestone')
         if (milestone && milestone.name === '里程碑殿堂') {

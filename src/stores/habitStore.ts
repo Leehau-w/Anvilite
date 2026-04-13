@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import type { Habit, HabitGroup } from '@/types/habit'
+import type { Habit, SubHabit, HabitGroup } from '@/types/habit'
 import { getStoragePrefix } from './accountManager'
 import { generateId } from '@/utils/id'
 import { migrateCategory } from '@/utils/area'
@@ -8,12 +8,21 @@ import { isHabitDueToday, calculateNewStreak, calculateToleranceUpdate } from '@
 import { calculateHabitXP } from '@/engines/xpEngine'
 import { useCharacterStore } from './characterStore'
 import { useGrowthEventStore } from './growthEventStore'
+import {
+  addNestedSubHabit,
+  toggleNestedHabit,
+  removeNestedHabit,
+  editNestedHabit,
+  makeSubHabit,
+} from '@/utils/subTaskUtils'
+
+const SUBHABIT_MIGRATION_KEY = 'anvilite-subhabit-migration-v3'
 
 interface HabitStore {
   habits: Habit[]
   completedHabitViewMode: 'area' | 'custom'
   customHabitGroups: HabitGroup[]
-  addHabit: (partial: Omit<Habit, 'id' | 'status' | 'isHidden' | 'deletedAt' | 'timerStartedAt' | 'actualMinutes' | 'consecutiveCount' | 'totalCompletions' | 'toleranceCharges' | 'toleranceNextAt' | 'weeklyCompletionCount' | 'lastCompletedAt' | 'lastDueAt' | 'currentCycleCount' | 'parentId' | 'childIds' | 'nestingLevel' | 'createdAt' | 'updatedAt'> & { parentId?: string | null }) => void
+  addHabit: (partial: Omit<Habit, 'id' | 'status' | 'isHidden' | 'deletedAt' | 'timerStartedAt' | 'actualMinutes' | 'consecutiveCount' | 'totalCompletions' | 'toleranceCharges' | 'toleranceNextAt' | 'weeklyCompletionCount' | 'lastCompletedAt' | 'lastDueAt' | 'currentCycleCount' | 'subHabits' | 'createdAt' | 'updatedAt'>) => void
   updateHabit: (id: string, patch: Partial<Habit>) => void
   deleteHabit: (id: string) => void
   restoreHabit: (id: string) => void
@@ -32,6 +41,12 @@ interface HabitStore {
   skipHabit: (id: string) => { newStreak: number } | null
   missHabit: (id: string) => { usedTolerance: boolean; newStreak: number } | null
 
+  // ── 子习惯 ──────────────────────────────────────────────────
+  addSubHabit: (habitId: string, title: string, parentSubHabitId?: string) => void
+  toggleSubHabit: (habitId: string, subHabitId: string) => void
+  removeSubHabit: (habitId: string, subHabitId: string) => void
+  editSubHabit: (habitId: string, subHabitId: string, title: string) => void
+
   reorderHabits: (ids: string[]) => void
   resetDailyHabits: () => void
   getTodayHabits: () => Habit[]
@@ -46,29 +61,12 @@ interface HabitStore {
   removeHabitFromGroup: (habitId: string, groupId: string) => void
 }
 
-/** 收集习惯及其所有子孙 ID */
-function collectHabitDescendants(habits: Habit[], rootId: string): Set<string> {
-  const ids = new Set<string>([rootId])
-  const queue = [rootId]
-  while (queue.length > 0) {
-    const pid = queue.shift()!
-    const parent = habits.find((h) => h.id === pid)
-    if (!parent) continue
-    for (const cid of parent.childIds) {
-      if (!ids.has(cid)) { ids.add(cid); queue.push(cid) }
-    }
-  }
-  return ids
-}
-
 function makeDefaultHabit(partial: Parameters<HabitStore['addHabit']>[0]): Habit {
   const now = new Date().toISOString()
   return {
     ...partial,
     id: generateId(),
-    parentId: partial.parentId ?? null,
-    childIds: [],
-    nestingLevel: 0,
+    subHabits: [],
     status: 'active',
     isHidden: false,
     deletedAt: null,
@@ -97,18 +95,6 @@ export const useHabitStore = create<HabitStore>()(
 
       addHabit: (partial) => {
         const habit = makeDefaultHabit(partial)
-        if (habit.parentId) {
-          const parent = get().habits.find((h) => h.id === habit.parentId)
-          if (!parent || parent.nestingLevel >= 2) return // 超过 3 层
-          habit.nestingLevel = parent.nestingLevel + 1
-          if (!partial.category) habit.category = parent.category
-          set((s) => ({
-            habits: [habit, ...s.habits.map((h) =>
-              h.id === habit.parentId ? { ...h, childIds: [...h.childIds, habit.id], updatedAt: new Date().toISOString() } : h
-            )],
-          }))
-          return
-        }
         set((s) => ({ habits: [...s.habits, habit] }))
       },
 
@@ -122,9 +108,8 @@ export const useHabitStore = create<HabitStore>()(
 
       deleteHabit: (id) => {
         const now = new Date().toISOString()
-        const ids = collectHabitDescendants(get().habits, id)
         set((s) => ({
-          habits: s.habits.map((h) => ids.has(h.id) ? { ...h, deletedAt: now, updatedAt: now } : h),
+          habits: s.habits.map((h) => h.id === id ? { ...h, deletedAt: now, updatedAt: now } : h),
         }))
       },
 
@@ -133,8 +118,7 @@ export const useHabitStore = create<HabitStore>()(
       },
 
       permanentlyDeleteHabit: (id) => {
-        const ids = collectHabitDescendants(get().habits, id)
-        set((s) => ({ habits: s.habits.filter((h) => !ids.has(h.id)) }))
+        set((s) => ({ habits: s.habits.filter((h) => h.id !== id) }))
       },
 
       pauseHabit: (id) => {
@@ -318,6 +302,52 @@ export const useHabitStore = create<HabitStore>()(
         return { usedTolerance, newStreak: usedTolerance ? habit.consecutiveCount : newStreak }
       },
 
+      // ── 子习惯 actions ──────────────────────────────────────────
+
+      addSubHabit: (habitId, title, parentSubHabitId) => {
+        set((s) => ({
+          habits: s.habits.map((h) => {
+            if (h.id !== habitId) return h
+            const newSub: SubHabit = makeSubHabit(title, h.subHabits.length)
+            if (!parentSubHabitId) {
+              return { ...h, subHabits: [...h.subHabits, newSub], updatedAt: new Date().toISOString() }
+            }
+            return {
+              ...h,
+              subHabits: addNestedSubHabit(h.subHabits, parentSubHabitId, newSub),
+              updatedAt: new Date().toISOString(),
+            }
+          }),
+        }))
+      },
+
+      toggleSubHabit: (habitId, subHabitId) => {
+        set((s) => ({
+          habits: s.habits.map((h) => {
+            if (h.id !== habitId) return h
+            return { ...h, subHabits: toggleNestedHabit(h.subHabits, subHabitId), updatedAt: new Date().toISOString() }
+          }),
+        }))
+      },
+
+      removeSubHabit: (habitId, subHabitId) => {
+        set((s) => ({
+          habits: s.habits.map((h) => {
+            if (h.id !== habitId) return h
+            return { ...h, subHabits: removeNestedHabit(h.subHabits, subHabitId), updatedAt: new Date().toISOString() }
+          }),
+        }))
+      },
+
+      editSubHabit: (habitId, subHabitId, title) => {
+        set((s) => ({
+          habits: s.habits.map((h) => {
+            if (h.id !== habitId) return h
+            return { ...h, subHabits: editNestedHabit(h.subHabits, subHabitId, title), updatedAt: new Date().toISOString() }
+          }),
+        }))
+      },
+
       setCompletedHabitViewMode: (mode) => {
         set({ completedHabitViewMode: mode })
       },
@@ -407,7 +437,7 @@ export const useHabitStore = create<HabitStore>()(
 
       getTodayHabits: () => {
         return get().habits.filter(
-          (h) => !h.deletedAt && !h.isHidden && !h.parentId && h.status === 'active' && isHabitDueToday(h)
+          (h) => !h.deletedAt && !h.isHidden && h.status === 'active' && isHabitDueToday(h)
         )
       },
 
@@ -437,21 +467,27 @@ export const useHabitStore = create<HabitStore>()(
         if (!state) return
         const now = new Date()
         const today = now.toISOString().split('T')[0]
-        // 本周一 00:00
         const dow = now.getDay() === 0 ? 7 : now.getDay()
         const monday = new Date(now)
         monday.setDate(now.getDate() - (dow - 1))
         monday.setHours(0, 0, 0, 0)
 
+        // ── v0.3 迁移：移除 parentId/childIds/nestingLevel，过滤掉旧子习惯 ──
+        if (!localStorage.getItem(SUBHABIT_MIGRATION_KEY)) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          state.habits = (state.habits as any[]).filter((h) => !h.parentId)
+          localStorage.setItem(SUBHABIT_MIGRATION_KEY, new Date().toISOString())
+        }
+
         state.habits = state.habits.map((h) => {
-          // completed_today → active if completed on a previous day
           const staleCompleted =
             h.status === 'completed_today' &&
             (!h.lastCompletedAt || !h.lastCompletedAt.startsWith(today))
-          // 跨周重置 weeklyCompletionCount
           const weeklyCount = h.weeklyCompletionCount ?? 0
           const weeklyStale = weeklyCount > 0 &&
             (!h.lastCompletedAt || new Date(h.lastCompletedAt) < monday)
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const legacy = h as any
           const patched: Habit = {
             sortOrder: h.sortOrder ?? Date.now(),
             isHidden: h.isHidden ?? (h.status === 'archived'),
@@ -459,18 +495,19 @@ export const useHabitStore = create<HabitStore>()(
             timerStartedAt: h.timerStartedAt ?? null,
             actualMinutes: h.actualMinutes ?? 0,
             weeklyCompletionCount: 0,
-            parentId: null,
-            childIds: [],
-            nestingLevel: 0,
             ...h,
+            subHabits: h.subHabits ?? [],
             category: migrateCategory(h.category),
-            // migrate archived → paused + hidden; reset stale completed_today → active
-            status: h.status === 'archived' ? 'paused' : staleCompleted ? 'active' : h.status,
+            status: legacy.status === 'archived' ? 'paused' : staleCompleted ? 'active' : h.status,
             weeklyCompletionCount: weeklyStale ? 0 : weeklyCount,
           }
+          // 清理旧字段
+          delete (patched as any).parentId
+          delete (patched as any).childIds
+          delete (patched as any).nestingLevel
           return patched
         })
-        // New fields compat
+
         if (!state.completedHabitViewMode) state.completedHabitViewMode = 'area'
         if (!state.customHabitGroups) state.customHabitGroups = []
       },

@@ -11,6 +11,9 @@ import { useToast } from '@/components/feedback/Toast'
 import { useFeedback } from '@/components/feedback/FeedbackContext'
 import { useT } from '@/i18n'
 import { useSettingsStore } from '@/stores/settingsStore'
+import { SubTaskItem } from './SubTaskItem'
+
+const MAX_VISIBLE_SUBTASKS = 5
 
 interface TaskItemProps {
   task: Task
@@ -19,8 +22,7 @@ interface TaskItemProps {
 }
 
 export function TaskItem({ task, compact, onEdit }: TaskItemProps) {
-  const { completeTask, undoComplete, updateTask, startTask, pauseTask, deleteTask, hideTask } = useTaskStore()
-  const allTasks = useTaskStore((s) => s.tasks)
+  const { completeTask, undoComplete, updateTask, startTask, pauseTask, deleteTask, hideTask, addSubTask } = useTaskStore()
   const { character, gainXPAndOre, recordActivity, revokeXP } = useCharacterStore()
   const { addEvent, removeEvent } = useGrowthEventStore()
   const { showToast } = useToast()
@@ -34,19 +36,26 @@ export function TaskItem({ task, compact, onEdit }: TaskItemProps) {
   const [deleteConfirm, setDeleteConfirm] = useState(false)
   const [showDurationInput, setShowDurationInput] = useState(false)
   const [durationInput, setDurationInput] = useState('')
+  const [subTasksExpanded, setSubTasksExpanded] = useState(true)
+  const [subTaskInput, setSubTaskInput] = useState('')
+  const [showSubTaskInput, setShowSubTaskInput] = useState(false)
+  const subTaskInputRef = useRef<HTMLInputElement>(null)
   const confirmTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const deleteConfirmTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  const [expanded, setExpanded] = useState(true)
-  const [parentCompletionPrompt, setParentCompletionPrompt] = useState<string | null>(null) // parentId when all siblings done
-
-  const children = allTasks.filter((t) => !t.deletedAt && !t.isHidden && task.childIds.includes(t.id))
 
   const isOverdueDue = isOverdue(task.dueDate) && task.status !== 'done'
   const isDoing = task.status === 'doing'
   const isDone = task.status === 'done'
 
-  // 清理确认timer
+  const subTasks = task.subTasks ?? []
+  const completedSubCount = subTasks.filter((s) => s.completed).length
+  const visibleSubTasks = subTasksExpanded ? subTasks : subTasks.slice(0, MAX_VISIBLE_SUBTASKS)
+  const hasMoreSubs = subTasks.length > MAX_VISIBLE_SUBTASKS && !subTasksExpanded
+
+  useEffect(() => {
+    if (showSubTaskInput && subTaskInputRef.current) subTaskInputRef.current.focus()
+  }, [showSubTaskInput])
+
   useEffect(() => {
     return () => {
       if (confirmTimer.current) clearTimeout(confirmTimer.current)
@@ -83,16 +92,6 @@ export function TaskItem({ task, compact, onEdit }: TaskItemProps) {
 
     const completed = completeTask(task.id)
     if (!completed) { setCompleting(false); return }
-
-    // 子任务不获得 XP/矿石，但检查是否全部完成
-    if (task.parentId) {
-      setCompleting(false)
-      showToast(`✓ ${task.title}`)
-      if (completed.allSiblingsDone) {
-        setParentCompletionPrompt(task.parentId)
-      }
-      return
-    }
 
     const { xp, ore } = calculateTaskXP(completed, character.streakDays)
     updateTask(task.id, { xpReward: xp })
@@ -186,11 +185,15 @@ export function TaskItem({ task, compact, onEdit }: TaskItemProps) {
   }
 
   function handleBodyClick() {
-    if (!completing && onEdit) {
-      onEdit(task)
-    }
+    if (!completing && onEdit) onEdit(task)
   }
 
+  function handleAddSubTask() {
+    const v = subTaskInput.trim()
+    if (v) addSubTask(task.id, v)
+    setSubTaskInput('')
+    setShowSubTaskInput(false)
+  }
 
   const cardVariants = {
     initial: { opacity: 0, y: -10 },
@@ -219,7 +222,6 @@ export function TaskItem({ task, compact, onEdit }: TaskItemProps) {
     : 'var(--color-border)'
 
   return (
-    <div>
     <motion.div
       layout
       variants={cardVariants}
@@ -235,265 +237,267 @@ export function TaskItem({ task, compact, onEdit }: TaskItemProps) {
         borderRadius: 'var(--radius-md)',
         border: `1px solid ${borderColor}`,
         display: 'flex',
-        alignItems: compact ? 'center' : 'flex-start',
-        gap: 10,
+        flexDirection: 'column',
+        gap: 0,
         opacity: isDone ? 0.7 : 1,
         overflow: 'hidden',
       }}
       whileHover={{ boxShadow: 'var(--shadow-md)' }}
     >
-      {/* 展开/收起 */}
-      {children.length > 0 && !compact && (
-        <button
-          onClick={(e) => { e.stopPropagation(); setExpanded(!expanded) }}
-          style={{ width: 14, height: 14, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-dim)', fontSize: 10, padding: 0, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'transform 0.15s', transform: expanded ? 'rotate(90deg)' : 'rotate(0deg)' }}
-        >
-          ▶
-        </button>
-      )}
+      {/* ── 主行 ────────────────────────────────────────────── */}
+      <div style={{ display: 'flex', alignItems: compact ? 'center' : 'flex-start', gap: 10 }}>
+        {/* 勾选框 */}
+        <CheckButton
+          done={isDone}
+          confirming={confirmHigh}
+          onComplete={handleComplete}
+          compact={compact}
+        />
 
-      {/* 勾选框 */}
-      <CheckButton
-        done={isDone}
-        confirming={confirmHigh}
-        onComplete={handleComplete}
-        compact={compact}
-      />
-
-      {/* 主内容 */}
-      <div style={{ flex: 1, minWidth: 0 }}>
-        {/* 标题行 - 非已完成任务可点击编辑 */}
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 6,
-            cursor: !completing && onEdit ? 'pointer' : 'default',
-          }}
-          onClick={handleBodyClick}
-        >
-          <PriorityDot priority={task.priority} />
-          <span
-            style={{
-              fontSize: 14,
-              color: isDone ? 'var(--color-text-dim)' : 'var(--color-text)',
-              textDecoration: isDone ? 'line-through' : 'none',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-              flex: 1,
-            }}
-          >
-            {task.title}
-          </span>
-        </div>
-
-        {!compact && (
+        {/* 主内容 */}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          {/* 标题行 */}
           <div
             style={{
               display: 'flex',
               alignItems: 'center',
-              gap: 12,
-              marginTop: 4,
-              fontSize: 12,
-              color: 'var(--color-text-dim)',
+              gap: 6,
+              cursor: !completing && onEdit ? 'pointer' : 'default',
             }}
+            onClick={handleBodyClick}
           >
-            {task.dueDate && (
-              <span style={{ color: isOverdueDue ? 'var(--color-danger)' : 'inherit' }}>
-                {isOverdueDue ? t.task_overdue : formatRelativeDate(task.dueDate, lang)}
-              </span>
-            )}
-            {task.childIds.length > 0 && <span>{t.task_subtasks(task.childIds.length)}</span>}
-            {task.estimatedMinutes && !isDoing && (
-              <span style={{ opacity: 0.6 }}>{t.task_estMin(task.estimatedMinutes)}</span>
-            )}
-            {isDoing && (
-              <span style={{ color: 'var(--color-accent)', fontSize: 11 }}>
-                {t.task_doing}
-              </span>
-            )}
-            {isDone && task.xpReward > 0 && (
-              <span style={{ color: 'var(--color-success)', fontFamily: 'var(--font-num)', fontWeight: 600 }}>
-                +{task.xpReward} XP
-              </span>
-            )}
-            {isDone && task.actualMinutes > 0 && (
-              <span style={{ fontFamily: 'var(--font-num)' }}>
-                {t.task_actualMin(task.actualMinutes)}
+            <PriorityDot priority={task.priority} />
+            <span
+              style={{
+                fontSize: 14,
+                color: isDone ? 'var(--color-text-dim)' : 'var(--color-text)',
+                textDecoration: isDone ? 'line-through' : 'none',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                flex: 1,
+              }}
+            >
+              {task.title}
+            </span>
+            {/* 子任务进度徽章 */}
+            {subTasks.length > 0 && (
+              <span
+                style={{
+                  fontSize: 11,
+                  color: 'var(--color-text-dim)',
+                  fontFamily: 'var(--font-num)',
+                  flexShrink: 0,
+                }}
+              >
+                {completedSubCount}/{subTasks.length}
               </span>
             )}
           </div>
-        )}
 
-        {/* 已完成任务操作行 */}
-        {isDone && !compact && (
-          <div style={{ marginTop: 6 }}>
-            {showDurationInput && (
-              <div
-                style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}
-                onClick={(e) => e.stopPropagation()}
-              >
-                <input
-                  type="number"
-                  min={1}
-                  autoFocus
-                  value={durationInput}
-                  onChange={(e) => setDurationInput(e.target.value)}
-                  placeholder={t.task_setActualDuration}
-                  onKeyDown={(e) => { if (e.key === 'Enter') handleSaveDuration(); if (e.key === 'Escape') setShowDurationInput(false) }}
-                  style={{
-                    width: 160,
-                    height: 24,
-                    padding: '0 8px',
-                    fontSize: 11,
-                    borderRadius: 'var(--radius-sm)',
-                    border: '1px solid var(--color-accent)',
-                    background: 'var(--color-bg)',
-                    color: 'var(--color-text)',
-                    outline: 'none',
-                  }}
-                />
-                <button
-                  onClick={handleSaveDuration}
-                  style={{ fontSize: 11, padding: '2px 8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-success)', background: 'transparent', color: 'var(--color-success)', cursor: 'pointer' }}
+          {!compact && (
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 12,
+                marginTop: 4,
+                fontSize: 12,
+                color: 'var(--color-text-dim)',
+              }}
+            >
+              {task.dueDate && (
+                <span style={{ color: isOverdueDue ? 'var(--color-danger)' : 'inherit' }}>
+                  {isOverdueDue ? t.task_overdue : formatRelativeDate(task.dueDate, lang)}
+                </span>
+              )}
+              {isDoing && (
+                <span style={{ color: 'var(--color-accent)', fontSize: 11 }}>
+                  {t.task_doing}
+                </span>
+              )}
+              {isDone && task.xpReward > 0 && (
+                <span style={{ color: 'var(--color-success)', fontFamily: 'var(--font-num)', fontWeight: 600 }}>
+                  +{task.xpReward} XP
+                </span>
+              )}
+              {isDone && task.actualMinutes > 0 && (
+                <span style={{ fontFamily: 'var(--font-num)' }}>
+                  {t.task_actualMin(task.actualMinutes)}
+                </span>
+              )}
+            </div>
+          )}
+
+          {/* 已完成操作行 */}
+          {isDone && !compact && (
+            <div style={{ marginTop: 6 }}>
+              {showDurationInput && (
+                <div
+                  style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}
+                  onClick={(e) => e.stopPropagation()}
                 >
-                  ✓
-                </button>
-                <button
-                  onClick={(e) => { e.stopPropagation(); setShowDurationInput(false) }}
-                  style={{ fontSize: 11, padding: '2px 8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', background: 'transparent', color: 'var(--color-text-dim)', cursor: 'pointer' }}
-                >
-                  ✕
-                </button>
-              </div>
-            )}
+                  <input
+                    type="number"
+                    min={1}
+                    autoFocus
+                    value={durationInput}
+                    onChange={(e) => setDurationInput(e.target.value)}
+                    placeholder={t.task_setActualDuration}
+                    onKeyDown={(e) => { if (e.key === 'Enter') handleSaveDuration(); if (e.key === 'Escape') setShowDurationInput(false) }}
+                    style={{
+                      width: 160, height: 24, padding: '0 8px', fontSize: 11,
+                      borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-accent)',
+                      background: 'var(--color-bg)', color: 'var(--color-text)', outline: 'none',
+                    }}
+                  />
+                  <button onClick={handleSaveDuration} style={smallBtnStyle('var(--color-success)')}>✓</button>
+                  <button onClick={(e) => { e.stopPropagation(); setShowDurationInput(false) }} style={smallBtnStyle()}>✕</button>
+                </div>
+              )}
+              <AnimatePresence>
+                {hovered && (
+                  <motion.div
+                    initial={{ opacity: 0, x: -4 }} animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -4 }} transition={{ duration: 0.15 }}
+                    style={{ display: 'flex', gap: 4 }}
+                  >
+                    {!showDurationInput && (
+                      <ActionButton onClick={(e) => { e.stopPropagation(); setDurationInput(task.actualMinutes > 0 ? String(task.actualMinutes) : ''); setShowDurationInput(true) }} color="var(--color-text-dim)">
+                        ⏱
+                      </ActionButton>
+                    )}
+                    <ActionButton onClick={handleInscribe} color="var(--color-xp)">⭐ {t.task_inscribe}</ActionButton>
+                    <ActionButton onClick={handleHide} color="var(--color-text-dim)">{t.task_hide}</ActionButton>
+                    <ActionButton
+                      onClick={handleDeleteDone}
+                      color={deleteConfirm ? 'var(--color-danger)' : 'var(--color-text-dim)'}
+                      borderColor={deleteConfirm ? 'var(--color-danger)' : undefined}
+                    >
+                      {deleteConfirm ? t.task_confirmDelete(task.xpReward) : t.task_delete}
+                    </ActionButton>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          )}
+
+          {/* 未完成操作行 */}
+          {!isDone && !compact && (
             <AnimatePresence>
               {hovered && (
                 <motion.div
-                  initial={{ opacity: 0, x: -4 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -4 }}
-                  transition={{ duration: 0.15 }}
-                  style={{ display: 'flex', gap: 4 }}
+                  initial={{ opacity: 0, x: -4 }} animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -4 }} transition={{ duration: 0.15 }}
+                  style={{ display: 'flex', gap: 4, marginTop: 6 }}
                 >
-                  {!showDurationInput && (
-                    <ActionButton onClick={(e) => { e.stopPropagation(); setDurationInput(task.actualMinutes > 0 ? String(task.actualMinutes) : ''); setShowDurationInput(true) }} color="var(--color-text-dim)">
-                      ⏱
-                    </ActionButton>
-                  )}
-                  <ActionButton onClick={handleInscribe} color="var(--color-xp)">
-                    ⭐ {t.task_inscribe}
-                  </ActionButton>
-                  <ActionButton onClick={handleHide} color="var(--color-text-dim)">
-                    {t.task_hide}
-                  </ActionButton>
+                  <ActionButton onClick={handleInscribe} color="var(--color-xp)">⭐ {t.task_inscribe}</ActionButton>
+                  <ActionButton onClick={handleHide} color="var(--color-text-dim)">{t.task_hide}</ActionButton>
                   <ActionButton
                     onClick={handleDeleteDone}
                     color={deleteConfirm ? 'var(--color-danger)' : 'var(--color-text-dim)'}
                     borderColor={deleteConfirm ? 'var(--color-danger)' : undefined}
                   >
-                    {deleteConfirm ? t.task_confirmDelete(task.xpReward) : t.task_delete}
+                    {deleteConfirm ? t.task_confirmDeleteNoXP : t.task_delete}
                   </ActionButton>
                 </motion.div>
               )}
             </AnimatePresence>
-          </div>
+          )}
+        </div>
+
+        {compact && task.dueDate && (
+          <span style={{ fontSize: 11, color: isOverdueDue ? 'var(--color-danger)' : 'var(--color-text-dim)', whiteSpace: 'nowrap', flexShrink: 0 }}>
+            {formatRelativeDate(task.dueDate)}
+          </span>
         )}
 
-        {/* 未完成任务操作行（hover 时显示） */}
-        {!isDone && !compact && (
-          <AnimatePresence>
-            {hovered && (
-              <motion.div
-                initial={{ opacity: 0, x: -4 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -4 }}
-                transition={{ duration: 0.15 }}
-                style={{ display: 'flex', gap: 4, marginTop: 6 }}
-              >
-                <ActionButton onClick={handleInscribe} color="var(--color-xp)">
-                  ⭐ {t.task_inscribe}
-                </ActionButton>
-                <ActionButton onClick={handleHide} color="var(--color-text-dim)">
-                  {t.task_hide}
-                </ActionButton>
-                <ActionButton
-                  onClick={handleDeleteDone}
-                  color={deleteConfirm ? 'var(--color-danger)' : 'var(--color-text-dim)'}
-                  borderColor={deleteConfirm ? 'var(--color-danger)' : undefined}
-                >
-                  {deleteConfirm ? t.task_confirmDeleteNoXP : t.task_delete}
-                </ActionButton>
-              </motion.div>
-            )}
-          </AnimatePresence>
+        {/* 进行中/开始按钮 */}
+        {!isDone && (
+          <button
+            onClick={handleStatusToggle}
+            title={isDoing ? t.task_pauseDoing : t.task_startDoing}
+            style={{
+              width: 26, height: 26, borderRadius: 'var(--radius-sm)',
+              background: isDoing ? 'color-mix(in srgb, var(--color-accent) 15%, transparent)' : 'transparent',
+              border: `1px solid ${isDoing ? 'var(--color-accent)' : 'var(--color-border)'}`,
+              color: isDoing ? 'var(--color-accent)' : 'var(--color-text-dim)',
+              cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              flexShrink: 0, transition: 'all 0.15s',
+            }}
+          >
+            {isDoing ? <PauseIcon /> : <PlayIcon />}
+          </button>
         )}
       </div>
 
-      {compact && task.dueDate && (
-        <span
-          style={{
-            fontSize: 11,
-            color: isOverdueDue ? 'var(--color-danger)' : 'var(--color-text-dim)',
-            whiteSpace: 'nowrap',
-            flexShrink: 0,
-          }}
-        >
-          {formatRelativeDate(task.dueDate)}
-        </span>
+      {/* ── 子任务 checklist（非 compact 模式） ─────────────── */}
+      {!compact && subTasks.length > 0 && (
+        <div style={{ marginTop: 8, paddingLeft: 28, display: 'flex', flexDirection: 'column', gap: 1 }}>
+          {visibleSubTasks.map((sub) => (
+            <SubTaskItem key={sub.id} subTask={sub} taskId={task.id} depth={0} />
+          ))}
+          {hasMoreSubs && (
+            <button
+              onClick={() => setSubTasksExpanded(true)}
+              style={{ fontSize: 11, color: 'var(--color-accent)', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 0', textAlign: 'left' }}
+            >
+              展开更多 {subTasks.length - MAX_VISIBLE_SUBTASKS} 项…
+            </button>
+          )}
+        </div>
       )}
 
-      {/* 进行中/开始按钮（非已完成） */}
-      {!isDone && (
-        <button
-          onClick={handleStatusToggle}
-          title={isDoing ? t.task_pauseDoing : t.task_startDoing}
-          style={{
-            width: 26,
-            height: 26,
-            borderRadius: 'var(--radius-sm)',
-            background: isDoing ? 'color-mix(in srgb, var(--color-accent) 15%, transparent)' : 'transparent',
-            border: `1px solid ${isDoing ? 'var(--color-accent)' : 'var(--color-border)'}`,
-            color: isDoing ? 'var(--color-accent)' : 'var(--color-text-dim)',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            flexShrink: 0,
-            transition: 'all 0.15s',
-          }}
-        >
-          {isDoing ? <PauseIcon /> : <PlayIcon />}
-        </button>
+      {/* ── 添加步骤入口（非 compact、非 done） ──────────── */}
+      {!compact && !isDone && (
+        <div style={{ marginTop: showSubTaskInput || subTasks.length > 0 ? 6 : 0, paddingLeft: 28 }}>
+          {showSubTaskInput ? (
+            <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+              <input
+                ref={subTaskInputRef}
+                value={subTaskInput}
+                onChange={(e) => setSubTaskInput(e.target.value)}
+                placeholder="添加步骤…"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleAddSubTask()
+                  if (e.key === 'Escape') { setSubTaskInput(''); setShowSubTaskInput(false) }
+                }}
+                onBlur={() => { if (!subTaskInput.trim()) setShowSubTaskInput(false) }}
+                style={{
+                  flex: 1, fontSize: 12, height: 24, padding: '0 8px',
+                  borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-accent)',
+                  background: 'var(--color-bg)', color: 'var(--color-text)', outline: 'none',
+                }}
+              />
+              <button onClick={handleAddSubTask} style={smallBtnStyle('var(--color-success)')}>✓</button>
+              <button onClick={() => { setSubTaskInput(''); setShowSubTaskInput(false) }} style={smallBtnStyle()}>✕</button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setShowSubTaskInput(true)}
+              style={{
+                fontSize: 11, color: 'var(--color-text-dim)', background: 'none', border: 'none',
+                cursor: 'pointer', padding: '2px 0', opacity: hovered ? 1 : 0.4, transition: 'opacity 0.15s',
+              }}
+            >
+              + 添加步骤
+            </button>
+          )}
+        </div>
       )}
 
       {/* 高难度确认提示 */}
       <AnimatePresence>
         {confirmHigh && (
-          <div
-            style={{
-              position: 'absolute',
-              right: 8,
-              top: '50%',
-              transform: 'translateY(-50%)',
-              zIndex: 10,
-            }}
-          >
+          <div style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', zIndex: 10 }}>
             <motion.div
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.9 }}
               style={{
-                background: 'var(--color-surface)',
-                border: '1px solid var(--color-warning)',
-                borderRadius: 'var(--radius-md)',
-                padding: '4px 10px',
-                fontSize: 11,
-                color: 'var(--color-warning)',
-                fontWeight: 500,
-                whiteSpace: 'nowrap',
-                boxShadow: 'var(--shadow-md)',
+                background: 'var(--color-surface)', border: '1px solid var(--color-warning)',
+                borderRadius: 'var(--radius-md)', padding: '4px 10px', fontSize: 11,
+                color: 'var(--color-warning)', fontWeight: 500, whiteSpace: 'nowrap', boxShadow: 'var(--shadow-md)',
               }}
             >
               {t.task_confirmComplete}
@@ -502,75 +506,10 @@ export function TaskItem({ task, compact, onEdit }: TaskItemProps) {
         )}
       </AnimatePresence>
     </motion.div>
-
-    {/* 子任务列表 */}
-    {expanded && children.length > 0 && (
-      <div style={{ paddingLeft: compact ? 16 : 20, marginTop: compact ? 2 : 4, display: 'flex', flexDirection: 'column', gap: compact ? 2 : 4, borderLeft: '2px solid var(--color-border)', marginLeft: 8 }}>
-        <AnimatePresence mode="popLayout">
-          {children.map((child) => (
-            <TaskItem key={child.id} task={child} compact={compact} onEdit={onEdit} />
-          ))}
-        </AnimatePresence>
-      </div>
-    )}
-
-    {/* 全部子任务完成提示 */}
-    <AnimatePresence>
-      {parentCompletionPrompt && (() => {
-        const parent = allTasks.find((t) => t.id === parentCompletionPrompt)
-        if (!parent) return null
-        return (
-          <motion.div
-            key="parent-prompt"
-            initial={{ opacity: 0, y: 4, scale: 0.97 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.97 }}
-            style={{
-              marginTop: 6, padding: '10px 12px',
-              background: 'color-mix(in srgb, var(--color-success) 8%, var(--color-surface))',
-              border: '1px solid color-mix(in srgb, var(--color-success) 30%, transparent)',
-              borderRadius: 'var(--radius-md)',
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
-            }}
-          >
-            <span style={{ fontSize: 12, color: 'var(--color-text)', flex: 1 }}>
-              {t.task_allChildrenDone(parent.title)}
-            </span>
-            <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
-              <button
-                onClick={() => { setParentCompletionPrompt(null) }}
-                style={{ fontSize: 11, padding: '3px 8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', background: 'transparent', color: 'var(--color-text-dim)', cursor: 'pointer' }}
-              >
-                {t.task_allChildrenDoneLater}
-              </button>
-              <button
-                onClick={() => {
-                  setParentCompletionPrompt(null)
-                  // 触发父任务完成（由父任务自己的 TaskItem 处理 XP，这里用外部调用）
-                  const parentTask = allTasks.find((t) => t.id === parentCompletionPrompt)
-                  if (parentTask && onEdit) onEdit(parentTask)
-                  // 直接调用 completeTask 并计算XP
-                  const completed = completeTask(parentCompletionPrompt!)
-                  if (completed && !completed.parentId) {
-                    const { xp, ore } = calculateTaskXP(completed, character.streakDays)
-                    updateTask(parentCompletionPrompt!, { xpReward: xp })
-                    gainXPAndOre(xp, ore)
-                    recordActivity()
-                  }
-                  showToast(`✓ ${parent.title}`)
-                }}
-                style={{ fontSize: 11, padding: '3px 8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-success)', background: 'color-mix(in srgb, var(--color-success) 15%, transparent)', color: 'var(--color-success)', cursor: 'pointer', fontWeight: 600 }}
-              >
-                {t.task_allChildrenDoneConfirm}
-              </button>
-            </div>
-          </motion.div>
-        )
-      })()}
-    </AnimatePresence>
-    </div>
   )
 }
+
+// ── 小组件 ──────────────────────────────────────────────────────
 
 interface CheckButtonProps {
   done: boolean
@@ -588,21 +527,10 @@ function CheckButton({ done, confirming, onComplete, compact }: CheckButtonProps
         width: compact ? 16 : 18,
         height: compact ? 16 : 18,
         borderRadius: 'var(--radius-sm)',
-        border: `2px solid ${
-          done ? 'var(--color-success)' : confirming ? 'var(--color-warning)' : 'var(--color-border)'
-        }`,
-        background: done
-          ? 'var(--color-success)'
-          : confirming
-          ? 'color-mix(in srgb, var(--color-warning) 15%, transparent)'
-          : 'transparent',
-        cursor: 'pointer',
-        flexShrink: 0,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        transition: 'border-color 0.15s, background 0.15s',
-        padding: 0,
+        border: `2px solid ${done ? 'var(--color-success)' : confirming ? 'var(--color-warning)' : 'var(--color-border)'}`,
+        background: done ? 'var(--color-success)' : confirming ? 'color-mix(in srgb, var(--color-warning) 15%, transparent)' : 'transparent',
+        cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+        transition: 'border-color 0.15s, background 0.15s', padding: 0,
       }}
     >
       {done && (
@@ -629,20 +557,23 @@ function ActionButton({
     <button
       onClick={onClick}
       style={{
-        fontSize: 11,
-        padding: '2px 8px',
-        borderRadius: 'var(--radius-sm)',
+        fontSize: 11, padding: '2px 8px', borderRadius: 'var(--radius-sm)',
         border: `1px solid ${borderColor ?? 'var(--color-border)'}`,
-        background: 'transparent',
-        color: color ?? 'var(--color-text-dim)',
-        cursor: 'pointer',
-        transition: 'all 0.15s',
-        whiteSpace: 'nowrap',
+        background: 'transparent', color: color ?? 'var(--color-text-dim)',
+        cursor: 'pointer', transition: 'all 0.15s', whiteSpace: 'nowrap',
       }}
     >
       {children}
     </button>
   )
+}
+
+function smallBtnStyle(color?: string): React.CSSProperties {
+  return {
+    fontSize: 11, padding: '2px 8px', borderRadius: 'var(--radius-sm)',
+    border: `1px solid ${color ?? 'var(--color-border)'}`,
+    background: 'transparent', color: color ?? 'var(--color-text-dim)', cursor: 'pointer',
+  }
 }
 
 function PlayIcon() {

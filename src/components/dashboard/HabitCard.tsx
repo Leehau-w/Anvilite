@@ -29,7 +29,7 @@ export function HabitCard({ onEdit }: { onEdit?: (habit: Habit) => void }) {
 
   // Completed today habits (for the collapsible group at bottom of dashboard)
   const completedTodayHabits = habits.filter(
-    (h) => !h.deletedAt && !h.isHidden && !h.parentId && h.status === 'completed_today'
+    (h) => !h.deletedAt && !h.isHidden && h.status === 'completed_today'
   )
 
   const [localHabits, setLocalHabits] = useState<Habit[]>(todayHabits)
@@ -127,7 +127,7 @@ export function HabitCard({ onEdit }: { onEdit?: (habit: Habit) => void }) {
         >
           <AnimatePresence mode="popLayout">
             {localHabits.map((habit) => {
-              const children = habits.filter((c) => !c.deletedAt && (habit.childIds ?? []).includes(c.id))
+              const children: typeof habits = []  // v0.3: 子习惯已内嵌为 subHabits，此处不再从 habits[] 查找
               return (
                 <Reorder.Item
                   key={habit.id}

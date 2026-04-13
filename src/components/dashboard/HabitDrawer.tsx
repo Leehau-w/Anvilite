@@ -43,8 +43,8 @@ const TODAY = new Date().toISOString().split('T')[0]
 const REPEAT_OPTIONS: UIRepeatType[] = ['daily', 'weekdays', 'weekly', 'biweekly', 'monthly', 'custom']
 
 export function HabitDrawer({ open, onClose, editHabit, defaultCategory }: HabitDrawerProps) {
-  const { addHabit, updateHabit, deleteHabit } = useHabitStore()
-  const allHabits = useHabitStore((s) => s.habits)
+  const { addHabit, updateHabit, addSubHabit, removeSubHabit } = useHabitStore()
+  const currentHabit = useHabitStore((s) => editHabit ? s.habits.find((h) => h.id === editHabit.id) : null)
   const { addEvent } = useGrowthEventStore()
   const { showToast } = useToast()
   const getAreaCategories = useAreaStore((s) => s.getAreaCategories)
@@ -388,18 +388,18 @@ export function HabitDrawer({ open, onClose, editHabit, defaultCategory }: Habit
           </button>
         )}
 
-        {/* 子项管理（编辑时 + 层级 < 2） */}
-        {editHabit && (editHabit.nestingLevel ?? 0) < 2 && (() => {
-          const children = allHabits.filter((c) => !c.deletedAt && c.parentId === editHabit.id)
+        {/* 子步骤管理（编辑模式，内嵌 subHabits） */}
+        {editHabit && (() => {
+          const subHabits = currentHabit?.subHabits ?? editHabit.subHabits ?? []
           return (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               <label style={{ fontSize: 12, color: 'var(--color-text-dim)' }}>{t.subtask_add}</label>
-              {children.length > 0 && (
+              {subHabits.length > 0 && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                   <AnimatePresence>
-                    {children.map((child) => (
+                    {subHabits.map((sub) => (
                       <motion.div
-                        key={child.id}
+                        key={sub.id}
                         initial={{ opacity: 0, y: -8 }}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, x: 40 }}
@@ -409,10 +409,21 @@ export function HabitDrawer({ open, onClose, editHabit, defaultCategory }: Habit
                           border: '1px solid var(--color-border)', background: 'var(--color-bg)', fontSize: 13,
                         }}
                       >
-                        <span style={{ color: 'var(--color-text)' }}>{child.title}</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <input
+                            type="checkbox"
+                            checked={sub.completed}
+                            onChange={() => undefined}
+                            style={{ accentColor: 'var(--color-accent)', cursor: 'pointer' }}
+                            readOnly
+                          />
+                          <span style={{ color: sub.completed ? 'var(--color-text-dim)' : 'var(--color-text)', textDecoration: sub.completed ? 'line-through' : 'none' }}>
+                            {sub.title}
+                          </span>
+                        </div>
                         <button
                           type="button"
-                          onClick={() => deleteHabit(child.id)}
+                          onClick={() => removeSubHabit(editHabit.id, sub.id)}
                           style={{ background: 'none', border: 'none', color: 'var(--color-text-dim)', cursor: 'pointer', fontSize: 12, padding: '0 4px' }}
                         >
                           ✕
@@ -430,24 +441,7 @@ export function HabitDrawer({ open, onClose, editHabit, defaultCategory }: Habit
                     if (e.key === 'Enter') {
                       e.preventDefault()
                       if (!subHabitInput.trim()) return
-                      addHabit({
-                        parentId: editHabit.id,
-                        title: subHabitInput.trim(),
-                        category: editHabit.category,
-                        difficulty: editHabit.difficulty,
-                        repeatType: editHabit.repeatType,
-                        customIntervalDays: editHabit.customIntervalDays,
-                        weeklyDays: editHabit.weeklyDays,
-                        weeklyMode: editHabit.weeklyMode,
-                        weeklyFlexibleCount: editHabit.weeklyFlexibleCount,
-                        monthlyDays: editHabit.monthlyDays,
-                        targetCount: editHabit.targetCount,
-                        startDate: editHabit.startDate,
-                        endDate: editHabit.endDate,
-                        reminderTime: editHabit.reminderTime,
-                        estimatedMinutes: editHabit.estimatedMinutes,
-                        description: '',
-                      })
+                      addSubHabit(editHabit.id, subHabitInput.trim())
                       setSubHabitInput('')
                     }
                   }}
@@ -462,24 +456,7 @@ export function HabitDrawer({ open, onClose, editHabit, defaultCategory }: Habit
                   type="button"
                   onClick={() => {
                     if (!subHabitInput.trim()) return
-                    addHabit({
-                      parentId: editHabit.id,
-                      title: subHabitInput.trim(),
-                      category: editHabit.category,
-                      difficulty: editHabit.difficulty,
-                      repeatType: editHabit.repeatType,
-                      customIntervalDays: editHabit.customIntervalDays,
-                      weeklyDays: editHabit.weeklyDays,
-                      weeklyMode: editHabit.weeklyMode,
-                      weeklyFlexibleCount: editHabit.weeklyFlexibleCount,
-                      monthlyDays: editHabit.monthlyDays,
-                      targetCount: editHabit.targetCount,
-                      startDate: editHabit.startDate,
-                      endDate: editHabit.endDate,
-                      reminderTime: editHabit.reminderTime,
-                      estimatedMinutes: editHabit.estimatedMinutes,
-                      description: '',
-                    })
+                    addSubHabit(editHabit.id, subHabitInput.trim())
                     setSubHabitInput('')
                   }}
                   disabled={!subHabitInput.trim()}
