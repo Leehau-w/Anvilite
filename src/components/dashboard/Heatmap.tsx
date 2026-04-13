@@ -27,6 +27,17 @@ const HEAT_COLORS = [
   'var(--color-accent)',
 ]
 
+/** Map `${dateStr}-${slotIdx}` → XP for that slot (0=凌晨,1=上午,2=下午,3=晚上) */
+type SlotMap = Map<string, number>
+
+/** Classify hour (0-23) into time slot index 0-3 */
+function hourToSlot(hour: number): 0 | 1 | 2 | 3 {
+  if (hour >= 1 && hour < 6)   return 0  // 凌晨 01-05
+  if (hour >= 6 && hour < 12)  return 1  // 上午 06-11
+  if (hour >= 12 && hour < 18) return 2  // 下午 12-17
+  return 3                                // 晚上 18-00
+}
+
 export function Heatmap() {
   const [mode, setMode] = useState<HeatmapMode>('month')
   const { events } = useGrowthEventStore()
@@ -52,6 +63,21 @@ export function Heatmap() {
     return map
   }, [events])
 
+  // 按天+时段聚合（用于周视图）
+  const slotMap = useMemo<SlotMap>(() => {
+    const map = new Map<string, number>()
+    events.forEach((e) => {
+      const xp = e.details.xpGained ?? 0
+      if (!xp) return
+      const date = e.timestamp.split('T')[0]
+      const hour = new Date(e.timestamp).getHours()
+      const slot = hourToSlot(hour)
+      const key = `${date}-${slot}`
+      map.set(key, (map.get(key) ?? 0) + xp)
+    })
+    return map
+  }, [events])
+
   if (mode === 'month') {
     return (
       <div>
@@ -64,7 +90,7 @@ export function Heatmap() {
   return (
     <div>
       <TabSwitcher mode={mode} onMode={setMode} />
-      <WeekHeatmap dayMap={dayMap} cellSize={CELL} gap={GAP} />
+      <WeekHeatmap slotMap={slotMap} cellSize={CELL} gap={GAP} />
     </div>
   )
 }
@@ -128,65 +154,64 @@ function MonthHeatmap({ dayMap, cellSize, gap }: { dayMap: Map<string, DayData>;
 
   return (
     <div>
-      <div style={{ display: 'flex', gap }}>
-        {/* 行标签（周一~周日） */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap, marginRight: 4 }}>
-          {DOW_LABELS.map((l) => (
-            <div
-              key={l}
-              style={{
-                width: 12,
-                height: cellSize,
-                fontSize: 10,
-                color: 'var(--color-text-dim)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              {l}
-            </div>
-          ))}
-        </div>
+      {/* 列标题：周一~周日（7 列） */}
+      <div style={{ display: 'flex', gap, marginBottom: gap, marginLeft: 0 }}>
+        {DOW_LABELS.map((l) => (
+          <div
+            key={l}
+            style={{
+              width: cellSize,
+              height: 12,
+              fontSize: 10,
+              color: 'var(--color-text-dim)',
+              textAlign: 'center',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            {l}
+          </div>
+        ))}
+      </div>
 
-        {/* 每列=每周 */}
-        <div style={{ display: 'flex', gap }}>
-          {weeks.map((week, wi) => (
-            <div key={wi} style={{ display: 'flex', flexDirection: 'column', gap }}>
-              {week.map((dateStr, di) => {
-                if (!dateStr) {
-                  return (
-                    <div
-                      key={di}
-                      style={{ width: cellSize, height: cellSize, borderRadius: 'var(--radius-sm)' }}
-                    />
-                  )
-                }
-                const data = dayMap.get(dateStr)
-                const level = getHeatLevel(data?.xp ?? 0, maxXP)
-                const isToday = dateStr === todayStr
-
+      {/* 每行 = 一周，7 格 */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap }}>
+        {weeks.map((week, wi) => (
+          <div key={wi} style={{ display: 'flex', gap }}>
+            {week.map((dateStr, di) => {
+              if (!dateStr) {
                 return (
-                  <HeatCell
-                    key={dateStr}
-                    date={dateStr}
-                    xp={data?.xp ?? 0}
-                    count={data?.count ?? 0}
-                    level={level}
-                    isToday={isToday}
-                    size={cellSize}
+                  <div
+                    key={di}
+                    style={{ width: cellSize, height: cellSize, borderRadius: 'var(--radius-sm)' }}
                   />
                 )
-              })}
-            </div>
-          ))}
-        </div>
+              }
+              const data = dayMap.get(dateStr)
+              const level = getHeatLevel(data?.xp ?? 0, maxXP)
+              const isToday = dateStr === todayStr
+
+              return (
+                <HeatCell
+                  key={dateStr}
+                  date={dateStr}
+                  xp={data?.xp ?? 0}
+                  count={data?.count ?? 0}
+                  level={level}
+                  isToday={isToday}
+                  size={cellSize}
+                />
+              )
+            })}
+          </div>
+        ))}
       </div>
     </div>
   )
 }
 
-function WeekHeatmap({ dayMap, cellSize, gap }: { dayMap: Map<string, DayData>; cellSize: number; gap: number }) {
+function WeekHeatmap({ slotMap, cellSize, gap }: { slotMap: SlotMap; cellSize: number; gap: number }) {
   const t = useT()
   const today = new Date()
   // 找本周周一
@@ -201,26 +226,27 @@ function WeekHeatmap({ dayMap, cellSize, gap }: { dayMap: Map<string, DayData>; 
     days.push(d.toISOString().split('T')[0])
   }
 
-  const SLOTS = t.heatmap_slots.map((label, idx) => {
-    const hours = [{ startH: 1, endH: 6 }, { startH: 6, endH: 12 }, { startH: 12, endH: 18 }, { startH: 18, endH: 24 }]
-    return { label, ...hours[idx] }
-  })
-
-  // 按时段聚合（需要 hourly events，简化为按天均分）
+  const SLOT_LABELS = t.heatmap_slots  // ['凌晨','上午','下午','晚上']
   const todayStr = today.toISOString().split('T')[0]
   const DOW_LABELS = t.heatmap_dow
 
-  const maxXP = Math.max(...days.map((d) => dayMap.get(d)?.xp ?? 0), 1)
+  // 计算本周内单个时段最大 XP，用于颜色归一化
+  const maxSlotXP = Math.max(
+    1,
+    ...days.flatMap((d) =>
+      SLOT_LABELS.map((_, si) => slotMap.get(`${d}-${si}`) ?? 0)
+    )
+  )
 
   return (
     <div>
       <div style={{ display: 'flex', gap }}>
-        {/* 时段标签：顶部加一个与日期行等高的占位，gap 改为 8 与格子行对齐 */}
+        {/* 时段标签列：顶部占位对齐日期行 */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginRight: 4 }}>
           <div style={{ height: cellSize }} />
-          {SLOTS.map((s) => (
+          {SLOT_LABELS.map((label) => (
             <div
-              key={s.label}
+              key={label}
               style={{
                 width: 24,
                 height: cellSize,
@@ -230,14 +256,14 @@ function WeekHeatmap({ dayMap, cellSize, gap }: { dayMap: Map<string, DayData>; 
                 alignItems: 'center',
               }}
             >
-              {s.label}
+              {label}
             </div>
           ))}
         </div>
 
-        {/* 每列=每天 */}
+        {/* 每列 = 每天 */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {/* 日期标签 */}
+          {/* 日期标签行 */}
           <div style={{ display: 'flex', gap }}>
             {days.map((d, i) => (
               <div
@@ -258,20 +284,17 @@ function WeekHeatmap({ dayMap, cellSize, gap }: { dayMap: Map<string, DayData>; 
             ))}
           </div>
 
-          {/* 时段格子 */}
-          {SLOTS.map((slot) => (
-            <div key={slot.label} style={{ display: 'flex', gap }}>
+          {/* 每行 = 一个时段 */}
+          {SLOT_LABELS.map((slotLabel, si) => (
+            <div key={slotLabel} style={{ display: 'flex', gap }}>
               {days.map((dateStr) => {
-                const data = dayMap.get(dateStr)
-                // 简化：每天XP按4个时段均分
-                const slotXP = Math.floor((data?.xp ?? 0) / 4)
-                const level = getHeatLevel(slotXP, Math.floor(maxXP / 4))
-
+                const xp = slotMap.get(`${dateStr}-${si}`) ?? 0
+                const level = getHeatLevel(xp, maxSlotXP)
                 return (
                   <HeatCell
-                    key={`${dateStr}-${slot.label}`}
-                    date={`${dateStr} ${slot.label}`}
-                    xp={slotXP}
+                    key={`${dateStr}-${si}`}
+                    date={`${dateStr} ${slotLabel}`}
+                    xp={xp}
                     count={0}
                     level={level}
                     isToday={dateStr === todayStr}

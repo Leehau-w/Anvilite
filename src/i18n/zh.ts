@@ -778,6 +778,35 @@ export const zh = {
   storage_exportNow: '立即导出',
   storage_used: '已使用',
   storage_total: '共',
+
+  // Common actions
+  common_edit: '编辑',
+  common_delete: '删除',
+  common_cancel: '取消',
+  common_save: '保存',
+
+  // SOP
+  sidebar_sop: 'SOP',
+  sop_title: 'SOP',
+  sop_newFolder: '新建文件夹',
+  sop_create: '新建 SOP',
+  sop_edit: '编辑 SOP',
+  sop_type_workflow: '流程型',
+  sop_type_itemlist: '清单型',
+  sop_type_schedule: '日程型',
+  sop_type_checklist: '检查型',
+  sop_steps: '个步骤',
+  sop_emptyState: '选择一个 SOP 查看，或创建新的',
+  sop_convertToTask: '转为任务',
+  sop_copyToMine: '复制为我的 SOP',
+  sop_lastUsed: '最近转化',
+  sop_titlePlaceholder: 'SOP 标题',
+  sop_stepPlaceholder: '步骤内容',
+  sop_notePlaceholder: '备注（可选）',
+  sop_addStep: '添加步骤',
+  sop_confirmConvert: '从 SOP 创建任务',
+  sop_selectSteps: '包含以下步骤',
+  sop_viewComingSoon: '该视图类型即将推出',
 }
 
 export type Translations = typeof zh

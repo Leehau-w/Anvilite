@@ -8,6 +8,7 @@ import { TaskList } from '@/components/tasks/TaskList'
 import { MilestoneHall } from '@/components/milestone/MilestoneHall'
 import { WorldMap } from '@/components/worldmap/WorldMap'
 import { InspirationModal } from '@/components/ui/InspirationModal'
+import { SOPPage } from '@/components/sop/SOPPage'
 import { ToastProvider } from '@/components/feedback/Toast'
 import { FeedbackProvider } from '@/components/feedback/FeedbackContext'
 import ErrorBoundary from '@/components/ui/ErrorBoundary'
@@ -69,6 +70,7 @@ function App() {
                   {activeTab === 'tasks' && <TaskList />}
                   {activeTab === 'worldmap' && <WorldMap />}
                   {activeTab === 'milestone' && <MilestoneHall />}
+                  {activeTab === 'sop' && <SOPPage />}
                 </ErrorBoundary>
               </main>
             </div>

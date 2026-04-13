@@ -780,4 +780,33 @@ export const en: Translations = {
   storage_exportNow: 'Export Now',
   storage_used: 'Used',
   storage_total: 'Total',
+
+  // Common actions
+  common_edit: 'Edit',
+  common_delete: 'Delete',
+  common_cancel: 'Cancel',
+  common_save: 'Save',
+
+  // SOP
+  sidebar_sop: 'SOP',
+  sop_title: 'SOP',
+  sop_newFolder: 'New Folder',
+  sop_create: 'New SOP',
+  sop_edit: 'Edit SOP',
+  sop_type_workflow: 'Workflow',
+  sop_type_itemlist: 'Item List',
+  sop_type_schedule: 'Schedule',
+  sop_type_checklist: 'Checklist',
+  sop_steps: 'steps',
+  sop_emptyState: 'Select an SOP or create a new one',
+  sop_convertToTask: 'Convert to Task',
+  sop_copyToMine: 'Copy to My SOPs',
+  sop_lastUsed: 'Last used',
+  sop_titlePlaceholder: 'SOP title',
+  sop_stepPlaceholder: 'Step content',
+  sop_notePlaceholder: 'Note (optional)',
+  sop_addStep: 'Add step',
+  sop_confirmConvert: 'Create task from SOP',
+  sop_selectSteps: 'Include these steps',
+  sop_viewComingSoon: 'This view type is coming soon',
 }

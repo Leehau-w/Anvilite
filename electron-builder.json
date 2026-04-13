@@ -8,6 +8,12 @@
     "dist/**/*",
     "dist-electron/**/*"
   ],
+  "extraResources": [
+    {
+      "from": "build/icon.png",
+      "to": "build/icon.png"
+    }
+  ],
   "win": {
     "target": [
       {

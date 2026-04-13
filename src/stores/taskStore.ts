@@ -1,10 +1,21 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import type { Task, TaskGroup } from '@/types/task'
+import type { Task, SubTask, TaskGroup } from '@/types/task'
 import { getStoragePrefix } from './accountManager'
 import { generateId } from '@/utils/id'
 import { getTomorrowString } from '@/utils/time'
 import { migrateCategory } from '@/utils/area'
+import {
+  addNestedSubTask,
+  toggleNested,
+  removeNested,
+  editNested,
+  reorderNested,
+  makeSubTask,
+  buildSubTasksFromFlat,
+} from '@/utils/subTaskUtils'
+
+const SUBTASK_MIGRATION_KEY = 'anvilite-subtask-migration-v3'
 
 interface TaskStore {
   tasks: Task[]
@@ -14,17 +25,24 @@ interface TaskStore {
 
   addTask: (partial: Partial<Task> & { title: string }) => Task
   updateTask: (id: string, patch: Partial<Task>) => void
-  deleteTask: (id: string) => void  // soft delete
+  deleteTask: (id: string) => void
   restoreTask: (id: string) => void
   permanentlyDeleteTask: (id: string) => void
 
-  hideTask: (id: string) => void  // 隐藏已完成任务
+  hideTask: (id: string) => void
 
-  completeTask: (id: string) => (Task & { allSiblingsDone: boolean }) | null
+  completeTask: (id: string) => Task | null
   undoComplete: (id: string) => void
 
   startTask: (id: string) => void
   pauseTask: (id: string) => void
+
+  // ── 子任务 ───────────────────────────────────────────────────
+  addSubTask: (taskId: string, title: string, parentSubTaskId?: string) => void
+  toggleSubTask: (taskId: string, subTaskId: string) => void
+  removeSubTask: (taskId: string, subTaskId: string) => void
+  editSubTask: (taskId: string, subTaskId: string, title: string) => void
+  reorderSubTasks: (taskId: string, parentSubTaskId: string | null, newOrder: string[]) => void
 
   reorderTasks: (ids: string[]) => void
 
@@ -38,47 +56,56 @@ interface TaskStore {
   getTasksByCategory: (category?: string) => Task[]
   getActiveTasks: () => Task[]
   getTodayStats: () => { completedCount: number; totalXP: number }
+
+  createTaskFromSOP: (params: {
+    title: string
+    category: string
+    difficulty: 1 | 2 | 3 | 4 | 5
+    dueDate: string | null
+    steps: import('@/types/sop').SOPStep[]
+  }) => string
+}
+
+function mapStepToSubTask(step: import('@/types/sop').SOPStep, index: number): SubTask {
+  const now = new Date().toISOString()
+  return {
+    id: generateId(),
+    title: step.title,
+    completed: false,
+    sortOrder: index,
+    subTasks: step.childSteps.map((child, ci) => ({
+      id: generateId(),
+      title: child.title,
+      completed: false,
+      sortOrder: ci,
+      subTasks: [],  // 第 3 层及更深层忽略
+      createdAt: now,
+    })),
+    createdAt: now,
+  }
 }
 
 function makeDefaultTask(partial: Partial<Task> & { title: string }): Task {
   const now = new Date().toISOString()
   return {
-    id: generateId(),
+    id: partial.id ?? generateId(),
     title: partial.title,
     category: partial.category ?? 'other',
     difficulty: partial.difficulty ?? 3,
     priority: partial.priority ?? 'medium',
     dueDate: partial.dueDate !== undefined ? partial.dueDate : getTomorrowString(),
     description: partial.description ?? '',
-    estimatedMinutes: partial.estimatedMinutes ?? null,
     status: 'todo',
-    parentId: partial.parentId ?? null,
-    childIds: partial.childIds ?? [],
-    nestingLevel: partial.nestingLevel ?? 0,
-    xpReward: 0, // 完成时动态计算
+    xpReward: 0,
     actualMinutes: 0,
     completedAt: null,
     deletedAt: null,
     isHidden: false,
     sortOrder: partial.sortOrder ?? Date.now(),
+    subTasks: partial.subTasks ?? [],
     createdAt: now,
     updatedAt: now,
   }
-}
-
-/** 收集任务及其所有子孙 ID */
-function collectDescendants(tasks: Task[], rootId: string): Set<string> {
-  const ids = new Set<string>([rootId])
-  const queue = [rootId]
-  while (queue.length > 0) {
-    const pid = queue.shift()!
-    const parent = tasks.find((t) => t.id === pid)
-    if (!parent) continue
-    for (const cid of parent.childIds) {
-      if (!ids.has(cid)) { ids.add(cid); queue.push(cid) }
-    }
-  }
-  return ids
 }
 
 export const useTaskStore = create<TaskStore>()(
@@ -91,19 +118,6 @@ export const useTaskStore = create<TaskStore>()(
 
       addTask: (partial) => {
         const task = makeDefaultTask(partial)
-        if (task.parentId) {
-          const parent = get().tasks.find((t) => t.id === task.parentId)
-          if (!parent || parent.nestingLevel >= 2) return task // 超过 3 层限制
-          task.nestingLevel = parent.nestingLevel + 1
-          if (!partial.category) task.category = parent.category
-          set((s) => ({
-            tasks: s.tasks.map((t) =>
-              t.id === task.parentId ? { ...t, childIds: [...t.childIds, task.id], updatedAt: new Date().toISOString() } : t
-            ).concat(task),
-            lastCategory: task.category,
-          }))
-          return task
-        }
         set((s) => ({
           tasks: [task, ...s.tasks],
           lastCategory: task.category,
@@ -121,10 +135,9 @@ export const useTaskStore = create<TaskStore>()(
 
       deleteTask: (id) => {
         const now = new Date().toISOString()
-        const ids = collectDescendants(get().tasks, id)
         set((s) => ({
           tasks: s.tasks.map((t) =>
-            ids.has(t.id) ? { ...t, deletedAt: now, updatedAt: now } : t
+            t.id === id ? { ...t, deletedAt: now, updatedAt: now } : t
           ),
         }))
       },
@@ -138,8 +151,7 @@ export const useTaskStore = create<TaskStore>()(
       },
 
       permanentlyDeleteTask: (id) => {
-        const ids = collectDescendants(get().tasks, id)
-        set((s) => ({ tasks: s.tasks.filter((t) => !ids.has(t.id)) }))
+        set((s) => ({ tasks: s.tasks.filter((t) => t.id !== id) }))
       },
 
       hideTask: (id) => {
@@ -166,60 +178,96 @@ export const useTaskStore = create<TaskStore>()(
           tasks: s.tasks.map((t) => (t.id === id ? updatedTask : t)),
         }))
 
-        // 检查兄弟子任务是否全部完成
-        let allSiblingsDone = false
-        if (task.parentId) {
-          const parent = get().tasks.find((t) => t.id === task.parentId)
-          if (parent) {
-            allSiblingsDone = parent.childIds.every((cid) => {
-              const child = get().tasks.find((t) => t.id === cid)
-              return !child || child.status === 'done'
-            })
-          }
-        }
-
-        return { ...updatedTask, allSiblingsDone }
+        return updatedTask
       },
 
       undoComplete: (id) => {
         set((s) => ({
           tasks: s.tasks.map((t) =>
             t.id === id
-              ? {
-                  ...t,
-                  status: 'todo',
-                  completedAt: null,
-                  updatedAt: new Date().toISOString(),
-                }
+              ? { ...t, status: 'todo', completedAt: null, updatedAt: new Date().toISOString() }
               : t
           ),
         }))
       },
 
       startTask: (id) => {
-        const task = get().tasks.find((t) => t.id === id)
         const now = new Date().toISOString()
         set((s) => ({
-          tasks: s.tasks.map((t) => {
-            if (t.id === id) return { ...t, status: 'doing', updatedAt: now }
-            // 子任务 → doing 时，todo 状态的父任务自动跟随
-            if (task?.parentId && t.id === task.parentId && t.status === 'todo') {
-              return { ...t, status: 'doing', updatedAt: now }
-            }
-            return t
-          }),
+          tasks: s.tasks.map((t) =>
+            t.id === id ? { ...t, status: 'doing', updatedAt: now } : t
+          ),
         }))
       },
 
       pauseTask: (id) => {
         set((s) => ({
           tasks: s.tasks.map((t) =>
-            t.id === id
-              ? { ...t, status: 'todo', updatedAt: new Date().toISOString() }
-              : t
+            t.id === id ? { ...t, status: 'todo', updatedAt: new Date().toISOString() } : t
           ),
         }))
       },
+
+      // ── 子任务 actions ─────────────────────────────────────────
+
+      addSubTask: (taskId, title, parentSubTaskId) => {
+        set((s) => ({
+          tasks: s.tasks.map((t) => {
+            if (t.id !== taskId) return t
+            const newSub: SubTask = makeSubTask(title, t.subTasks.length)
+            if (!parentSubTaskId) {
+              return { ...t, subTasks: [...t.subTasks, newSub], updatedAt: new Date().toISOString() }
+            }
+            return {
+              ...t,
+              subTasks: addNestedSubTask(t.subTasks, parentSubTaskId, newSub),
+              updatedAt: new Date().toISOString(),
+            }
+          }),
+        }))
+      },
+
+      toggleSubTask: (taskId, subTaskId) => {
+        set((s) => ({
+          tasks: s.tasks.map((t) => {
+            if (t.id !== taskId) return t
+            return { ...t, subTasks: toggleNested(t.subTasks, subTaskId), updatedAt: new Date().toISOString() }
+          }),
+        }))
+      },
+
+      removeSubTask: (taskId, subTaskId) => {
+        set((s) => ({
+          tasks: s.tasks.map((t) => {
+            if (t.id !== taskId) return t
+            return { ...t, subTasks: removeNested(t.subTasks, subTaskId), updatedAt: new Date().toISOString() }
+          }),
+        }))
+      },
+
+      editSubTask: (taskId, subTaskId, title) => {
+        set((s) => ({
+          tasks: s.tasks.map((t) => {
+            if (t.id !== taskId) return t
+            return { ...t, subTasks: editNested(t.subTasks, subTaskId, title), updatedAt: new Date().toISOString() }
+          }),
+        }))
+      },
+
+      reorderSubTasks: (taskId, parentSubTaskId, newOrder) => {
+        set((s) => ({
+          tasks: s.tasks.map((t) => {
+            if (t.id !== taskId) return t
+            return {
+              ...t,
+              subTasks: reorderNested(t.subTasks, parentSubTaskId, newOrder),
+              updatedAt: new Date().toISOString(),
+            }
+          }),
+        }))
+      },
+
+      // ── 其余 actions ──────────────────────────────────────────
 
       reorderTasks: (ids) => {
         set((s) => {
@@ -269,7 +317,6 @@ export const useTaskStore = create<TaskStore>()(
             if (g.id === groupId) {
               return { ...g, taskIds: g.taskIds.includes(taskId) ? g.taskIds : [...g.taskIds, taskId] }
             }
-            // Remove from other groups
             return { ...g, taskIds: g.taskIds.filter((id) => id !== taskId) }
           }),
         }))
@@ -281,6 +328,31 @@ export const useTaskStore = create<TaskStore>()(
             g.id === groupId ? { ...g, taskIds: g.taskIds.filter((id) => id !== taskId) } : g
           ),
         }))
+      },
+
+      createTaskFromSOP: ({ title, category, difficulty, dueDate, steps }) => {
+        const now = new Date().toISOString()
+        const task: Task = {
+          id: generateId(),
+          title,
+          category,
+          difficulty,
+          priority: 'medium',
+          dueDate,
+          description: '',
+          actualMinutes: 0,
+          status: 'todo',
+          xpReward: 0,
+          completedAt: null,
+          deletedAt: null,
+          isHidden: false,
+          sortOrder: get().tasks.length,
+          createdAt: now,
+          updatedAt: now,
+          subTasks: steps.map((step, i) => mapStepToSubTask(step, i)),
+        }
+        set((s) => ({ tasks: [...s.tasks, task], lastCategory: category }))
+        return task.id
       },
 
       getTasksByCategory: (category) => {
@@ -311,22 +383,46 @@ export const useTaskStore = create<TaskStore>()(
       name: `${getStoragePrefix()}-tasks`,
       onRehydrateStorage: () => (state) => {
         if (!state) return
+
+        // ── v0.3 迁移：平铺子任务 → 内嵌 subTasks ────────────────
+        if (!localStorage.getItem(SUBTASK_MIGRATION_KEY)) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const allRaw = state.tasks as any[]
+          const rootTasks = allRaw.filter((t) => !t.parentId)
+          const childTasks = allRaw.filter((t) => t.parentId)
+
+          const childrenMap = new Map<string, typeof childTasks>()
+          childTasks.forEach((child) => {
+            const pid = child.parentId as string
+            const siblings = childrenMap.get(pid) ?? []
+            siblings.push(child)
+            childrenMap.set(pid, siblings)
+          })
+
+          state.tasks = rootTasks.map((root) => ({
+            ...root,
+            subTasks: buildSubTasksFromFlat(childrenMap, root.id),
+          })) as Task[]
+
+          localStorage.setItem(SUBTASK_MIGRATION_KEY, new Date().toISOString())
+        }
+
+        // ── 兼容：确保所有任务都有 subTasks ──────────────────────
         state.tasks = state.tasks.map((t) => {
-          // 迁移：清理旧版计时器字段
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const legacy = t as any
           if ('timerStartedAt' in legacy) delete legacy.timerStartedAt
           if ('timerElapsed' in legacy) delete legacy.timerElapsed
-          // doing 状态保持，只是不再有计时器
           return {
             ...t,
             category: migrateCategory(t.category),
             actualMinutes: t.actualMinutes ?? 0,
             sortOrder: t.sortOrder ?? 0,
+            subTasks: t.subTasks ?? [],
           }
         })
+
         state.lastCategory = migrateCategory(state.lastCategory)
-        // New fields compat
         if (!state.completedViewMode) state.completedViewMode = 'month'
         if (!state.customTaskGroups) state.customTaskGroups = []
       },
