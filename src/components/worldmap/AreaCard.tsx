@@ -68,13 +68,13 @@ export function AreaCard({ area, editMode, onClick, onRename, onDelete }: AreaCa
           : undefined,
       }}
     >
-      {/* 繁荣度 emoji（尺寸随卡片缩放：clamp 在 20px-48px 之间） */}
-      <div style={{ fontSize: 'clamp(20px, 22%, 48px)', lineHeight: 1 }}>{emoji}</div>
+      {/* 繁荣度 emoji */}
+      <div style={{ fontSize: 'clamp(28px, 32%, 64px)', lineHeight: 1 }}>{emoji}</div>
 
       {/* 区域名称 */}
       <div
         style={{
-          fontSize: 'clamp(10px, 8%, 16px)',
+          fontSize: 'clamp(12px, 11%, 20px)',
           fontWeight: 600,
           color: 'var(--color-text)',
           textAlign: 'center',
@@ -88,12 +88,12 @@ export function AreaCard({ area, editMode, onClick, onRename, onDelete }: AreaCa
       </div>
 
       {/* 繁荣度星级 */}
-      <div style={{ fontSize: 'clamp(9px, 7%, 14px)', color: 'var(--color-xp)', letterSpacing: 1 }}>
+      <div style={{ fontSize: 'clamp(11px, 10%, 18px)', color: 'var(--color-xp)', letterSpacing: 1 }}>
         {prosperityStars}
       </div>
 
       {/* 繁荣度名称 */}
-      <div style={{ fontSize: 'clamp(9px, 7%, 13px)', color: 'var(--color-text-dim)' }}>
+      <div style={{ fontSize: 'clamp(11px, 9%, 16px)', color: 'var(--color-text-dim)' }}>
         {prosperityName}
       </div>
 
