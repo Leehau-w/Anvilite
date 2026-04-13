@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import { AnimatePresence, motion, Reorder } from 'framer-motion'
 import { useAreaStore } from '@/stores/areaStore'
 import { useTaskStore } from '@/stores/taskStore'
@@ -10,6 +10,37 @@ import { InteriorSpace } from '@/components/interior/InteriorSpace'
 import { getProsperityInfo, getAreaSkillXP } from '@/engines/prosperityEngine'
 import { useT } from '@/i18n'
 import { getAreaDisplayName } from '@/utils/area'
+
+// 卡片宽高比（宽:高）= 1:1，方便后期替换像素素材
+const CARD_ASPECT = 1
+const CARD_GAP = 16
+const MIN_CARD_W = 120
+
+/** 给定容器内容区尺寸和卡片数量，求最大化卡片面积的列数 */
+function computeOptimalCols(W: number, H: number, n: number): number {
+  if (W <= 0 || H <= 0 || n === 0) return 3
+  let best = 0
+  let bestArea = 0
+  for (let c = 1; c <= n; c++) {
+    const rows = Math.ceil(n / c)
+    const w = (W - (c - 1) * CARD_GAP) / c
+    if (w < MIN_CARD_W) break
+    const h = w / CARD_ASPECT
+    const totalH = rows * h + (rows - 1) * CARD_GAP
+    if (totalH <= H) {
+      const area = w * h
+      if (area > bestArea) { bestArea = area; best = c }
+    }
+  }
+  // 若容器太矮，无任何布局能不滚动时，选最多列（最小行数）
+  if (best === 0) {
+    for (let c = n; c >= 1; c--) {
+      const w = (W - (c - 1) * CARD_GAP) / c
+      if (w >= MIN_CARD_W) { best = c; break }
+    }
+  }
+  return Math.max(1, best || 1)
+}
 
 export function WorldMap() {
   const { areas, addArea, updateArea, removeArea, reorderAreas, canAddMore, getUsedTemplateIds } = useAreaStore()
@@ -31,7 +62,34 @@ export function WorldMap() {
 
   // 用于拖拽排序的本地状态
   const [localOrder, setLocalOrder] = useState<Area[]>(sortedAreas)
-  const isDraggingRef = React.useRef(false)
+  const isDraggingRef = useRef(false)
+
+  // 自适应列数：ResizeObserver 监听网格容器内容区尺寸
+  const containerRef = useRef<HTMLDivElement>(null)
+  const [cols, setCols] = useState(3)
+
+  const totalCards = sortedAreas.length + (canAddMore() ? 1 : 0)
+
+  const computeCols = useCallback((W: number, H: number) => {
+    setCols(computeOptimalCols(W, H, totalCards))
+  }, [totalCards])
+
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+    const obs = new ResizeObserver(([entry]) => {
+      const { width, height } = entry.contentRect
+      computeCols(width, height)
+    })
+    obs.observe(el)
+    // 初始计算（contentRect 在首次 observe 后触发，这里也主动读一次）
+    const s = getComputedStyle(el)
+    const pw = parseFloat(s.paddingLeft) + parseFloat(s.paddingRight)
+    const ph = parseFloat(s.paddingTop) + parseFloat(s.paddingBottom)
+    const r = el.getBoundingClientRect()
+    computeCols(r.width - pw, r.height - ph)
+    return () => obs.disconnect()
+  }, [computeCols])
 
   React.useEffect(() => {
     if (!isDraggingRef.current) setLocalOrder(sortedAreas)
@@ -146,7 +204,10 @@ export function WorldMap() {
       </div>
 
       {/* 卡片网格 */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '0 24px 24px' }}>
+      <div
+        ref={containerRef}
+        style={{ flex: 1, overflowY: 'auto', padding: '8px 24px 24px' }}
+      >
         {editMode ? (
           // 编辑模式：可拖拽排序
           <Reorder.Group
@@ -158,8 +219,8 @@ export function WorldMap() {
             }}
             style={{
               display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))',
-              gap: 16,
+              gridTemplateColumns: `repeat(${cols}, 1fr)`,
+              gap: CARD_GAP,
               listStyle: 'none',
               padding: 0,
               margin: 0,
@@ -186,8 +247,8 @@ export function WorldMap() {
           // 普通模式：静态网格
           <div style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))',
-            gap: 16,
+            gridTemplateColumns: `repeat(${cols}, 1fr)`,
+            gap: CARD_GAP,
           }}>
             <AnimatePresence>
               {sortedAreas.map((area) => (
@@ -209,7 +270,7 @@ export function WorldMap() {
                 animate={{ opacity: 1 }}
                 onClick={() => { setEditMode(true); setShowAddModal(true) }}
                 style={{
-                  minHeight: 140,
+                  aspectRatio: `${CARD_ASPECT}`,
                   border: '2px dashed var(--color-border)',
                   borderRadius: 'var(--radius-xl)',
                   display: 'flex', flexDirection: 'column',
@@ -218,6 +279,7 @@ export function WorldMap() {
                   color: 'var(--color-text-dim)',
                   background: 'transparent', cursor: 'pointer',
                   fontSize: 13, transition: 'border-color 0.15s, color 0.15s',
+                  width: '100%',
                 }}
                 whileHover={{ borderColor: 'var(--color-accent)', color: 'var(--color-accent)' } as any}
               >

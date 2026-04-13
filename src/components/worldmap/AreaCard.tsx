@@ -1,12 +1,14 @@
-import React, { useState } from 'react'
+import React from 'react'
 import { motion } from 'framer-motion'
 import type { Area } from '@/types/area'
 import { AREA_TEMPLATES, PROSPERITY_NAMES } from '@/types/area'
 import { useTaskStore } from '@/stores/taskStore'
-import { useHabitStore } from '@/stores/habitStore'
 import { getProsperityInfo, getAreaSkillXP } from '@/engines/prosperityEngine'
 import { getAreaDisplayName } from '@/utils/area'
 import { useT } from '@/i18n'
+
+// 与 WorldMap.tsx 保持一致的宽高比常量（方便后期像素素材适配）
+const CARD_ASPECT = 1
 
 interface AreaCardProps {
   area: Area
@@ -27,7 +29,6 @@ function getAreaEmoji(templateId: string | null, prosperityLevel: number): strin
 export function AreaCard({ area, editMode, onClick, onRename, onDelete }: AreaCardProps) {
   const t = useT()
   const tasks = useTaskStore((s) => s.tasks)
-  const habits = useHabitStore((s) => s.habits)
 
   // 计算繁荣度
   const skillXP = getAreaSkillXP(tasks, area.category)
@@ -43,11 +44,13 @@ export function AreaCard({ area, editMode, onClick, onRename, onDelete }: AreaCa
   return (
     <motion.div
       layout
-      whileHover={editMode ? undefined : { scale: 1.03 }}
+      whileHover={editMode ? undefined : { scale: 1.02, borderColor: 'var(--color-accent)' } as object}
       onClick={() => !editMode && onClick()}
       style={{
         position: 'relative',
-        padding: '16px 12px 12px',
+        aspectRatio: `${CARD_ASPECT}`,
+        width: '100%',
+        padding: '12% 10% 10%',
         borderRadius: 'var(--radius-xl)',
         background: 'var(--color-surface)',
         border: '1px solid var(--color-border)',
@@ -55,27 +58,23 @@ export function AreaCard({ area, editMode, onClick, onRename, onDelete }: AreaCa
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
-        gap: 4,
-        minHeight: 140,
+        justifyContent: 'center',
+        gap: '4%',
+        overflow: 'hidden',
         transition: 'border-color 0.15s',
+        boxSizing: 'border-box',
         boxShadow: isHighProsperity
           ? '0 0 12px color-mix(in srgb, var(--color-accent) 30%, transparent)'
           : undefined,
       }}
-      onHoverStart={(e) => {
-        if (!editMode) {
-          const el = e.target as HTMLElement
-          el.closest?.('[data-area-card]')?.setAttribute('style', `border-color: var(--color-accent)`)
-        }
-      }}
     >
-      {/* 繁荣度 emoji */}
-      <div style={{ fontSize: 32, lineHeight: 1.2 }}>{emoji}</div>
+      {/* 繁荣度 emoji（尺寸随卡片缩放：clamp 在 20px-48px 之间） */}
+      <div style={{ fontSize: 'clamp(20px, 22%, 48px)', lineHeight: 1 }}>{emoji}</div>
 
       {/* 区域名称 */}
       <div
         style={{
-          fontSize: 13,
+          fontSize: 'clamp(10px, 8%, 16px)',
           fontWeight: 600,
           color: 'var(--color-text)',
           textAlign: 'center',
@@ -89,10 +88,14 @@ export function AreaCard({ area, editMode, onClick, onRename, onDelete }: AreaCa
       </div>
 
       {/* 繁荣度星级 */}
-      <div style={{ fontSize: 11, color: 'var(--color-xp)', letterSpacing: 1 }}>{prosperityStars}</div>
+      <div style={{ fontSize: 'clamp(9px, 7%, 14px)', color: 'var(--color-xp)', letterSpacing: 1 }}>
+        {prosperityStars}
+      </div>
 
       {/* 繁荣度名称 */}
-      <div style={{ fontSize: 11, color: 'var(--color-text-dim)' }}>{prosperityName}</div>
+      <div style={{ fontSize: 'clamp(9px, 7%, 13px)', color: 'var(--color-text-dim)' }}>
+        {prosperityName}
+      </div>
 
       {/* 编辑模式操作 */}
       {editMode && (
