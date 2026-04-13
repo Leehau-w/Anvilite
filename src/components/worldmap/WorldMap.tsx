@@ -12,7 +12,7 @@ import { useT } from '@/i18n'
 import { getAreaDisplayName } from '@/utils/area'
 
 export function WorldMap() {
-  const { areas, addArea, updateArea, removeArea, reorderAreas, canAddMore } = useAreaStore()
+  const { areas, addArea, updateArea, removeArea, reorderAreas, canAddMore, getUsedTemplateIds } = useAreaStore()
   const tasks = useTaskStore((s) => s.tasks)
   const habits = useHabitStore((s) => s.habits)
   const t = useT()
@@ -230,14 +230,19 @@ export function WorldMap() {
       </div>
 
       {/* 添加区域 Modal */}
-      <AddAreaModal
-        open={showAddModal}
-        onClose={() => setShowAddModal(false)}
-        onAdd={(templateId, customName) => {
-          addArea(templateId, customName)
-          setShowAddModal(false)
-        }}
-      />
+      <AnimatePresence>
+        {showAddModal && (
+          <AddAreaModal
+            usedTemplateIds={getUsedTemplateIds()}
+            areaCount={areas.length}
+            onClose={() => setShowAddModal(false)}
+            onAdd={(templateId, customName) => {
+              addArea(templateId, customName)
+              setShowAddModal(false)
+            }}
+          />
+        )}
+      </AnimatePresence>
 
       {/* 改名对话框 */}
       <AnimatePresence>
