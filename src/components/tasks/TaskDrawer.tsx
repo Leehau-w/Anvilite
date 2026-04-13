@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import { Drawer } from '@/components/ui/Drawer'
 import { StarRating } from '@/components/ui/StarRating'
 import { CategorySelect } from '@/components/ui/CategorySelect'
-import type { Task, TaskDifficulty, TaskPriority } from '@/types/task'
+import type { Task, TaskDifficulty, TaskPriority, SubTask } from '@/types/task'
 import { useTaskStore } from '@/stores/taskStore'
 import { useAreaStore } from '@/stores/areaStore'
 import { useGrowthEventStore } from '@/stores/growthEventStore'
@@ -11,6 +11,7 @@ import { useT } from '@/i18n'
 import { useToast } from '@/components/feedback/Toast'
 import { AnimatePresence, motion } from 'framer-motion'
 import { SubTaskItem } from './SubTaskItem'
+import { makeSubTask } from '@/utils/subTaskUtils'
 
 interface TaskDrawerProps {
   open: boolean
@@ -39,6 +40,8 @@ export function TaskDrawer({ open, onClose, editTask, initialCategory }: TaskDra
   const t = useT()
   const [subtaskInput, setSubtaskInput] = useState('')
   const subtaskInputRef = useRef<HTMLInputElement>(null)
+  // 新建任务时暂存子项，submit 后批量写入
+  const [pendingSubTasks, setPendingSubTasks] = useState<SubTask[]>([])
 
   const defaultForm: FormData = {
     title: editTask?.title ?? '',
@@ -66,6 +69,7 @@ export function TaskDrawer({ open, onClose, editTask, initialCategory }: TaskDra
         actualMinutes: editTask?.actualMinutes ? String(editTask.actualMinutes) : '',
       })
       setSubtaskInput('')
+      setPendingSubTasks([])
     }
   }, [open, editTask?.id])
 
@@ -93,16 +97,27 @@ export function TaskDrawer({ open, onClose, editTask, initialCategory }: TaskDra
     if (editTask) {
       updateTask(editTask.id, data)
     } else {
-      addTask(data)
+      const newTask = addTask(data)
+      // 将新建前暂存的子项批量写入
+      pendingSubTasks.forEach((sub) => addSubTask(newTask.id, sub.title))
     }
     handleClose()
   }
 
   function handleAddSubTask() {
-    if (!editTask || !subtaskInput.trim()) return
-    addSubTask(editTask.id, subtaskInput.trim())
+    if (!subtaskInput.trim()) return
+    if (editTask) {
+      addSubTask(editTask.id, subtaskInput.trim())
+    } else {
+      // 新建模式：先放入本地暂存列表
+      setPendingSubTasks((prev) => [...prev, makeSubTask(subtaskInput.trim(), prev.length)])
+    }
     setSubtaskInput('')
     if (subtaskInputRef.current) subtaskInputRef.current.focus()
+  }
+
+  function handleRemovePending(id: string) {
+    setPendingSubTasks((prev) => prev.filter((s) => s.id !== id))
   }
 
   const priorities = [
@@ -112,8 +127,8 @@ export function TaskDrawer({ open, onClose, editTask, initialCategory }: TaskDra
     { value: 'low' as TaskPriority, label: t.taskPriority_low, color: 'var(--color-border)' },
   ]
 
-  // 使用实时的 currentTask.subTasks 展示（保证编辑过程中实时更新）
-  const subTasks = currentTask?.subTasks ?? editTask?.subTasks ?? []
+  // 编辑模式：从 store 实时拿；新建模式：用本地暂存列表
+  const subTasks = editTask ? (currentTask?.subTasks ?? editTask.subTasks ?? []) : pendingSubTasks
 
   return (
     <Drawer open={open} onClose={handleClose} title={editTask ? t.taskDrawer_editTitle : t.taskDrawer_createTitle}>
@@ -274,77 +289,90 @@ export function TaskDrawer({ open, onClose, editTask, initialCategory }: TaskDra
           />
         </div>
 
-        {/* 子任务管理（编辑模式） */}
-        {editTask && (
-          <div className="flex flex-col gap-2">
-            <label style={{ fontSize: 12, color: 'var(--color-text-dim)' }}>{t.subtask_add}</label>
+        {/* 子项管理（新建和编辑模式均显示） */}
+        <div className="flex flex-col gap-2">
+          <label style={{ fontSize: 12, color: 'var(--color-text-dim)' }}>{t.subtask_add}</label>
 
-            {/* 已有子任务列表（全部显示，不折叠） */}
-            {subTasks.length > 0 && (
-              <div style={{
-                padding: '8px 10px',
+          {/* 子项列表 */}
+          {subTasks.length > 0 && (
+            <div style={{
+              padding: '8px 10px',
+              borderRadius: 'var(--radius-md)',
+              border: '1px solid var(--color-border)',
+              background: 'var(--color-bg)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 2,
+            }}>
+              <AnimatePresence>
+                {subTasks.map((sub) => (
+                  <motion.div
+                    key={sub.id}
+                    initial={{ opacity: 0, y: -4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, x: 20 }}
+                  >
+                    {editTask ? (
+                      <SubTaskItem subTask={sub} taskId={editTask.id} depth={0} />
+                    ) : (
+                      /* 新建模式：只显示标题 + 删除按钮 */
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '2px 0' }}>
+                        <span style={{ fontSize: 12, color: 'var(--color-text-dim)', flexShrink: 0 }}>•</span>
+                        <span style={{ fontSize: 13, color: 'var(--color-text)', flex: 1 }}>{sub.title}</span>
+                        <button
+                          type="button"
+                          onClick={() => handleRemovePending(sub.id)}
+                          style={{ background: 'none', border: 'none', fontSize: 13, color: 'var(--color-text-dim)', cursor: 'pointer', padding: '0 2px', lineHeight: 1 }}
+                        >
+                          ×
+                        </button>
+                      </div>
+                    )}
+                  </motion.div>
+                ))}
+              </AnimatePresence>
+            </div>
+          )}
+
+          {/* 输入行 */}
+          <div style={{ display: 'flex', gap: 6 }}>
+            <input
+              ref={subtaskInputRef}
+              value={subtaskInput}
+              onChange={(e) => setSubtaskInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault()
+                  handleAddSubTask()
+                }
+              }}
+              placeholder={t.subtask_placeholder}
+              style={{
+                flex: 1, height: 32, padding: '0 10px',
                 borderRadius: 'var(--radius-md)',
                 border: '1px solid var(--color-border)',
                 background: 'var(--color-bg)',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 2,
-              }}>
-                <AnimatePresence>
-                  {subTasks.map((sub) => (
-                    <motion.div
-                      key={sub.id}
-                      initial={{ opacity: 0, y: -4 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, x: 20 }}
-                    >
-                      <SubTaskItem subTask={sub} taskId={editTask.id} depth={0} />
-                    </motion.div>
-                  ))}
-                </AnimatePresence>
-              </div>
-            )}
-
-            {/* 添加新步骤 */}
-            <div style={{ display: 'flex', gap: 6 }}>
-              <input
-                ref={subtaskInputRef}
-                value={subtaskInput}
-                onChange={(e) => setSubtaskInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault()
-                    handleAddSubTask()
-                  }
-                }}
-                placeholder={t.subtask_placeholder}
-                style={{
-                  flex: 1, height: 32, padding: '0 10px',
-                  borderRadius: 'var(--radius-md)',
-                  border: '1px solid var(--color-border)',
-                  background: 'var(--color-bg)',
-                  color: 'var(--color-text)',
-                  fontSize: 13, outline: 'none',
-                }}
-              />
-              <button
-                type="button"
-                onClick={handleAddSubTask}
-                disabled={!subtaskInput.trim()}
-                style={{
-                  height: 32, padding: '0 12px',
-                  borderRadius: 'var(--radius-md)',
-                  border: 'none',
-                  background: subtaskInput.trim() ? 'var(--color-accent)' : 'var(--color-border)',
-                  color: subtaskInput.trim() ? 'white' : 'var(--color-text-dim)',
-                  fontSize: 12, fontWeight: 600, cursor: subtaskInput.trim() ? 'pointer' : 'default',
-                }}
-              >
-                +
-              </button>
-            </div>
+                color: 'var(--color-text)',
+                fontSize: 13, outline: 'none',
+              }}
+            />
+            <button
+              type="button"
+              onClick={handleAddSubTask}
+              disabled={!subtaskInput.trim()}
+              style={{
+                height: 32, padding: '0 12px',
+                borderRadius: 'var(--radius-md)',
+                border: 'none',
+                background: subtaskInput.trim() ? 'var(--color-accent)' : 'var(--color-border)',
+                color: subtaskInput.trim() ? 'white' : 'var(--color-text-dim)',
+                fontSize: 12, fontWeight: 600, cursor: subtaskInput.trim() ? 'pointer' : 'default',
+              }}
+            >
+              +
+            </button>
           </div>
-        )}
+        </div>
 
         {/* 铭刻为里程碑 */}
         {editTask && (editTask.status === 'done' || editTask.status === 'doing') && (

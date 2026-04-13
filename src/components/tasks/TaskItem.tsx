@@ -457,7 +457,7 @@ export function TaskItem({ task, compact, onEdit }: TaskItemProps) {
                 ref={subTaskInputRef}
                 value={subTaskInput}
                 onChange={(e) => setSubTaskInput(e.target.value)}
-                placeholder="添加步骤…"
+                placeholder={t.subtask_placeholder}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') handleAddSubTask()
                   if (e.key === 'Escape') { setSubTaskInput(''); setShowSubTaskInput(false) }
@@ -480,7 +480,7 @@ export function TaskItem({ task, compact, onEdit }: TaskItemProps) {
                 cursor: 'pointer', padding: '2px 0', opacity: hovered ? 1 : 0.4, transition: 'opacity 0.15s',
               }}
             >
-              + 添加步骤
+              + {t.subtask_add}
             </button>
           )}
         </div>
