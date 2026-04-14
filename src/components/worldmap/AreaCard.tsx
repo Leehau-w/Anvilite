@@ -43,7 +43,6 @@ export function AreaCard({ area, editMode, onClick, onRename, onDelete }: AreaCa
 
   return (
     <motion.div
-      layout
       whileHover={editMode ? undefined : { scale: 1.02, borderColor: 'var(--color-accent)' } as object}
       onClick={() => !editMode && onClick()}
       style={{

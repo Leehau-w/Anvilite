@@ -10,37 +10,12 @@ import { InteriorSpace } from '@/components/interior/InteriorSpace'
 import { getProsperityInfo, getAreaSkillXP } from '@/engines/prosperityEngine'
 import { useT } from '@/i18n'
 import { getAreaDisplayName } from '@/utils/area'
+import { computeOptimalCols } from '@/utils/grid'
 
-// 卡片宽高比（宽:高）= 1:1，方便后期替换像素素材
+export { computeOptimalCols }
+
 const CARD_ASPECT = 1
 const CARD_GAP = 16
-const MIN_CARD_W = 120
-
-/** 给定容器内容区尺寸和卡片数量，求最大化卡片面积的列数 */
-function computeOptimalCols(W: number, H: number, n: number): number {
-  if (W <= 0 || H <= 0 || n === 0) return 3
-  let best = 0
-  let bestArea = 0
-  for (let c = 1; c <= n; c++) {
-    const rows = Math.ceil(n / c)
-    const w = (W - (c - 1) * CARD_GAP) / c
-    if (w < MIN_CARD_W) break
-    const h = w / CARD_ASPECT
-    const totalH = rows * h + (rows - 1) * CARD_GAP
-    if (totalH <= H) {
-      const area = w * h
-      if (area > bestArea) { bestArea = area; best = c }
-    }
-  }
-  // 若容器太矮，无任何布局能不滚动时，选最多列（最小行数）
-  if (best === 0) {
-    for (let c = n; c >= 1; c--) {
-      const w = (W - (c - 1) * CARD_GAP) / c
-      if (w >= MIN_CARD_W) { best = c; break }
-    }
-  }
-  return Math.max(1, best || 1)
-}
 
 export function WorldMap() {
   const { areas, addArea, updateArea, removeArea, reorderAreas, canAddMore, getUsedTemplateIds } = useAreaStore()
@@ -142,25 +117,21 @@ export function WorldMap() {
     reorderAreas(localOrder.map((a) => a.id))
   }
 
-  // 当前显示区域内部
-  if (interiorAreaId && interiorArea) {
-    const skillXP = getAreaSkillXP(tasks, interiorArea.category)
-    const prosperity = getProsperityInfo(skillXP)
-    return (
-      <motion.div
-        key="interior"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        style={{ height: '100%' }}
-      >
-        <InteriorSpace area={interiorArea} prosperity={prosperity} onExit={handleBack} />
-      </motion.div>
-    )
-  }
+  const showInterior = !!(interiorAreaId && interiorArea)
 
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--color-bg)', overflow: 'hidden' }}>
+    <div style={{ height: '100%', position: 'relative' }}>
+      {/* 区域内部（始终挂载，用 display 切换） */}
+      <div style={{ display: showInterior ? 'block' : 'none', height: '100%' }}>
+        {interiorArea && (() => {
+          const skillXP = getAreaSkillXP(tasks, interiorArea.category)
+          const prosperity = getProsperityInfo(skillXP)
+          return <InteriorSpace area={interiorArea} prosperity={prosperity} onExit={handleBack} />
+        })()}
+      </div>
+
+      {/* 地图主视图（始终挂载，containerRef 不丢失） */}
+      <div style={{ display: showInterior ? 'none' : 'flex', height: '100%', flexDirection: 'column', background: 'var(--color-bg)', overflow: 'hidden' }}>
       {/* 顶部工具栏 */}
       <div style={{
         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
@@ -209,7 +180,7 @@ export function WorldMap() {
         style={{ flex: 1, overflowY: 'auto', padding: '8px 24px 24px' }}
       >
         {editMode ? (
-          // 编辑模式：可拖拽排序
+          // 编辑模式：单列列表，拖拽排序正常工作
           <Reorder.Group
             axis="y"
             values={localOrder}
@@ -217,14 +188,7 @@ export function WorldMap() {
               isDraggingRef.current = true
               setLocalOrder(newOrder)
             }}
-            style={{
-              display: 'grid',
-              gridTemplateColumns: `repeat(${cols}, 1fr)`,
-              gap: CARD_GAP,
-              listStyle: 'none',
-              padding: 0,
-              margin: 0,
-            }}
+            style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 8 }}
           >
             {localOrder.map((area) => (
               <Reorder.Item
@@ -233,12 +197,11 @@ export function WorldMap() {
                 onDragEnd={handleDragEnd}
                 style={{ listStyle: 'none' }}
               >
-                <AreaCard
+                <AreaEditRow
                   area={area}
-                  editMode={editMode}
-                  onClick={() => handleAreaClick(area.id)}
                   onRename={handleRename}
                   onDelete={handleDeleteRequest}
+                  t={t}
                 />
               </Reorder.Item>
             ))}
@@ -379,8 +342,77 @@ export function WorldMap() {
           )
         })()}
       </AnimatePresence>
+      </div>  {/* 地图主视图 end */}
     </div>
   )
+}
+
+function AreaEditRow({
+  area,
+  onRename,
+  onDelete,
+  t,
+}: {
+  area: Area
+  onRename: (id: string) => void
+  onDelete: (id: string) => void
+  t: ReturnType<typeof useT>
+}) {
+  const displayName = getAreaDisplayName(area, t)
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 12,
+        padding: '10px 14px',
+        background: 'var(--color-surface)',
+        border: '1px solid var(--color-border)',
+        borderRadius: 'var(--radius-md)',
+        cursor: 'grab',
+        userSelect: 'none',
+      }}
+    >
+      {/* 拖拽手柄 */}
+      <span style={{ fontSize: 16, color: 'var(--color-text-dim)', flexShrink: 0 }}>⠿</span>
+
+      {/* 名称 */}
+      <span style={{ flex: 1, fontSize: 14, color: 'var(--color-text)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        {displayName}
+      </span>
+
+      {/* 重命名 */}
+      <button
+        onClick={(e) => { e.stopPropagation(); onRename(area.id) }}
+        title={t.worldmap_rename ?? '重命名'}
+        style={{ ...editRowBtnStyle }}
+      >
+        ✏
+      </button>
+
+      {/* 删除 */}
+      {area.canDelete && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onDelete(area.id) }}
+          title={t.worldmap_delete ?? '删除'}
+          style={{ ...editRowBtnStyle, color: 'var(--color-danger)', borderColor: 'var(--color-danger)' }}
+        >
+          ✕
+        </button>
+      )}
+    </div>
+  )
+}
+
+const editRowBtnStyle: React.CSSProperties = {
+  padding: '3px 10px',
+  fontSize: 12,
+  borderRadius: 'var(--radius-sm)',
+  border: '1px solid var(--color-border)',
+  background: 'transparent',
+  color: 'var(--color-text-dim)',
+  cursor: 'pointer',
+  flexShrink: 0,
 }
 
 const ghostBtnStyle: React.CSSProperties = {

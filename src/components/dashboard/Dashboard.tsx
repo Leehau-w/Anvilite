@@ -27,12 +27,13 @@ import { HabitDrawer } from './HabitDrawer'
 import { HabitManageModal } from './HabitManageModal'
 import { Heatmap } from './Heatmap'
 import { InspirationCard } from './InspirationCard'
+import { FlowsSummaryCard } from './FlowsSummaryCard'
 import { AnimatePresence, Reorder } from 'framer-motion'
 import { CollapsibleGroup } from '@/components/ui/CollapsibleGroup'
 import type { Habit } from '@/types/habit'
 import type { Task } from '@/types/task'
 
-type NavTab = 'dashboard' | 'tasks' | 'worldmap' | 'timeline' | 'milestone'
+type NavTab = 'dashboard' | 'tasks' | 'worldmap' | 'timeline' | 'milestone' | 'sop'
 
 interface DashboardProps {
   onNavigate?: (tab: NavTab) => void
@@ -240,7 +241,7 @@ export function Dashboard({ onNavigate, onOpenInspiration }: DashboardProps) {
                       <SectionLabel label={t.dash_todo} />
                       <Reorder.Group axis="y" values={localTodo} onReorder={handleTodoReorder} style={{ listStyle: 'none', padding: 0, margin: 0 }}>
                         <AnimatePresence mode="popLayout">
-                          {localTodo.slice(0, 10).map((task) => (
+                          {localTodo.map((task) => (
                             <Reorder.Item key={task.id} value={task} onDragEnd={handleTaskDragEnd} style={{ listStyle: 'none' }}>
                               <TaskItem task={task} compact onEdit={openEditTask} />
                             </Reorder.Item>
@@ -307,6 +308,12 @@ export function Dashboard({ onNavigate, onOpenInspiration }: DashboardProps) {
               }
             >
               <InspirationCard onOpenModal={onOpenInspiration} />
+            </GridCard>
+          )}
+
+          {visibleCards.includes('flows') && (
+            <GridCard card={getCard('flows')} cw={cw} containerRef={containerRef} onUpdate={(p) => updateCard('flows', p)} locked={!editMode} onRemove={editMode ? () => removeCard('flows') : undefined} resizable title={`📋 ${t.dash_flows}`}>
+              <FlowsSummaryCard onNavigate={() => onNavigate?.('sop')} />
             </GridCard>
           )}
 
@@ -614,6 +621,8 @@ function CardPickerModal({ open, onClose, hiddenCards, onAdd }: {
     character: t.dash_character,
     habits: t.dash_habits,
     growth: t.dash_growth,
+    inspiration: t.inspiration_list,
+    flows: t.dash_flows,
   }
 
   if (!open) return null

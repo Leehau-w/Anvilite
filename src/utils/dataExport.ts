@@ -6,10 +6,12 @@ import { useBadgeStore } from '@/stores/badgeStore'
 import { useDashboardStore } from '@/stores/dashboardStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useGrowthEventStore } from '@/stores/growthEventStore'
+import { useSOPStore } from '@/stores/sopStore'
+import { useInspirationStore } from '@/stores/inspirationStore'
 import { getCurrentAccountId, getStoragePrefix } from '@/stores/accountManager'
 
 export const EXPORT_VERSION = 1
-export const APP_VERSION = '0.2.0'
+export const APP_VERSION = '0.3.0'
 
 export interface ExportData {
   exportVersion: typeof EXPORT_VERSION
@@ -25,6 +27,9 @@ export interface ExportData {
     dashboard: ReturnType<typeof useDashboardStore.getState>
     settings: ReturnType<typeof useSettingsStore.getState>
     growthEvents: ReturnType<typeof useGrowthEventStore.getState>
+    // v0.3 新增（旧备份中可能不存在，导入时做兼容）
+    sops?: ReturnType<typeof useSOPStore.getState>
+    inspirations?: ReturnType<typeof useInspirationStore.getState>
   }
 }
 
@@ -43,6 +48,8 @@ export async function exportData(): Promise<void> {
       dashboard: useDashboardStore.getState(),
       settings: useSettingsStore.getState(),
       growthEvents: useGrowthEventStore.getState(),
+      sops: useSOPStore.getState(),
+      inspirations: useInspirationStore.getState(),
     },
   }
 
@@ -95,6 +102,8 @@ export async function importData(file: File): Promise<{ success: boolean; error?
       dashboard: 'dashboard',
       settings: 'settings',
       growthEvents: 'growth-events',
+      sops: 'sops',
+      inspirations: 'inspirations',
     }
 
     for (const [dataKey, storeSuffix] of Object.entries(storeKeyMap)) {

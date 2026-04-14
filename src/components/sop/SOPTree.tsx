@@ -22,8 +22,7 @@ interface Props {
 export function SOPTree({ onNewSOP }: Props) {
   const t = useT()
   const lang = useSettingsStore((s) => s.settings.language)
-  const { folders, sops, selectedSOPId, selectSOP, addFolder, renameFolder, deleteFolder } = useSOPStore()
-  const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(new Set())
+  const { folders, sops, selectedSOPId, selectSOP, addFolder, renameFolder, deleteFolder, collapsedFolderIds, toggleFolderCollapsed } = useSOPStore()
   const [newFolderInput, setNewFolderInput] = useState(false)
   const [newFolderName, setNewFolderName] = useState('')
   const [renamingId, setRenamingId] = useState<string | null>(null)
@@ -47,12 +46,7 @@ export function SOPTree({ onNewSOP }: Props) {
   }, [systemFolder, systemSOPs, folders, sops])
 
   function toggleFolder(id: string) {
-    setCollapsedFolders((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
+    toggleFolderCollapsed(id)
   }
 
   function handleAddFolder() {
@@ -88,7 +82,7 @@ export function SOPTree({ onNewSOP }: Props) {
       }}
     >
       {tree.map(({ folder, items }) => {
-        const isCollapsed = collapsedFolders.has(folder.id)
+        const isCollapsed = collapsedFolderIds.includes(folder.id)
         const isRenaming = renamingId === folder.id
 
         return (

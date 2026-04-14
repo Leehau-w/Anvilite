@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import type { SubTask } from '@/types/task'
 import { useTaskStore } from '@/stores/taskStore'
+import { useUIStore } from '@/stores/uiStore'
 
 const MAX_DEPTH = 2 // depth 0/1/2 → 最多 3 层
 
@@ -9,10 +10,13 @@ interface SubTaskItemProps {
   subTask: SubTask
   taskId: string
   depth: number
+  compact?: boolean
 }
 
-export function SubTaskItem({ subTask, taskId, depth }: SubTaskItemProps) {
+export function SubTaskItem({ subTask, taskId, depth, compact }: SubTaskItemProps) {
   const { toggleSubTask, removeSubTask, editSubTask, addSubTask } = useTaskStore()
+  const { isTaskCollapsed, toggleTaskCollapse } = useUIStore()
+  const childrenExpanded = !isTaskCollapsed(subTask.id)
   const [editing, setEditing] = useState(false)
   const [editValue, setEditValue] = useState(subTask.title)
   const [hovered, setHovered] = useState(false)
@@ -64,6 +68,33 @@ export function SubTaskItem({ subTask, taskId, depth }: SubTaskItemProps) {
           }}
         />
 
+        {/* 子项折叠按钮（有子项时显示） */}
+        {subTask.subTasks.length > 0 && (
+          <button
+            onClick={(e) => { e.stopPropagation(); toggleTaskCollapse(subTask.id) }}
+            title={childrenExpanded ? '收起' : '展开'}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 2,
+              padding: '0 5px',
+              height: 16,
+              borderRadius: 'var(--radius-sm)',
+              border: `1px solid ${childrenExpanded ? 'color-mix(in srgb, var(--color-accent) 30%, var(--color-border))' : 'var(--color-border)'}`,
+              background: childrenExpanded ? 'color-mix(in srgb, var(--color-accent) 8%, transparent)' : 'transparent',
+              color: childrenExpanded ? 'var(--color-accent)' : 'var(--color-text-dim)',
+              cursor: 'pointer',
+              fontSize: 10,
+              fontFamily: 'var(--font-num)',
+              flexShrink: 0,
+              transition: 'all 0.15s',
+            }}
+          >
+            <span style={{ fontSize: 8, lineHeight: 1 }}>{childrenExpanded ? '▾' : '▸'}</span>
+            <span>{subTask.subTasks.filter(c => c.completed).length}/{subTask.subTasks.length}</span>
+          </button>
+        )}
+
         {/* 标题 / 编辑框 */}
         {editing ? (
           <input
@@ -88,13 +119,13 @@ export function SubTaskItem({ subTask, taskId, depth }: SubTaskItemProps) {
           />
         ) : (
           <span
-            onClick={() => setEditing(true)}
+            onClick={() => !compact && setEditing(true)}
             style={{
               flex: 1,
               fontSize: 13,
               color: subTask.completed ? 'var(--color-text-dim)' : 'var(--color-text)',
               textDecoration: subTask.completed ? 'line-through' : 'none',
-              cursor: 'pointer',
+              cursor: compact ? 'default' : 'pointer',
               userSelect: 'none',
             }}
           >
@@ -102,9 +133,9 @@ export function SubTaskItem({ subTask, taskId, depth }: SubTaskItemProps) {
           </span>
         )}
 
-        {/* hover 操作：添加子项 + 删除 */}
+        {/* hover 操作：添加子项 + 删除（compact 模式隐藏） */}
         <AnimatePresence>
-          {hovered && !editing && (
+          {!compact && hovered && !editing && (
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -133,12 +164,12 @@ export function SubTaskItem({ subTask, taskId, depth }: SubTaskItemProps) {
       </div>
 
       {/* 嵌套子项 */}
-      {subTask.subTasks.map((child) => (
-        <SubTaskItem key={child.id} subTask={child} taskId={taskId} depth={depth + 1} />
+      {childrenExpanded && subTask.subTasks.map((child) => (
+        <SubTaskItem key={child.id} subTask={child} taskId={taskId} depth={depth + 1} compact={compact} />
       ))}
 
-      {/* 添加子步骤输入框 */}
-      {addingChild && (
+      {/* 添加子步骤输入框（compact 模式不显示） */}
+      {!compact && addingChild && (
         <div style={{ marginLeft: (depth + 1) * 18, marginTop: 2, display: 'flex', gap: 4, alignItems: 'center' }}>
           <input
             ref={childInputRef}

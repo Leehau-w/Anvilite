@@ -1,9 +1,11 @@
 import React, { useState } from 'react'
 import type { SOP, SOPStep } from '@/types/sop'
+import type { TaskPriority } from '@/types/task'
 import { useTaskStore } from '@/stores/taskStore'
 import { useSOPStore } from '@/stores/sopStore'
 import { useAreaStore } from '@/stores/areaStore'
 import { useT } from '@/i18n'
+import { CategorySelect } from '@/components/ui/CategorySelect'
 
 interface Props {
   sop: SOP
@@ -19,6 +21,7 @@ export function SOPToTaskModal({ sop, onClose }: Props) {
   const [title, setTitle] = useState(sop.title)
   const [category, setCategory] = useState(getAreaCategories()[0] ?? 'other')
   const [difficulty, setDifficulty] = useState<1 | 2 | 3 | 4 | 5>(3)
+  const [priority, setPriority] = useState<TaskPriority>('medium')
   const [dueDate, setDueDate] = useState('')
   const [selectedStepIds, setSelectedStepIds] = useState<Set<string>>(
     new Set(sop.steps.map((s) => s.id))
@@ -43,6 +46,7 @@ export function SOPToTaskModal({ sop, onClose }: Props) {
       title: title.trim(),
       category,
       difficulty,
+      priority,
       dueDate: dueDate || null,
       steps: selectedSteps,
     })
@@ -122,11 +126,11 @@ export function SOPToTaskModal({ sop, onClose }: Props) {
         {categories.length > 0 && (
           <div style={{ marginBottom: 14 }}>
             <label style={labelStyle}>{t.taskDrawer_category}</label>
-            <select value={category} onChange={(e) => setCategory(e.target.value)} style={inputStyle}>
-              {categories.map((c) => (
-                <option key={c} value={c}>{c}</option>
-              ))}
-            </select>
+            <CategorySelect
+              value={category}
+              onChange={setCategory}
+              categories={categories}
+            />
           </div>
         )}
 
@@ -154,6 +158,45 @@ export function SOPToTaskModal({ sop, onClose }: Props) {
                 {d.label}
               </button>
             ))}
+          </div>
+        </div>
+
+        {/* 优先级 */}
+        <div style={{ marginBottom: 14 }}>
+          <label style={labelStyle}>{t.taskDrawer_priority}</label>
+          <div style={{ display: 'flex', gap: 6 }}>
+            {(
+              [
+                { value: 'urgent' as TaskPriority, label: t.taskPriority_urgent, color: '#dc2626' },
+                { value: 'high'   as TaskPriority, label: t.taskPriority_high,   color: 'var(--color-accent)' },
+                { value: 'medium' as TaskPriority, label: t.taskPriority_medium, color: 'var(--color-text-dim)' },
+                { value: 'low'    as TaskPriority, label: t.taskPriority_low,    color: 'var(--color-border)' },
+              ] as const
+            ).map((p) => {
+              const isActive = priority === p.value
+              return (
+                <button
+                  key={p.value}
+                  type="button"
+                  onClick={() => setPriority(p.value)}
+                  style={{
+                    flex: 1,
+                    height: 32,
+                    fontSize: 12,
+                    borderRadius: 'var(--radius-md)',
+                    border: `1px solid ${isActive ? p.color : 'var(--color-border)'}`,
+                    background: isActive
+                      ? `color-mix(in srgb, ${p.color} 12%, transparent)`
+                      : 'transparent',
+                    color: isActive ? p.color : 'var(--color-text-dim)',
+                    cursor: 'pointer',
+                    fontWeight: isActive ? 500 : 400,
+                  }}
+                >
+                  {p.label}
+                </button>
+              )
+            })}
           </div>
         </div>
 

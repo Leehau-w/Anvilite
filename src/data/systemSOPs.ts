@@ -129,11 +129,11 @@ const SOP_META: Array<{
   { id: '__sys_workday',       type: 'schedule',  titleZh: '工作日日程',   titleEn: 'Workday Schedule',      steps: WORKDAY_STEPS,         sortOrder: 0 },
   { id: '__sys_dayoff',        type: 'schedule',  titleZh: '休息日日程',   titleEn: 'Day Off Schedule',      steps: DAYOFF_STEPS,          sortOrder: 1 },
   { id: '__sys_weeklyReview',  type: 'checklist', titleZh: '每周复盘',     titleEn: 'Weekly Review',         steps: WEEKLY_REVIEW_STEPS,   sortOrder: 2 },
-  { id: '__sys_projectKickoff',type: 'workflow',  titleZh: '项目启动流程', titleEn: 'Project Kickoff',       steps: PROJECT_KICKOFF_STEPS, sortOrder: 3 },
-  { id: '__sys_learnSkill',    type: 'workflow',  titleZh: '学习新技能流程',titleEn: 'Learn a New Skill',    steps: LEARN_SKILL_STEPS,     sortOrder: 4 },
-  { id: '__sys_travelPacking', type: 'itemlist',  titleZh: '出差准备清单', titleEn: 'Business Trip Packing', steps: TRAVEL_PACKING_STEPS,  sortOrder: 5 },
-  { id: '__sys_deepClean',     type: 'itemlist',  titleZh: '大扫除清单',   titleEn: 'Deep Cleaning',         steps: DEEP_CLEAN_STEPS,      sortOrder: 6 },
-  { id: '__sys_meetingPrep',   type: 'checklist', titleZh: '会议准备检查', titleEn: 'Meeting Preparation',   steps: MEETING_PREP_STEPS,    sortOrder: 7 },
+  { id: '__sys_meetingPrep',   type: 'checklist', titleZh: '会议准备检查', titleEn: 'Meeting Preparation',   steps: MEETING_PREP_STEPS,    sortOrder: 3 },
+  { id: '__sys_projectKickoff',type: 'workflow',  titleZh: '项目启动流程', titleEn: 'Project Kickoff',       steps: PROJECT_KICKOFF_STEPS, sortOrder: 4 },
+  { id: '__sys_learnSkill',    type: 'workflow',  titleZh: '学习新技能流程',titleEn: 'Learn a New Skill',    steps: LEARN_SKILL_STEPS,     sortOrder: 5 },
+  { id: '__sys_travelPacking', type: 'itemlist',  titleZh: '出差准备清单', titleEn: 'Business Trip Packing', steps: TRAVEL_PACKING_STEPS,  sortOrder: 6 },
+  { id: '__sys_deepClean',     type: 'itemlist',  titleZh: '大扫除清单',   titleEn: 'Deep Cleaning',         steps: DEEP_CLEAN_STEPS,      sortOrder: 7 },
 ]
 
 export function getSystemFolder(lang: Lang): SOPFolder {

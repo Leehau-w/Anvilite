@@ -8,8 +8,9 @@ import { useToast } from '@/components/feedback/Toast'
 import { UndoToast } from '@/components/feedback/UndoToast'
 import { CollapsibleGroup } from '@/components/ui/CollapsibleGroup'
 import { getNextRefreshText } from '@/engines/habitEngine'
-import type { Habit } from '@/types/habit'
+import type { Habit, SubHabit } from '@/types/habit'
 import { useT } from '@/i18n'
+import { useUIStore } from '@/stores/uiStore'
 
 interface UndoEntry {
   habitId: string
@@ -309,7 +310,13 @@ function HabitItem({
 }) {
   const refreshText = getNextRefreshText(habit)
   const t = useT()
+  const { toggleSubHabit } = useHabitStore()
+  const { isTaskCollapsed, toggleTaskCollapse } = useUIStore()
   const isDoing = !!habit.timerStartedAt
+
+  const subHabits = habit.subHabits ?? []
+  const subHabitsExpanded = !isTaskCollapsed(habit.id)
+  const completedSubCount = subHabits.filter((s) => s.completed).length
 
   return (
     <motion.div
@@ -318,9 +325,6 @@ function HabitItem({
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, height: 0, marginBottom: 0 }}
       style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 8,
         padding: '8px 0',
         borderBottom: '1px solid var(--color-border)',
         background: isDoing ? 'color-mix(in srgb, var(--color-accent) 4%, transparent)' : 'transparent',
@@ -329,119 +333,176 @@ function HabitItem({
         paddingRight: isDoing ? 6 : undefined,
       }}
     >
-      {/* 完成按钮 */}
-      {(habit.targetCount ?? 1) > 1 ? (
-        <ProgressButton
-          current={habit.currentCycleCount ?? 0}
-          target={habit.targetCount}
-          onClick={onComplete}
-        />
-      ) : (
-        <button
-          onClick={onComplete}
-          style={{
-            width: 28,
-            height: 28,
-            borderRadius: 'var(--radius-sm)',
-            border: '1.5px solid var(--color-accent)',
-            background: 'color-mix(in srgb, var(--color-accent) 10%, transparent)',
-            color: 'var(--color-accent)',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            flexShrink: 0,
-            fontSize: 13,
-            fontWeight: 700,
-          }}
-        >
-          ✓
-        </button>
-      )}
+      {/* 主行 */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        {/* 完成按钮 */}
+        {(habit.targetCount ?? 1) > 1 ? (
+          <ProgressButton
+            current={habit.currentCycleCount ?? 0}
+            target={habit.targetCount}
+            onClick={onComplete}
+          />
+        ) : (
+          <button
+            onClick={onComplete}
+            style={{
+              width: 28, height: 28, borderRadius: 'var(--radius-sm)',
+              border: '1.5px solid var(--color-accent)',
+              background: 'color-mix(in srgb, var(--color-accent) 10%, transparent)',
+              color: 'var(--color-accent)', cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              flexShrink: 0, fontSize: 13, fontWeight: 700,
+            }}
+          >
+            ✓
+          </button>
+        )}
 
-      {/* 名称 + 连续 */}
-      <div
-        style={{ flex: 1, minWidth: 0, cursor: onEdit ? 'pointer' : 'default' }}
-        onClick={onEdit}
-      >
-        <div
-          style={{
+        {/* 子项折叠按钮 */}
+        {subHabits.length > 0 && (
+          <button
+            onClick={() => toggleTaskCollapse(habit.id)}
+            title={subHabitsExpanded ? '收起子项' : '展开子项'}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 3,
+              padding: '0 7px', height: 20,
+              borderRadius: 'var(--radius-sm)',
+              border: `1px solid ${subHabitsExpanded ? 'color-mix(in srgb, var(--color-accent) 30%, var(--color-border))' : 'var(--color-border)'}`,
+              background: subHabitsExpanded ? 'color-mix(in srgb, var(--color-accent) 8%, transparent)' : 'transparent',
+              color: subHabitsExpanded ? 'var(--color-accent)' : 'var(--color-text-dim)',
+              cursor: 'pointer', fontSize: 11, fontFamily: 'var(--font-num)',
+              flexShrink: 0, transition: 'all 0.15s',
+            }}
+          >
+            <span style={{ fontSize: 9, lineHeight: 1 }}>{subHabitsExpanded ? '▾' : '▸'}</span>
+            <span>{completedSubCount}/{subHabits.length}</span>
+          </button>
+        )}
+
+        {/* 名称 + 刷新时间 */}
+        <div style={{ flex: 1, minWidth: 0, cursor: onEdit ? 'pointer' : 'default' }} onClick={onEdit}>
+          <div style={{
             fontSize: 14,
             color: isDoing ? 'var(--color-accent)' : 'var(--color-text)',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
             fontWeight: isDoing ? 600 : 400,
+          }}>
+            {habit.title}
+          </div>
+          {refreshText && (
+            <div style={{ fontSize: 10, color: 'var(--color-text-dim)', marginTop: 1 }}>{refreshText}</div>
+          )}
+        </div>
+
+        {/* 连续次数 */}
+        {habit.consecutiveCount > 0 && (
+          <span style={{ fontSize: 11, color: 'var(--color-xp)', fontFamily: 'var(--font-num)', fontWeight: 600, whiteSpace: 'nowrap' }}>
+            🔥{habit.consecutiveCount}
+          </span>
+        )}
+
+        {/* 开始/暂停按钮 */}
+        <button
+          onClick={onStartPause}
+          title={isDoing ? t.task_pauseDoing : t.task_startDoing}
+          style={{
+            width: 24, height: 24, borderRadius: 'var(--radius-sm)',
+            border: `1px solid ${isDoing ? 'var(--color-accent)' : 'var(--color-border)'}`,
+            background: isDoing ? 'color-mix(in srgb, var(--color-accent) 15%, transparent)' : 'transparent',
+            color: isDoing ? 'var(--color-accent)' : 'var(--color-text-dim)',
+            cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+            flexShrink: 0, transition: 'all 0.15s', padding: 0,
           }}
         >
-          {habit.title}
-        </div>
-        {refreshText && (
-          <div style={{ fontSize: 10, color: 'var(--color-text-dim)', marginTop: 1 }}>
-            {refreshText}
-          </div>
-        )}
+          {isDoing ? (
+            <svg width="9" height="9" viewBox="0 0 10 10" fill="currentColor">
+              <rect x="2" y="2" width="2.5" height="6" rx="0.5"/>
+              <rect x="5.5" y="2" width="2.5" height="6" rx="0.5"/>
+            </svg>
+          ) : (
+            <svg width="9" height="9" viewBox="0 0 10 10" fill="currentColor">
+              <path d="M3 2l5 3-5 3V2z"/>
+            </svg>
+          )}
+        </button>
+
+        {/* 跳过按钮 */}
+        <button
+          onClick={onSkip}
+          title={t.habitCard_skip}
+          style={{
+            fontSize: 10, color: 'var(--color-text-dim)', background: 'none',
+            border: 'none', cursor: 'pointer', padding: '3px 6px',
+            borderRadius: 'var(--radius-sm)', opacity: 0.5,
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.opacity = '1' }}
+          onMouseLeave={(e) => { e.currentTarget.style.opacity = '0.5' }}
+        >
+          {t.habitCard_skip}
+        </button>
       </div>
 
-      {/* 连续次数 */}
-      {habit.consecutiveCount > 0 && (
-        <span style={{ fontSize: 11, color: 'var(--color-xp)', fontFamily: 'var(--font-num)', fontWeight: 600, whiteSpace: 'nowrap' }}>
-          🔥{habit.consecutiveCount}
-        </span>
+      {/* 子项列表 */}
+      {subHabits.length > 0 && subHabitsExpanded && (
+        <div style={{ paddingLeft: 36, marginTop: 4, display: 'flex', flexDirection: 'column', gap: 1 }}>
+          {subHabits.map((sub) => (
+            <DashSubHabitItem key={sub.id} sub={sub} habitId={habit.id} depth={0} onToggle={toggleSubHabit} />
+          ))}
+        </div>
       )}
-
-      {/* 开始/暂停按钮 */}
-      <button
-        onClick={onStartPause}
-        title={isDoing ? t.task_pauseDoing : t.task_startDoing}
-        style={{
-          width: 24,
-          height: 24,
-          borderRadius: 'var(--radius-sm)',
-          border: `1px solid ${isDoing ? 'var(--color-accent)' : 'var(--color-border)'}`,
-          background: isDoing ? 'color-mix(in srgb, var(--color-accent) 15%, transparent)' : 'transparent',
-          color: isDoing ? 'var(--color-accent)' : 'var(--color-text-dim)',
-          cursor: 'pointer',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          flexShrink: 0,
-          transition: 'all 0.15s',
-          padding: 0,
-        }}
-      >
-        {isDoing ? (
-          <svg width="9" height="9" viewBox="0 0 10 10" fill="currentColor">
-            <rect x="2" y="2" width="2.5" height="6" rx="0.5"/>
-            <rect x="5.5" y="2" width="2.5" height="6" rx="0.5"/>
-          </svg>
-        ) : (
-          <svg width="9" height="9" viewBox="0 0 10 10" fill="currentColor">
-            <path d="M3 2l5 3-5 3V2z"/>
-          </svg>
-        )}
-      </button>
-
-      {/* 跳过按钮 */}
-      <button
-        onClick={onSkip}
-        title={t.habitCard_skip}
-        style={{
-          fontSize: 10,
-          color: 'var(--color-text-dim)',
-          background: 'none',
-          border: 'none',
-          cursor: 'pointer',
-          padding: '3px 6px',
-          borderRadius: 'var(--radius-sm)',
-          opacity: 0.5,
-        }}
-        onMouseEnter={(e) => { e.currentTarget.style.opacity = '1' }}
-        onMouseLeave={(e) => { e.currentTarget.style.opacity = '0.5' }}
-      >
-        {t.habitCard_skip}
-      </button>
     </motion.div>
+  )
+}
+
+function DashSubHabitItem({
+  sub, habitId, depth, onToggle,
+}: {
+  sub: SubHabit; habitId: string; depth: number; onToggle: (habitId: string, subId: string) => void
+}) {
+  const { isTaskCollapsed, toggleTaskCollapse } = useUIStore()
+  const childrenExpanded = !isTaskCollapsed(sub.id)
+  const completedChildCount = sub.subHabits.filter((c) => c.completed).length
+
+  return (
+    <div style={{ marginLeft: depth * 18 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '2px 0' }}>
+        <input
+          type="checkbox"
+          checked={sub.completed}
+          onChange={() => onToggle(habitId, sub.id)}
+          style={{ width: 13, height: 13, flexShrink: 0, cursor: 'pointer', accentColor: 'var(--color-accent)' }}
+        />
+        {sub.subHabits.length > 0 && (
+          <button
+            onClick={() => toggleTaskCollapse(sub.id)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 2,
+              padding: '0 5px', height: 16,
+              borderRadius: 'var(--radius-sm)',
+              border: `1px solid ${childrenExpanded ? 'color-mix(in srgb, var(--color-accent) 30%, var(--color-border))' : 'var(--color-border)'}`,
+              background: childrenExpanded ? 'color-mix(in srgb, var(--color-accent) 8%, transparent)' : 'transparent',
+              color: childrenExpanded ? 'var(--color-accent)' : 'var(--color-text-dim)',
+              cursor: 'pointer', fontSize: 10, fontFamily: 'var(--font-num)',
+              flexShrink: 0, transition: 'all 0.15s',
+            }}
+          >
+            <span style={{ fontSize: 8, lineHeight: 1 }}>{childrenExpanded ? '▾' : '▸'}</span>
+            <span>{completedChildCount}/{sub.subHabits.length}</span>
+          </button>
+        )}
+        <span style={{
+          flex: 1, fontSize: 13,
+          color: sub.completed ? 'var(--color-text-dim)' : 'var(--color-text)',
+          textDecoration: sub.completed ? 'line-through' : 'none',
+          userSelect: 'none',
+        }}>
+          {sub.title}
+        </span>
+      </div>
+      {sub.subHabits.length > 0 && childrenExpanded && sub.subHabits.map((child) => (
+        <DashSubHabitItem key={child.id} sub={child} habitId={habitId} depth={depth + 1} onToggle={onToggle} />
+      ))}
+    </div>
   )
 }
 

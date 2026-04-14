@@ -61,6 +61,7 @@ interface TaskStore {
     title: string
     category: string
     difficulty: 1 | 2 | 3 | 4 | 5
+    priority: 'urgent' | 'high' | 'medium' | 'low'
     dueDate: string | null
     steps: import('@/types/sop').SOPStep[]
   }) => string
@@ -330,14 +331,14 @@ export const useTaskStore = create<TaskStore>()(
         }))
       },
 
-      createTaskFromSOP: ({ title, category, difficulty, dueDate, steps }) => {
+      createTaskFromSOP: ({ title, category, difficulty, priority, dueDate, steps }) => {
         const now = new Date().toISOString()
         const task: Task = {
           id: generateId(),
           title,
           category,
           difficulty,
-          priority: 'medium',
+          priority,
           dueDate,
           description: '',
           actualMinutes: 0,

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useMemo, useCallback } from 'react'
+import React, { useState, useRef, useMemo, useCallback, useEffect } from 'react'
 import { AnimatePresence, motion, Reorder } from 'framer-motion'
 import { useTaskStore } from '@/stores/taskStore'
 import { useAreaStore } from '@/stores/areaStore'
@@ -11,7 +11,8 @@ import { HabitDrawer } from '@/components/dashboard/HabitDrawer'
 import { CollapsibleGroup } from '@/components/ui/CollapsibleGroup'
 import { useToast } from '@/components/feedback/Toast'
 import type { Task } from '@/types/task'
-import type { Habit } from '@/types/habit'
+import type { Habit, SubHabit } from '@/types/habit'
+import { useUIStore } from '@/stores/uiStore'
 import { useT } from '@/i18n'
 import { categoryDisplay, getAreaDisplayName } from '@/utils/area'
 import { sortTasksInGroup } from '@/utils/task'
@@ -1500,15 +1501,25 @@ function HabitRow({
 }) {
   const tr = useT()
   const areas = useAreaStore((s) => s.areas)
-  // v0.3: subHabits are embedded in habit, allHabits no longer needed here
+  const { isTaskCollapsed, toggleTaskCollapse } = useUIStore()
   const catLabel = (cat: string) => resolveCatLabel(cat, areas, tr)
   const repeatLabel = getHabitRepeatLabel(habit, tr)
   const [hovered, setHovered] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState(false)
   const deleteTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const isDoing = !!habit.timerStartedAt
 
   const subHabits = habit.subHabits ?? []
+  const subHabitsExpanded = !isTaskCollapsed(habit.id)
+  const completedSubCount = subHabits.filter((s) => s.completed).length
+
+  useEffect(() => {
+    return () => {
+      if (deleteTimer.current) clearTimeout(deleteTimer.current)
+      if (hoverTimer.current) clearTimeout(hoverTimer.current)
+    }
+  }, [])
 
   function handleDeleteClick() {
     if (!deleteConfirm) {
@@ -1528,8 +1539,15 @@ function HabitRow({
         initial={{ opacity: 0, y: -6 }}
         animate={{ opacity: dim ? 0.6 : 1, y: 0 }}
         exit={{ opacity: 0, height: 0 }}
-        onMouseEnter={() => setHovered(true)}
-        onMouseLeave={() => { setHovered(false); setDeleteConfirm(false) }}
+        onMouseEnter={() => {
+          if (hoverTimer.current) clearTimeout(hoverTimer.current)
+          hoverTimer.current = setTimeout(() => setHovered(true), 300)
+        }}
+        onMouseLeave={() => {
+          if (hoverTimer.current) clearTimeout(hoverTimer.current)
+          setHovered(false)
+          setDeleteConfirm(false)
+        }}
         style={{
           padding: '10px 12px',
           background: 'var(--color-surface)',
@@ -1541,9 +1559,26 @@ function HabitRow({
         onClick={() => onEdit?.(habit)}
       >
         {/* 标题行 */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {/* 子项折叠按钮 */}
           {subHabits.length > 0 && (
-            <span style={{ fontSize: 10, color: 'var(--color-text-dim)', flexShrink: 0 }}>▶</span>
+            <button
+              onClick={(e) => { e.stopPropagation(); toggleTaskCollapse(habit.id) }}
+              title={subHabitsExpanded ? '收起子项' : '展开子项'}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 3,
+                padding: '0 7px', height: 20,
+                borderRadius: 'var(--radius-sm)',
+                border: `1px solid ${subHabitsExpanded ? 'color-mix(in srgb, var(--color-accent) 30%, var(--color-border))' : 'var(--color-border)'}`,
+                background: subHabitsExpanded ? 'color-mix(in srgb, var(--color-accent) 8%, transparent)' : 'transparent',
+                color: subHabitsExpanded ? 'var(--color-accent)' : 'var(--color-text-dim)',
+                cursor: 'pointer', fontSize: 11, fontFamily: 'var(--font-num)',
+                flexShrink: 0, transition: 'all 0.15s',
+              }}
+            >
+              <span style={{ fontSize: 9, lineHeight: 1 }}>{subHabitsExpanded ? '▾' : '▸'}</span>
+              <span>{completedSubCount}/{subHabits.length}</span>
+            </button>
           )}
           <span style={{
             fontSize: 14, color: dim ? 'var(--color-text-dim)' : isDoing ? 'var(--color-accent)' : 'var(--color-text)',
@@ -1586,11 +1621,8 @@ function HabitRow({
           {habit.consecutiveCount > 0 && (
             <span style={{ color: 'var(--color-xp)', fontFamily: 'var(--font-num)', fontWeight: 600 }}>🔥{habit.consecutiveCount}</span>
           )}
-          {subHabits.length > 0 && (
-            <span>{tr.task_subtasks(subHabits.length)}</span>
-          )}
         </div>
-        {/* hover 操作栏（和 TaskItem 一致的文字按钮风格） */}
+        {/* hover 操作栏 */}
         <AnimatePresence>
           {hovered && (
             <motion.div
@@ -1618,19 +1650,65 @@ function HabitRow({
             </motion.div>
           )}
         </AnimatePresence>
-      </motion.div>
 
-      {/* 子步骤（内嵌 subHabits，只显示名称和完成状态） */}
-      {subHabits.length > 0 && (
-        <div style={{ paddingLeft: 20, marginTop: 4, display: 'flex', flexDirection: 'column', gap: 2, borderLeft: '2px solid var(--color-border)', marginLeft: 8 }}>
-          {subHabits.map((sub) => (
-            <div key={sub.id} style={{ fontSize: 12, color: sub.completed ? 'var(--color-text-dim)' : 'var(--color-text)', display: 'flex', alignItems: 'center', gap: 4, textDecoration: sub.completed ? 'line-through' : 'none' }}>
-              <span>{sub.completed ? '✓' : '○'}</span>
-              <span>{sub.title}</span>
-            </div>
-          ))}
-        </div>
-      )}
+        {/* 子项列表（卡片内，可收起） */}
+        {subHabits.length > 0 && subHabitsExpanded && (
+          <div style={{ paddingLeft: 28, marginTop: 6, display: 'flex', flexDirection: 'column', gap: 1 }} onClick={(e) => e.stopPropagation()}>
+            {subHabits.map((sub) => (
+              <SubHabitItem key={sub.id} sub={sub} habitId={habit.id} depth={0} />
+            ))}
+          </div>
+        )}
+      </motion.div>
+    </div>
+  )
+}
+
+function SubHabitItem({ sub, habitId, depth }: { sub: SubHabit; habitId: string; depth: number }) {
+  const { toggleSubHabit } = useHabitStore()
+  const { isTaskCollapsed, toggleTaskCollapse } = useUIStore()
+  const childrenExpanded = !isTaskCollapsed(sub.id)
+  const completedChildCount = sub.subHabits.filter((c) => c.completed).length
+
+  return (
+    <div style={{ marginLeft: depth * 18 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '2px 0' }}>
+        <input
+          type="checkbox"
+          checked={sub.completed}
+          onChange={() => toggleSubHabit(habitId, sub.id)}
+          style={{ width: 13, height: 13, flexShrink: 0, cursor: 'pointer', accentColor: 'var(--color-accent)' }}
+        />
+        {sub.subHabits.length > 0 && (
+          <button
+            onClick={() => toggleTaskCollapse(sub.id)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 2,
+              padding: '0 5px', height: 16,
+              borderRadius: 'var(--radius-sm)',
+              border: `1px solid ${childrenExpanded ? 'color-mix(in srgb, var(--color-accent) 30%, var(--color-border))' : 'var(--color-border)'}`,
+              background: childrenExpanded ? 'color-mix(in srgb, var(--color-accent) 8%, transparent)' : 'transparent',
+              color: childrenExpanded ? 'var(--color-accent)' : 'var(--color-text-dim)',
+              cursor: 'pointer', fontSize: 10, fontFamily: 'var(--font-num)',
+              flexShrink: 0, transition: 'all 0.15s',
+            }}
+          >
+            <span style={{ fontSize: 8, lineHeight: 1 }}>{childrenExpanded ? '▾' : '▸'}</span>
+            <span>{completedChildCount}/{sub.subHabits.length}</span>
+          </button>
+        )}
+        <span style={{
+          flex: 1, fontSize: 13,
+          color: sub.completed ? 'var(--color-text-dim)' : 'var(--color-text)',
+          textDecoration: sub.completed ? 'line-through' : 'none',
+          userSelect: 'none',
+        }}>
+          {sub.title}
+        </span>
+      </div>
+      {sub.subHabits.length > 0 && childrenExpanded && sub.subHabits.map((child) => (
+        <SubHabitItem key={child.id} sub={child} habitId={habitId} depth={depth + 1} />
+      ))}
     </div>
   )
 }

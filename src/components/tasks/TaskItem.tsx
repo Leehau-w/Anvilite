@@ -11,9 +11,9 @@ import { useToast } from '@/components/feedback/Toast'
 import { useFeedback } from '@/components/feedback/FeedbackContext'
 import { useT } from '@/i18n'
 import { useSettingsStore } from '@/stores/settingsStore'
+import { useUIStore } from '@/stores/uiStore'
 import { SubTaskItem } from './SubTaskItem'
 
-const MAX_VISIBLE_SUBTASKS = 5
 
 interface TaskItemProps {
   task: Task
@@ -36,12 +36,14 @@ export function TaskItem({ task, compact, onEdit }: TaskItemProps) {
   const [deleteConfirm, setDeleteConfirm] = useState(false)
   const [showDurationInput, setShowDurationInput] = useState(false)
   const [durationInput, setDurationInput] = useState('')
-  const [subTasksExpanded, setSubTasksExpanded] = useState(true)
+  const { isTaskCollapsed, toggleTaskCollapse } = useUIStore()
+  const subTasksExpanded = !isTaskCollapsed(task.id)
   const [subTaskInput, setSubTaskInput] = useState('')
   const [showSubTaskInput, setShowSubTaskInput] = useState(false)
   const subTaskInputRef = useRef<HTMLInputElement>(null)
   const confirmTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const deleteConfirmTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const isOverdueDue = isOverdue(task.dueDate) && task.status !== 'done'
   const isDoing = task.status === 'doing'
@@ -49,8 +51,6 @@ export function TaskItem({ task, compact, onEdit }: TaskItemProps) {
 
   const subTasks = task.subTasks ?? []
   const completedSubCount = subTasks.filter((s) => s.completed).length
-  const visibleSubTasks = subTasksExpanded ? subTasks : subTasks.slice(0, MAX_VISIBLE_SUBTASKS)
-  const hasMoreSubs = subTasks.length > MAX_VISIBLE_SUBTASKS && !subTasksExpanded
 
   useEffect(() => {
     if (showSubTaskInput && subTaskInputRef.current) subTaskInputRef.current.focus()
@@ -60,6 +60,7 @@ export function TaskItem({ task, compact, onEdit }: TaskItemProps) {
     return () => {
       if (confirmTimer.current) clearTimeout(confirmTimer.current)
       if (deleteConfirmTimer.current) clearTimeout(deleteConfirmTimer.current)
+      if (hoverTimer.current) clearTimeout(hoverTimer.current)
     }
   }, [])
 
@@ -203,12 +204,9 @@ export function TaskItem({ task, compact, onEdit }: TaskItemProps) {
       scale: completing ? 1.02 : 1,
       transition: { duration: 0.25 },
     },
-    exit: {
-      x: '120%',
-      rotate: 3,
-      opacity: 0,
-      transition: { duration: 0.4, ease: [0.4, 0, 1, 1], delay: 0.25 },
-    },
+    exit: compact
+      ? { opacity: 0, transition: { duration: 0.15 } }
+      : { x: '120%', rotate: 3, opacity: 0, transition: { duration: 0.4, ease: [0.4, 0, 1, 1], delay: 0.25 } },
   }
 
   const bgColor = isDoing
@@ -228,8 +226,15 @@ export function TaskItem({ task, compact, onEdit }: TaskItemProps) {
       initial="initial"
       animate="animate"
       exit="exit"
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => { setHovered(false); setDeleteConfirm(false) }}
+      onMouseEnter={() => {
+        if (hoverTimer.current) clearTimeout(hoverTimer.current)
+        hoverTimer.current = setTimeout(() => setHovered(true), 300)
+      }}
+      onMouseLeave={() => {
+        if (hoverTimer.current) clearTimeout(hoverTimer.current)
+        setHovered(false)
+        setDeleteConfirm(false)
+      }}
       style={{
         position: 'relative',
         padding: compact ? '8px 12px' : '10px 12px',
@@ -245,7 +250,7 @@ export function TaskItem({ task, compact, onEdit }: TaskItemProps) {
       whileHover={{ boxShadow: 'var(--shadow-md)' }}
     >
       {/* ── 主行 ────────────────────────────────────────────── */}
-      <div style={{ display: 'flex', alignItems: compact ? 'center' : 'flex-start', gap: 10 }}>
+      <div style={{ display: 'flex', alignItems: compact ? 'center' : 'flex-start', gap: 8 }}>
         {/* 勾选框 */}
         <CheckButton
           done={isDone}
@@ -253,6 +258,36 @@ export function TaskItem({ task, compact, onEdit }: TaskItemProps) {
           onComplete={handleComplete}
           compact={compact}
         />
+
+        {/* 子任务折叠按钮（勾选框右侧） */}
+        {subTasks.length > 0 && (
+          <button
+            onClick={(e) => { e.stopPropagation(); toggleTaskCollapse(task.id) }}
+            title={subTasksExpanded ? '收起子项' : '展开子项'}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 3,
+              padding: '0 7px',
+              height: compact ? 18 : 20,
+              borderRadius: 'var(--radius-sm)',
+              border: '1px solid var(--color-border)',
+              background: subTasksExpanded
+                ? 'color-mix(in srgb, var(--color-accent) 8%, transparent)'
+                : 'transparent',
+              borderColor: subTasksExpanded ? 'color-mix(in srgb, var(--color-accent) 30%, var(--color-border))' : 'var(--color-border)',
+              color: subTasksExpanded ? 'var(--color-accent)' : 'var(--color-text-dim)',
+              cursor: 'pointer',
+              fontSize: 11,
+              fontFamily: 'var(--font-num)',
+              flexShrink: 0,
+              transition: 'all 0.15s',
+            }}
+          >
+            <span style={{ fontSize: 9, lineHeight: 1 }}>{subTasksExpanded ? '▾' : '▸'}</span>
+            <span>{completedSubCount}/{subTasks.length}</span>
+          </button>
+        )}
 
         {/* 主内容 */}
         <div style={{ flex: 1, minWidth: 0 }}>
@@ -280,19 +315,6 @@ export function TaskItem({ task, compact, onEdit }: TaskItemProps) {
             >
               {task.title}
             </span>
-            {/* 子任务进度徽章 */}
-            {subTasks.length > 0 && (
-              <span
-                style={{
-                  fontSize: 11,
-                  color: 'var(--color-text-dim)',
-                  fontFamily: 'var(--font-num)',
-                  flexShrink: 0,
-                }}
-              >
-                {completedSubCount}/{subTasks.length}
-              </span>
-            )}
           </div>
 
           {!compact && (
@@ -431,20 +453,12 @@ export function TaskItem({ task, compact, onEdit }: TaskItemProps) {
         )}
       </div>
 
-      {/* ── 子任务 checklist（非 compact 模式） ─────────────── */}
-      {!compact && subTasks.length > 0 && (
-        <div style={{ marginTop: 8, paddingLeft: 28, display: 'flex', flexDirection: 'column', gap: 1 }}>
-          {visibleSubTasks.map((sub) => (
-            <SubTaskItem key={sub.id} subTask={sub} taskId={task.id} depth={0} />
+      {/* ── 子任务 checklist ────────────────────────────────── */}
+      {subTasks.length > 0 && subTasksExpanded && (
+        <div style={{ marginTop: 8, paddingLeft: compact ? 22 : 28, display: 'flex', flexDirection: 'column', gap: 1 }}>
+          {subTasks.map((sub) => (
+            <SubTaskItem key={sub.id} subTask={sub} taskId={task.id} depth={0} compact={compact} />
           ))}
-          {hasMoreSubs && (
-            <button
-              onClick={() => setSubTasksExpanded(true)}
-              style={{ fontSize: 11, color: 'var(--color-accent)', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 0', textAlign: 'left' }}
-            >
-              展开更多 {subTasks.length - MAX_VISIBLE_SUBTASKS} 项…
-            </button>
-          )}
         </div>
       )}
 

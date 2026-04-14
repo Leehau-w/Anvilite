@@ -8,6 +8,7 @@ interface SOPState {
   folders: SOPFolder[]
   sops: SOP[]
   selectedSOPId: string | null
+  collapsedFolderIds: string[]
 
   // 文件夹 CRUD
   addFolder: (name: string) => void
@@ -24,6 +25,7 @@ interface SOPState {
   reorderSOPs: (folderId: string, ids: string[]) => void
 
   selectSOP: (id: string | null) => void
+  toggleFolderCollapsed: (id: string) => void
 }
 
 export const useSOPStore = create<SOPState>()(
@@ -32,6 +34,7 @@ export const useSOPStore = create<SOPState>()(
       folders: [],
       sops: [],
       selectedSOPId: null,
+      collapsedFolderIds: [],
 
       addFolder: (name) => {
         const folder: SOPFolder = {
@@ -136,7 +139,21 @@ export const useSOPStore = create<SOPState>()(
       },
 
       selectSOP: (id) => set({ selectedSOPId: id }),
+
+      toggleFolderCollapsed: (id) => {
+        set((s) => ({
+          collapsedFolderIds: s.collapsedFolderIds.includes(id)
+            ? s.collapsedFolderIds.filter((x) => x !== id)
+            : [...s.collapsedFolderIds, id],
+        }))
+      },
     }),
-    { name: `${getStoragePrefix()}-sops` }
+    {
+      name: `${getStoragePrefix()}-sops`,
+      onRehydrateStorage: () => (state) => {
+        if (!state) return
+        if (!state.collapsedFolderIds) state.collapsedFolderIds = []
+      },
+    }
   )
 )

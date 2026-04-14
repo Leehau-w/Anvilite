@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { Reorder, useDragControls } from 'framer-motion'
 import { useInspirationStore } from '@/stores/inspirationStore'
 import { useTaskStore } from '@/stores/taskStore'
 import { useToast } from '@/components/feedback/Toast'
@@ -7,7 +7,7 @@ import { useT } from '@/i18n'
 import type { Inspiration } from '@/types/inspiration'
 
 export function InspirationCard({ onOpenModal }: { onOpenModal?: () => void }) {
-  const { inspirations, deleteInspiration, markConverted, updateInspiration } = useInspirationStore()
+  const { inspirations, deleteInspiration, markConverted, updateInspiration, reorderInspirations } = useInspirationStore()
   const { addTask } = useTaskStore()
   const { showToast } = useToast()
   const t = useT()
@@ -33,7 +33,12 @@ export function InspirationCard({ onOpenModal }: { onOpenModal?: () => void }) {
 
   return (
     <div style={{ overflowY: 'auto', height: '100%', scrollbarWidth: 'thin', scrollbarColor: 'var(--color-border) transparent' }}>
-      <AnimatePresence mode="popLayout">
+      <Reorder.Group
+        axis="y"
+        values={unconverted}
+        onReorder={(items) => reorderInspirations(items.map((i) => i.id))}
+        style={{ listStyle: 'none', margin: 0, padding: 0 }}
+      >
         {unconverted.map((item) => (
           <InspirationRow
             key={item.id}
@@ -44,7 +49,7 @@ export function InspirationCard({ onOpenModal }: { onOpenModal?: () => void }) {
             t={t}
           />
         ))}
-      </AnimatePresence>
+      </Reorder.Group>
       {unconverted.length === 0 && inspirations.length > 0 && (
         <p style={{ fontSize: 12, color: 'var(--color-text-dim)', textAlign: 'center', padding: '16px 0' }}>
           {t.inspiration_allConverted} ✓
@@ -71,6 +76,7 @@ function InspirationRow({
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(item.content)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+  const dragControls = useDragControls()
 
   useEffect(() => {
     if (editing) {
@@ -92,27 +98,33 @@ function InspirationRow({
   }
 
   return (
-    <motion.div
-      layout
-      initial={{ opacity: 0, height: 0 }}
-      animate={{ opacity: 1, height: 'auto' }}
-      exit={{ opacity: 0, height: 0 }}
-      style={{ overflow: 'hidden' }}
-    >
+    <Reorder.Item value={item} dragListener={false} dragControls={dragControls} style={{ listStyle: 'none' }}>
       <div
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
         style={{
           display: 'flex',
           alignItems: 'flex-start',
-          gap: 6,
+          gap: 4,
           padding: '6px 2px',
           borderBottom: '1px solid var(--color-border)',
-          background: editing ? 'var(--color-surface-hover)' : hovered ? 'var(--color-surface-hover)' : 'transparent',
+          background: editing || hovered ? 'var(--color-surface-hover)' : 'transparent',
           transition: 'background 0.1s',
         }}
       >
-        <span style={{ fontSize: 11, color: 'var(--color-text-dim)', marginTop: editing ? 6 : 2, flexShrink: 0 }}>💡</span>
+        {/* 拖拽把手 */}
+        <span
+          onPointerDown={(e) => { e.preventDefault(); dragControls.start(e) }}
+          style={{
+            fontSize: 11, color: 'var(--color-border)', cursor: 'grab',
+            flexShrink: 0, marginTop: editing ? 6 : 3,
+            opacity: hovered ? 1 : 0, transition: 'opacity 0.1s',
+            userSelect: 'none',
+          }}
+        >
+          ⠿
+        </span>
+
         {editing ? (
           <textarea
             ref={inputRef}
@@ -125,16 +137,9 @@ function InspirationRow({
             }}
             rows={2}
             style={{
-              flex: 1,
-              fontSize: 12,
-              color: 'var(--color-text)',
-              lineHeight: 1.5,
-              background: 'transparent',
-              border: 'none',
-              outline: 'none',
-              resize: 'none',
-              fontFamily: 'var(--font-zh)',
-              padding: 0,
+              flex: 1, fontSize: 12, color: 'var(--color-text)', lineHeight: 1.5,
+              background: 'transparent', border: 'none', outline: 'none',
+              resize: 'none', fontFamily: 'var(--font-zh)', padding: 0,
             }}
           />
         ) : (
@@ -145,6 +150,7 @@ function InspirationRow({
             {item.content}
           </span>
         )}
+
         {!editing && hovered && (
           <div style={{ display: 'flex', gap: 3, flexShrink: 0 }}>
             <button
@@ -163,6 +169,6 @@ function InspirationRow({
           </div>
         )}
       </div>
-    </motion.div>
+    </Reorder.Item>
   )
 }

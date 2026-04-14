@@ -2,9 +2,9 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { getStoragePrefix } from './accountManager'
 
-export type CardId = 'quickAdd' | 'stats' | 'tasks' | 'character' | 'habits' | 'growth' | 'inspiration'
+export type CardId = 'quickAdd' | 'stats' | 'tasks' | 'character' | 'habits' | 'growth' | 'inspiration' | 'flows'
 
-export const ALL_CARD_IDS: CardId[] = ['quickAdd', 'stats', 'tasks', 'character', 'habits', 'growth', 'inspiration']
+export const ALL_CARD_IDS: CardId[] = ['quickAdd', 'stats', 'tasks', 'character', 'habits', 'growth', 'inspiration', 'flows']
 
 export interface CardLayout {
   id: CardId
@@ -26,6 +26,7 @@ export const DEFAULT_LAYOUT: CardLayout[] = [
   { id: 'character',    col: 16, row: 2,  colSpan: 8,  rowSpan: 3 },
   { id: 'growth',       col: 16, row: 5,  colSpan: 8,  rowSpan: 5 },
   { id: 'inspiration',  col: 0,  row: 10, colSpan: 8,  rowSpan: 5 },
+  { id: 'flows',        col: 8,  row: 10, colSpan: 8,  rowSpan: 5 },
 ]
 
 interface DashboardStore {
@@ -65,8 +66,12 @@ export const useDashboardStore = create<DashboardStore>()(
         if (missing.length) state.layout = [...state.layout, ...missing]
         if (!state.visibleCards) {
           state.visibleCards = ALL_CARD_IDS
-        } else if (!state.visibleCards.includes('inspiration')) {
-          state.visibleCards = [...state.visibleCards, 'inspiration']
+        } else {
+          for (const id of ['inspiration', 'flows'] as CardId[]) {
+            if (!state.visibleCards.includes(id)) {
+              state.visibleCards = [...state.visibleCards, id]
+            }
+          }
         }
       },
     }

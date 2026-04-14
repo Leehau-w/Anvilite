@@ -10,6 +10,7 @@ interface InspirationStore {
   updateInspiration: (id: string, content: string) => void
   deleteInspiration: (id: string) => void
   markConverted: (id: string, taskId: string) => void
+  reorderInspirations: (ids: string[]) => void
 }
 
 export const useInspirationStore = create<InspirationStore>()(
@@ -45,6 +46,15 @@ export const useInspirationStore = create<InspirationStore>()(
             i.id === id ? { ...i, convertedTaskId: taskId } : i
           ),
         }))
+      },
+
+      reorderInspirations: (ids) => {
+        set((s) => {
+          const map = new Map(s.inspirations.map((i) => [i.id, i]))
+          const reordered = ids.map((id) => map.get(id)).filter(Boolean) as Inspiration[]
+          const rest = s.inspirations.filter((i) => !new Set(ids).has(i.id))
+          return { inspirations: [...reordered, ...rest] }
+        })
       },
     }),
     {
