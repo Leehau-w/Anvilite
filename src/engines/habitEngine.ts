@@ -63,8 +63,17 @@ export function isHabitDueToday(habit: Habit): boolean {
   }
 }
 
-/** 获取下次刷新的提示文字 */
-export function getNextRefreshText(habit: Habit): string | null {
+/** 下次刷新结构化信息 */
+export type NextRefreshInfo =
+  | { type: 'weekday'; day: number }          // day: 1-7
+  | { type: 'biweekly' }
+  | { type: 'monthly' }
+  | { type: 'custom'; days: number }
+  | { type: 'monthly_day'; day: number }       // day: 具体日期，-1=月末
+  | { type: 'monthly_next'; day: number }      // 下月的日期，-1=月末
+
+/** 获取下次刷新的结构化信息（纯数据，不含 i18n 文案） */
+export function getNextRefreshInfo(habit: Habit): NextRefreshInfo | null {
   if (habit.repeatType === 'daily' || habit.repeatType === 'weekdays') return null
 
   const today = new Date()
@@ -75,25 +84,23 @@ export function getNextRefreshText(habit: Habit): string | null {
       if (habit.weeklyMode === 'strict' && habit.weeklyDays && habit.weeklyDays.length > 0) {
         const days = habit.weeklyDays.sort()
         const next = days.find((d) => d > dayOfWeek) ?? days[0]
-        const labels = ['', '周一', '周二', '周三', '周四', '周五', '周六', '周日']
-        return `下次：${labels[next]}`
+        return { type: 'weekday', day: next }
       }
       return null
     }
     case 'biweekly':
-      return `下次：两周后`
+      return { type: 'biweekly' }
     case 'monthly':
-      return `下次：下月`
+      return { type: 'monthly' }
     case 'custom':
-      return habit.customIntervalDays ? `下次：${habit.customIntervalDays}天后` : null
+      return habit.customIntervalDays ? { type: 'custom', days: habit.customIntervalDays } : null
     case 'monthly_fixed': {
       if (!habit.monthlyDays || habit.monthlyDays.length === 0) return null
       const sorted = [...habit.monthlyDays].sort((a, b) => (a === -1 ? 32 : a) - (b === -1 ? 32 : b))
-      const today2 = new Date()
-      const dayOfMonth = today2.getDate()
+      const dayOfMonth = today.getDate()
       const next = sorted.find((d) => (d === -1 ? 32 : d) > dayOfMonth)
-      if (next !== undefined) return `下次：${next === -1 ? '月末' : `${next}号`}`
-      return `下次：下月${sorted[0] === -1 ? '末' : `${sorted[0]}号`}`
+      if (next !== undefined) return { type: 'monthly_day', day: next }
+      return { type: 'monthly_next', day: sorted[0] }
     }
     default:
       return null

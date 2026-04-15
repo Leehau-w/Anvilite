@@ -24,6 +24,9 @@ export interface Task {
   deletedAt: string | null
   isHidden: boolean
   sortOrder: number
+  timerStartedAt: string | null
+  timerAccumulated: number
+  tags: string[]
   subTasks: SubTask[]
   createdAt: string
   updatedAt: string

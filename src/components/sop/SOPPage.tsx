@@ -10,8 +10,6 @@ import { SOPEditor } from './SOPEditor'
 import { SOPToTaskModal } from './SOPToTaskModal'
 import type { SOP } from '@/types/sop'
 
-const EXECUTION_SUPPORTED: SOP['type'][] = ['checklist', 'itemlist', 'workflow']
-
 export function SOPPage() {
   const t = useT()
   const lang = useSettingsStore((s) => s.settings.language)
@@ -54,15 +52,13 @@ export function SOPPage() {
     if (!targetFolderId) return
     const newId = addSOP({
       title: sop.title + (lang === 'zh' ? '（副本）' : ' (Copy)'),
-      type: sop.type,
+      displayStyle: sop.displayStyle,
       folderId: targetFolderId,
       steps: sop.steps.map((s) => ({ ...s, id: generateId(), childSteps: [] })),
       isSystem: false,
     })
     selectSOP(newId)
   }
-
-  const supportsExecution = selectedSOP ? EXECUTION_SUPPORTED.includes(selectedSOP.type) : false
 
   // ── 卡片内容 ─────────────────────────────────────────────────
   function renderCardContent() {
@@ -139,7 +135,7 @@ export function SOPPage() {
           </button>
         )}
 
-        {supportsExecution && !executionMode && (
+        {!executionMode && (
           <button
             onClick={() => { setExecutionMode(true); setCheckedIds(new Set()) }}
             style={{

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { getTitle } from '@/engines/levelEngine'
 import { useCharacterStore } from '@/stores/characterStore'

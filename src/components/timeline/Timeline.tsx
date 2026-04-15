@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef, useCallback } from 'react'
+import { useState, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useGrowthEventStore } from '@/stores/growthEventStore'
 import { useT } from '@/i18n'
@@ -136,7 +136,7 @@ function groupEvents(events: GrowthEvent[], t: ReturnType<typeof useT>): MonthGr
 // ─── 主组件 ───────────────────────────────────────────────────────────────────
 
 export function Timeline() {
-  const { events, markMilestone, removeEvent } = useGrowthEventStore()
+  const { events, markMilestone } = useGrowthEventStore()
   const t = useT()
   const [filterType, setFilterType] = useState<FilterType>('all')
   const [timeRange, setTimeRange] = useState<TimeRange>('all')
@@ -145,7 +145,6 @@ export function Timeline() {
   const [milestoneModal, setMilestoneModal] = useState<{ eventId: string; title: string } | null>(null)
   const filterTypes = getFilterTypes(t)
 
-  const today = new Date().toISOString().split('T')[0]
   const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0]
   const monthAgo = new Date(Date.now() - 30 * 86400000).toISOString().split('T')[0]
 

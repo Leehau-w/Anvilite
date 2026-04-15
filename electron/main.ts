@@ -7,6 +7,7 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
 const isDev = process.env.NODE_ENV === 'development'
+const VITE_DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL
 
 function createWindow() {
   const win = new BrowserWindow({
@@ -23,12 +24,12 @@ function createWindow() {
     },
     backgroundColor: '#faf8f5',
     icon: app.isPackaged
-      ? path.join(process.resourcesPath, 'build/icon.png')
-      : path.join(process.cwd(), 'build/icon.png'),
+      ? path.join(process.resourcesPath, 'build/icon.ico')
+      : path.join(process.cwd(), 'build/icon.ico'),
   })
 
-  if (isDev) {
-    win.loadURL('http://localhost:5173')
+  if (isDev && VITE_DEV_SERVER_URL) {
+    win.loadURL(VITE_DEV_SERVER_URL)
     win.webContents.openDevTools()
   } else {
     win.loadFile(path.join(__dirname, '../dist/index.html'))

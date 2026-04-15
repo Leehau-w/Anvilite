@@ -13,6 +13,8 @@ import { useT } from '@/i18n'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useUIStore } from '@/stores/uiStore'
 import { SubTaskItem } from './SubTaskItem'
+import { TimerBadge } from './TimerBadge'
+import { TagPill } from './TagPill'
 
 
 interface TaskItemProps {
@@ -206,7 +208,7 @@ export function TaskItem({ task, compact, onEdit }: TaskItemProps) {
     },
     exit: compact
       ? { opacity: 0, transition: { duration: 0.15 } }
-      : { x: '120%', rotate: 3, opacity: 0, transition: { duration: 0.4, ease: [0.4, 0, 1, 1], delay: 0.25 } },
+      : { x: '120%', rotate: 3, opacity: 0, transition: { duration: 0.4, ease: [0.4, 0, 1, 1] as [number, number, number, number], delay: 0.25 } },
   }
 
   const bgColor = isDoing
@@ -259,7 +261,7 @@ export function TaskItem({ task, compact, onEdit }: TaskItemProps) {
           compact={compact}
         />
 
-        {/* 子任务折叠按钮（勾选框右侧） */}
+        {/* 子任务折叠按钮 */}
         {subTasks.length > 0 && (
           <button
             onClick={(e) => { e.stopPropagation(); toggleTaskCollapse(task.id) }}
@@ -283,9 +285,53 @@ export function TaskItem({ task, compact, onEdit }: TaskItemProps) {
               flexShrink: 0,
               transition: 'all 0.15s',
             }}
+            onMouseEnter={(e) => {
+              if (!subTasksExpanded) {
+                (e.currentTarget as HTMLElement).style.color = 'var(--color-accent)';
+                (e.currentTarget as HTMLElement).style.borderColor = 'var(--color-accent)'
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (!subTasksExpanded) {
+                (e.currentTarget as HTMLElement).style.color = 'var(--color-text-dim)';
+                (e.currentTarget as HTMLElement).style.borderColor = 'var(--color-border)'
+              }
+            }}
           >
             <span style={{ fontSize: 9, lineHeight: 1 }}>{subTasksExpanded ? '▾' : '▸'}</span>
             <span>{completedSubCount}/{subTasks.length}</span>
+          </button>
+        )}
+
+        {/* + 添加子项按钮：常显 */}
+        {!isDone && (
+          <button
+            onClick={(e) => { e.stopPropagation(); setShowSubTaskInput(true) }}
+            title={t.subtask_add}
+            style={{
+              width: compact ? 16 : 18,
+              height: compact ? 16 : 18,
+              borderRadius: 'var(--radius-sm)',
+              color: 'var(--color-text-dim)',
+              fontSize: 13,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              background: 'transparent',
+              border: '1px solid var(--color-border)',
+              cursor: 'pointer',
+              padding: 0,
+              flexShrink: 0,
+              transition: 'all 0.15s',
+            }}
+            onMouseEnter={(e) => {
+              (e.currentTarget as HTMLElement).style.color = 'var(--color-accent)';
+              (e.currentTarget as HTMLElement).style.borderColor = 'var(--color-accent)'
+            }}
+            onMouseLeave={(e) => {
+              (e.currentTarget as HTMLElement).style.color = 'var(--color-text-dim)';
+              (e.currentTarget as HTMLElement).style.borderColor = 'var(--color-border)'
+            }}
+          >
+            +
           </button>
         )}
 
@@ -404,6 +450,20 @@ export function TaskItem({ task, compact, onEdit }: TaskItemProps) {
             </div>
           )}
 
+          {/* Tags (non-compact only) */}
+          {!compact && task.tags && task.tags.length > 0 && (
+            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 4 }}>
+              {task.tags.slice(0, 3).map((tag) => (
+                <TagPill key={tag} tag={tag} size="sm" />
+              ))}
+              {task.tags.length > 3 && (
+                <span style={{ fontSize: 11, color: 'var(--color-text-dim)' }}>
+                  {t.tag_more(task.tags.length - 3)}
+                </span>
+              )}
+            </div>
+          )}
+
           {/* 未完成操作行 */}
           {!isDone && !compact && (
             <AnimatePresence>
@@ -434,22 +494,36 @@ export function TaskItem({ task, compact, onEdit }: TaskItemProps) {
           </span>
         )}
 
-        {/* 进行中/开始按钮 */}
+        {/* 计时中/暂停态：TimerBadge / 空闲：▶ 按钮 */}
         {!isDone && (
-          <button
-            onClick={handleStatusToggle}
-            title={isDoing ? t.task_pauseDoing : t.task_startDoing}
-            style={{
-              width: 26, height: 26, borderRadius: 'var(--radius-sm)',
-              background: isDoing ? 'color-mix(in srgb, var(--color-accent) 15%, transparent)' : 'transparent',
-              border: `1px solid ${isDoing ? 'var(--color-accent)' : 'var(--color-border)'}`,
-              color: isDoing ? 'var(--color-accent)' : 'var(--color-text-dim)',
-              cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-              flexShrink: 0, transition: 'all 0.15s',
-            }}
-          >
-            {isDoing ? <PauseIcon /> : <PlayIcon />}
-          </button>
+          isDoing ? (
+            <TimerBadge
+              startedAt={task.timerStartedAt}
+              accumulated={task.timerAccumulated}
+              onToggle={() => pauseTask(task.id)}
+            />
+          ) : task.timerAccumulated > 0 ? (
+            <TimerBadge
+              startedAt={null}
+              accumulated={task.timerAccumulated}
+              onToggle={() => startTask(task.id)}
+            />
+          ) : (
+            <button
+              onClick={handleStatusToggle}
+              title={t.task_startDoing}
+              style={{
+                width: 26, height: 26, borderRadius: 'var(--radius-sm)',
+                background: 'transparent',
+                border: '1px solid var(--color-border)',
+                color: 'var(--color-text-dim)',
+                cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                flexShrink: 0, transition: 'all 0.15s',
+              }}
+            >
+              <PlayIcon />
+            </button>
+          )
         )}
       </div>
 
@@ -462,41 +536,29 @@ export function TaskItem({ task, compact, onEdit }: TaskItemProps) {
         </div>
       )}
 
-      {/* ── 添加步骤入口（非 compact、非 done） ──────────── */}
-      {!compact && !isDone && (
-        <div style={{ marginTop: showSubTaskInput || subTasks.length > 0 ? 6 : 0, paddingLeft: 28 }}>
-          {showSubTaskInput ? (
-            <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-              <input
-                ref={subTaskInputRef}
-                value={subTaskInput}
-                onChange={(e) => setSubTaskInput(e.target.value)}
-                placeholder={t.subtask_placeholder}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') handleAddSubTask()
-                  if (e.key === 'Escape') { setSubTaskInput(''); setShowSubTaskInput(false) }
-                }}
-                onBlur={() => { if (!subTaskInput.trim()) setShowSubTaskInput(false) }}
-                style={{
-                  flex: 1, fontSize: 12, height: 24, padding: '0 8px',
-                  borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-accent)',
-                  background: 'var(--color-bg)', color: 'var(--color-text)', outline: 'none',
-                }}
-              />
-              <button onClick={handleAddSubTask} style={smallBtnStyle('var(--color-success)')}>✓</button>
-              <button onClick={() => { setSubTaskInput(''); setShowSubTaskInput(false) }} style={smallBtnStyle()}>✕</button>
-            </div>
-          ) : (
-            <button
-              onClick={() => setShowSubTaskInput(true)}
-              style={{
-                fontSize: 11, color: 'var(--color-text-dim)', background: 'none', border: 'none',
-                cursor: 'pointer', padding: '2px 0', opacity: hovered ? 1 : 0.4, transition: 'opacity 0.15s',
+      {/* ── 添加子项输入框 ──────────────────────────────── */}
+      {!isDone && showSubTaskInput && (
+        <div style={{ marginTop: 6, paddingLeft: compact ? 22 : 28 }}>
+          <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+            <input
+              ref={subTaskInputRef}
+              value={subTaskInput}
+              onChange={(e) => setSubTaskInput(e.target.value)}
+              placeholder={t.subtask_placeholder}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleAddSubTask()
+                if (e.key === 'Escape') { setSubTaskInput(''); setShowSubTaskInput(false) }
               }}
-            >
-              + {t.subtask_add}
-            </button>
-          )}
+              onBlur={() => { if (!subTaskInput.trim()) setShowSubTaskInput(false) }}
+              style={{
+                flex: 1, fontSize: 12, height: 24, padding: '0 8px',
+                borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-accent)',
+                background: 'var(--color-bg)', color: 'var(--color-text)', outline: 'none',
+              }}
+            />
+            <button onClick={handleAddSubTask} style={smallBtnStyle('var(--color-success)')}>✓</button>
+            <button onClick={() => { setSubTaskInput(''); setShowSubTaskInput(false) }} style={smallBtnStyle()}>✕</button>
+          </div>
         </div>
       )}
 

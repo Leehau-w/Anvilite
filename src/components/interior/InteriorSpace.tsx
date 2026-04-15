@@ -70,10 +70,10 @@ export function InteriorSpace({ area, prosperity, onExit }: InteriorSpaceProps) 
     ? [...activeTasks, ...todoTasks, ...doneTasks]
     : [...activeTasks, ...todoTasks].slice(0, 6)
 
-  const areaHabits = habits.filter((h) => h.status !== 'archived' && !h.parentId && h.category === area.category)
+  const areaHabits = habits.filter((h) => h.status !== 'archived' && h.category === area.category)
 
   const todayHabits = areaHabits.filter((h) => h.status === 'active')
-  const completedHabits = habits.filter((h) => h.status === 'completed_today' && !h.parentId && h.category === area.category)
+  const completedHabits = habits.filter((h) => h.status === 'completed_today' && h.category === area.category)
 
   const visibleHabits = showAllHabits ? areaHabits.filter((h) => h.status !== 'archived') : todayHabits
 

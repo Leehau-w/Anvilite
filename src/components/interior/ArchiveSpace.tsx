@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react'
+import { useState, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useTaskStore } from '@/stores/taskStore'
 import { useHabitStore } from '@/stores/habitStore'
@@ -7,7 +7,10 @@ import { normalizeTitle } from '@/utils/normalizeTitle'
 import { useAreaStore } from '@/stores/areaStore'
 import { useT } from '@/i18n'
 import type { GrowthEvent } from '@/types/growthEvent'
+import type { Task } from '@/types/task'
+import type { Habit } from '@/types/habit'
 import type { Area } from '@/types/area'
+import { AREA_TEMPLATES } from '@/types/area'
 import type { ProsperityInfo } from '@/engines/prosperityEngine'
 
 // ── 类型 ─────────────────────────────────────────────────────────────────────
@@ -52,7 +55,7 @@ function fmtMinutes(mins: number, t: ReturnType<typeof useT>): string {
 
 // ── 主组件 ────────────────────────────────────────────────────────────────────
 
-export function ArchiveSpace({ area, prosperity, onExit }: ArchiveSpaceProps) {
+export function ArchiveSpace({ area: _area, prosperity: _prosperity, onExit }: ArchiveSpaceProps) {
   const t = useT()
   const [tab, setTab] = useState<ArchiveTab>('overview')
   const [period, setPeriod] = useState<Period>('week')
@@ -207,14 +210,14 @@ function ArchiveOverview({ period }: { period: Period }) {
       {/* 4. 习惯坚持 */}
       <HabitConsistencySection habitEvents={habitEvents} habits={habits} />
       {/* 5. 高频行为 */}
-      <RoutineSection tasks={completedTasks} habitEvents={habitEvents} habits={habits} />
+      <RoutineSection tasks={completedTasks} habitEvents={habitEvents} />
     </div>
   )
 }
 
 // ─ 1. 紧急程度能量条 ──────────────────────────────────────────────────────────
 
-function UrgencySection({ tasks }: { tasks: ReturnType<typeof useTaskStore>['tasks'] }) {
+function UrgencySection({ tasks }: { tasks: Task[] }) {
   const t = useT()
   const urgent = tasks.filter((task) => task.priority === 'urgent').length
   const high   = tasks.filter((task) => task.priority === 'high').length
@@ -261,7 +264,7 @@ function UrgencySection({ tasks }: { tasks: ReturnType<typeof useTaskStore>['tas
 
 // ─ 2. 难度柱状图 ─────────────────────────────────────────────────────────────
 
-function DifficultySection({ tasks }: { tasks: ReturnType<typeof useTaskStore>['tasks'] }) {
+function DifficultySection({ tasks }: { tasks: Task[] }) {
   const t = useT()
   const dist = [0, 0, 0, 0, 0]
   tasks.forEach((task) => {
@@ -313,7 +316,7 @@ function DifficultySection({ tasks }: { tasks: ReturnType<typeof useTaskStore>['
 // ─ 3. 区域时长排行 ───────────────────────────────────────────────────────────
 
 function AreaTimeSection({ tasks, areas }: {
-  tasks: ReturnType<typeof useTaskStore>['tasks']
+  tasks: Task[]
   areas: Area[]
 }) {
   const t = useT()
@@ -343,7 +346,7 @@ function AreaTimeSection({ tasks, areas }: {
             return (
               <div key={cat} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <span style={{ fontSize: 11, color: 'var(--color-text-dim)', width: 16, textAlign: 'center' }}>#{i + 1}</span>
-                <span style={{ fontSize: 14 }}>{area?.emoji ?? '📁'}</span>
+                <span style={{ fontSize: 14 }}>{(area?.templateId && AREA_TEMPLATES[area.templateId]?.prosperityEmojis[0]) ?? '📁'}</span>
                 <span style={{ fontSize: 12, color: 'var(--color-text)', minWidth: 64, maxWidth: 96, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cat}</span>
                 <div style={{ flex: 1, height: 6, borderRadius: 'var(--radius-full)', background: 'var(--color-border)', overflow: 'hidden' }}>
                   <motion.div
@@ -369,7 +372,7 @@ function AreaTimeSection({ tasks, areas }: {
 
 function HabitConsistencySection({ habitEvents, habits }: {
   habitEvents: GrowthEvent[]
-  habits: ReturnType<typeof useHabitStore>['habits']
+  habits: Habit[]
 }) {
   const t = useT()
   const totalCompletions = habitEvents.length
@@ -413,10 +416,9 @@ function HabitConsistencySection({ habitEvents, habits }: {
 
 // ─ 5. 高频行为镜像 ───────────────────────────────────────────────────────────
 
-function RoutineSection({ tasks, habitEvents, habits }: {
-  tasks: ReturnType<typeof useTaskStore>['tasks']
+function RoutineSection({ tasks, habitEvents }: {
+  tasks: Task[]
   habitEvents: GrowthEvent[]
-  habits: ReturnType<typeof useHabitStore>['habits']
 }) {
   const t = useT()
   const groups: Record<string, { count: number; totalMinutes: number }> = {}

@@ -1,5 +1,5 @@
-import React, { useState } from 'react'
-import type { SOP, SOPStep } from '@/types/sop'
+import { useState } from 'react'
+import type { SOP } from '@/types/sop'
 import type { TaskPriority } from '@/types/task'
 import { useTaskStore } from '@/stores/taskStore'
 import { useSOPStore } from '@/stores/sopStore'

@@ -1,9 +1,8 @@
-import React from 'react'
+
 import { useCharacterStore } from '@/stores/characterStore'
 import { useTaskStore } from '@/stores/taskStore'
 import { useHabitStore } from '@/stores/habitStore'
 import { getXPProgress, xpToNextLevel } from '@/engines/levelEngine'
-import { AnimatedXPBar } from '@/components/feedback/AnimatedXPBar'
 import { useT } from '@/i18n'
 import type { Translations } from '@/i18n'
 import type { GlobalStatus } from '@/types'

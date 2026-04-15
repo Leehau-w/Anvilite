@@ -1,4 +1,4 @@
-import React from 'react'
+
 import { useCharacterStore } from '@/stores/characterStore'
 import { AnimatedXPBar } from '@/components/feedback/AnimatedXPBar'
 import { useT } from '@/i18n'

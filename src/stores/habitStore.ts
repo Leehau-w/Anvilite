@@ -22,7 +22,7 @@ interface HabitStore {
   habits: Habit[]
   completedHabitViewMode: 'area' | 'custom'
   customHabitGroups: HabitGroup[]
-  addHabit: (partial: Omit<Habit, 'id' | 'status' | 'isHidden' | 'deletedAt' | 'timerStartedAt' | 'actualMinutes' | 'consecutiveCount' | 'totalCompletions' | 'toleranceCharges' | 'toleranceNextAt' | 'weeklyCompletionCount' | 'lastCompletedAt' | 'lastDueAt' | 'currentCycleCount' | 'subHabits' | 'createdAt' | 'updatedAt'>) => void
+  addHabit: (partial: Omit<Habit, 'id' | 'status' | 'isHidden' | 'deletedAt' | 'timerStartedAt' | 'timerAccumulated' | 'actualMinutes' | 'consecutiveCount' | 'totalCompletions' | 'toleranceCharges' | 'toleranceNextAt' | 'weeklyCompletionCount' | 'lastCompletedAt' | 'lastDueAt' | 'currentCycleCount' | 'subHabits' | 'sortOrder' | 'createdAt' | 'updatedAt'>) => void
   updateHabit: (id: string, patch: Partial<Habit>) => void
   deleteHabit: (id: string) => void
   restoreHabit: (id: string) => void
@@ -71,6 +71,7 @@ function makeDefaultHabit(partial: Parameters<HabitStore['addHabit']>[0]): Habit
     isHidden: false,
     deletedAt: null,
     timerStartedAt: null,
+    timerAccumulated: 0,
     actualMinutes: 0,
     consecutiveCount: 0,
     totalCompletions: 0,
@@ -152,7 +153,15 @@ export const useHabitStore = create<HabitStore>()(
       },
 
       pauseHabitTimer: (id) => {
-        get().updateHabit(id, { timerStartedAt: null })
+        const habit = get().habits.find((h) => h.id === id)
+        if (!habit || !habit.timerStartedAt) return
+        let accumulated = habit.timerAccumulated ?? 0
+        accumulated += Math.max(0, Math.floor((Date.now() - new Date(habit.timerStartedAt).getTime()) / 1000))
+        // Only accumulate; completeHabit settles into actualMinutes
+        get().updateHabit(id, {
+          timerAccumulated: accumulated,
+          timerStartedAt: null,
+        })
       },
 
       completeHabit: (id) => {
@@ -190,6 +199,16 @@ export const useHabitStore = create<HabitStore>()(
           newWeeklyCount = (!lastDone || lastDone < monday) ? 1 : newWeeklyCount + 1
         }
 
+        // Auto-record timer into actualMinutes
+        let habitActualMinutes = habit.actualMinutes
+        if (habit.timerStartedAt || (habit.timerAccumulated ?? 0) > 0) {
+          let totalSec = habit.timerAccumulated ?? 0
+          if (habit.timerStartedAt) {
+            totalSec += Math.max(0, Math.floor((Date.now() - new Date(habit.timerStartedAt).getTime()) / 1000))
+          }
+          habitActualMinutes = Math.round(totalSec / 60)
+        }
+
         set((s) => ({
           habits: s.habits.map((h) =>
             h.id === id
@@ -205,6 +224,9 @@ export const useHabitStore = create<HabitStore>()(
                   lastCompletedAt: now,
                   lastDueAt: now,
                   updatedAt: now,
+                  actualMinutes: habitActualMinutes,
+                  timerStartedAt: null,
+                  timerAccumulated: 0,
                 }
               : h
           ),
@@ -489,13 +511,12 @@ export const useHabitStore = create<HabitStore>()(
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const legacy = h as any
           const patched: Habit = {
+            ...h,
             sortOrder: h.sortOrder ?? Date.now(),
             isHidden: h.isHidden ?? (h.status === 'archived'),
             deletedAt: h.deletedAt ?? null,
             timerStartedAt: h.timerStartedAt ?? null,
             actualMinutes: h.actualMinutes ?? 0,
-            weeklyCompletionCount: 0,
-            ...h,
             subHabits: h.subHabits ?? [],
             category: migrateCategory(h.category),
             status: legacy.status === 'archived' ? 'paused' : staleCompleted ? 'active' : h.status,
@@ -506,6 +527,28 @@ export const useHabitStore = create<HabitStore>()(
           delete (patched as any).childIds
           delete (patched as any).nestingLevel
           return patched
+        })
+
+        // ── v0.3.1 迁移：timerAccumulated ──────────────────────
+        const HABIT_TIMER_MIGRATION = 'anvilite-migration-habit-timer-v031'
+        if (!localStorage.getItem(HABIT_TIMER_MIGRATION)) {
+          state.habits = state.habits.map((h) => ({
+            ...h,
+            timerAccumulated: h.timerAccumulated ?? 0,
+          }))
+          localStorage.setItem(HABIT_TIMER_MIGRATION, new Date().toISOString())
+        }
+
+        // ── 4 小时过期自动暂停 ────────────────────────────────
+        const STALE_THRESHOLD = 4 * 60 * 60
+        const nowMs = Date.now()
+        state.habits = state.habits.map((h) => {
+          if (!h.timerStartedAt) return h
+          const elapsed = (nowMs - new Date(h.timerStartedAt).getTime()) / 1000
+          if (elapsed > STALE_THRESHOLD) {
+            return { ...h, timerAccumulated: (h.timerAccumulated ?? 0) + STALE_THRESHOLD, timerStartedAt: null }
+          }
+          return h
         })
 
         if (!state.completedHabitViewMode) state.completedHabitViewMode = 'area'

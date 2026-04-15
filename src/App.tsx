@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { TopBar } from '@/components/layout/TopBar'
 import { Sidebar, type NavTab } from '@/components/layout/Sidebar'
 import { StatusBar } from '@/components/layout/StatusBar'
@@ -9,12 +9,13 @@ import { MilestoneHall } from '@/components/milestone/MilestoneHall'
 import { WorldMap } from '@/components/worldmap/WorldMap'
 import { InspirationModal } from '@/components/ui/InspirationModal'
 import { SOPPage } from '@/components/sop/SOPPage'
-import { ToastProvider } from '@/components/feedback/Toast'
+import { ToastProvider, useToast } from '@/components/feedback/Toast'
 import { FeedbackProvider } from '@/components/feedback/FeedbackContext'
 import ErrorBoundary from '@/components/ui/ErrorBoundary'
 import { startDateWatcher } from '@/utils/dateWatcher'
 import { useHabitStore } from '@/stores/habitStore'
 import { useProsperityWatcher } from '@/hooks/useProsperityWatcher'
+import { useT } from '@/i18n'
 
 function App() {
   const [activeTab, setActiveTab] = useState<NavTab>('dashboard')
@@ -80,10 +81,24 @@ function App() {
 
           <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
           <InspirationModal open={inspirationOpen} onClose={() => setInspirationOpen(false)} />
+          <StaleTimerWatcher />
         </ErrorBoundary>
       </FeedbackProvider>
     </ToastProvider>
   )
+}
+
+function StaleTimerWatcher() {
+  const { showToast } = useToast()
+  const t = useT()
+  useEffect(() => {
+    const stale = sessionStorage.getItem('anvilite-stale-timers')
+    if (stale) {
+      sessionStorage.removeItem('anvilite-stale-timers')
+      showToast(t.timer_stalePaused(Number(stale)))
+    }
+  }, [])
+  return null
 }
 
 export default App

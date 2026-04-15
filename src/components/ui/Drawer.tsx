@@ -20,7 +20,7 @@ export function Drawer({ open, onClose, title, children, width = 360 }: DrawerPr
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
-            onClick={onClose}
+            onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
             style={{
               position: 'fixed',
               inset: 0,

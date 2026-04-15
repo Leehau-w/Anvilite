@@ -1,23 +1,31 @@
-import React from 'react'
+
 import type { SOP } from '@/types/sop'
 import { useT } from '@/i18n'
 import { useSettingsStore } from '@/stores/settingsStore'
-import { SOPWorkflowView } from './SOPWorkflowView'
-import { SOPItemListView } from './SOPItemListView'
-import { SOPScheduleView } from './SOPScheduleView'
-import { SOPChecklistView } from './SOPChecklistView'
+import { useSOPStore } from '@/stores/sopStore'
+import { SOPStepListView } from './SOPStepListView'
 import { formatRelativeTime } from '@/utils/formatRelativeTime'
 
-function getSOPTypeIcon(type: SOP['type']): string {
-  const icons: Record<SOP['type'], string> = {
-    schedule: '⏰',
-    workflow: '🔄',
-    checklist: '☑️',
-    itemlist: '📝',
+function getDisplayStyleIcon(style: SOP['displayStyle']): string {
+  const icons: Record<SOP['displayStyle'], string> = {
+    numbered: '≡',
+    bullet: '•',
+    timeline: '⏰',
   }
-  return icons[type]
+  return icons[style]
 }
 
+function countAllSteps(sop: SOP): number {
+  let count = 0
+  function walk(steps: SOP['steps']) {
+    for (const s of steps) {
+      count++
+      if (s.childSteps.length > 0) walk(s.childSteps)
+    }
+  }
+  walk(sop.steps)
+  return count
+}
 
 interface Props {
   sop: SOP
@@ -29,16 +37,15 @@ interface Props {
 export function SOPContent({ sop, executionMode, checkedIds, onToggle }: Props) {
   const t = useT()
   const lang = useSettingsStore((s) => s.settings.language)
+  const setDisplayStyle = useSOPStore((s) => s.setDisplayStyle)
 
-  const typeLabels: Record<SOP['type'], string> = {
-    schedule: t.sop_type_schedule,
-    workflow: t.sop_type_workflow,
-    checklist: t.sop_type_checklist,
-    itemlist: t.sop_type_itemlist,
+  const styleLabels: Record<SOP['displayStyle'], string> = {
+    numbered: t.sop_style_numbered,
+    bullet: t.sop_style_bullet,
+    timeline: t.sop_style_timeline,
   }
 
-  const doneCount = sop.steps.filter((s) => checkedIds.has(s.id)).length
-  const totalCount = sop.steps.length
+  const totalStepCount = countAllSteps(sop)
 
   return (
     <div>
@@ -63,46 +70,61 @@ export function SOPContent({ sop, executionMode, checkedIds, onToggle }: Props) 
               {t.sop_systemBadge}
             </span>
           )}
+
+          {/* 风格切换按钮组 */}
+          <div style={{ marginLeft: 'auto', display: 'flex', gap: 2 }}>
+            {(['numbered', 'bullet', 'timeline'] as const).map((style) => (
+              <button
+                key={style}
+                onClick={() => !sop.isSystem && setDisplayStyle(sop.id, style)}
+                title={styleLabels[style]}
+                style={{
+                  width: 28,
+                  height: 28,
+                  borderRadius: 'var(--radius-sm)',
+                  border: 'none',
+                  background:
+                    sop.displayStyle === style
+                      ? 'color-mix(in srgb, var(--color-accent) 15%, transparent)'
+                      : 'transparent',
+                  color:
+                    sop.displayStyle === style
+                      ? 'var(--color-accent)'
+                      : 'var(--color-text-dim)',
+                  cursor: sop.isSystem ? 'default' : 'pointer',
+                  fontSize: 14,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  opacity: sop.isSystem ? 0.5 : 1,
+                }}
+                disabled={sop.isSystem}
+              >
+                {getDisplayStyleIcon(style)}
+              </button>
+            ))}
+          </div>
         </div>
         <div style={{ fontSize: 13, color: 'var(--color-text-dim)' }}>
-          {getSOPTypeIcon(sop.type)}{' '}
-          {typeLabels[sop.type]}{' '}
+          {getDisplayStyleIcon(sop.displayStyle)}{' '}
+          {styleLabels[sop.displayStyle]}{' '}
           ·{' '}
           {sop.steps.length} {t.sop_steps}
           {executionMode && (
             <span style={{ marginLeft: 12, color: 'var(--color-accent)', fontWeight: 600 }}>
-              {t.sop_progress(doneCount, totalCount)}
+              {t.sop_progress(checkedIds.size, totalStepCount)}
             </span>
           )}
         </div>
       </div>
 
-      {/* 内容视图 */}
-      {sop.type === 'workflow' && (
-        <SOPWorkflowView
-          steps={sop.steps}
-          executionMode={executionMode}
-          checkedIds={checkedIds}
-          onToggle={onToggle}
-        />
-      )}
-      {sop.type === 'itemlist' && (
-        <SOPItemListView
-          steps={sop.steps}
-          executionMode={executionMode}
-          checkedIds={checkedIds}
-          onToggle={onToggle}
-        />
-      )}
-      {sop.type === 'schedule' && <SOPScheduleView steps={sop.steps} />}
-      {sop.type === 'checklist' && (
-        <SOPChecklistView
-          steps={sop.steps}
-          executionMode={executionMode}
-          checkedIds={checkedIds}
-          onToggle={onToggle}
-        />
-      )}
+      {/* 统一内容视图 */}
+      <SOPStepListView
+        sop={sop}
+        executionMode={executionMode}
+        checkedIds={checkedIds}
+        onToggle={onToggle}
+      />
 
       {/* 最近转化时间 */}
       {sop.lastUsedAt && !executionMode && (

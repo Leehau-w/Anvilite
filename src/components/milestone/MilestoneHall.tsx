@@ -6,6 +6,7 @@ import type { GrowthEvent } from '@/types/growthEvent'
 import { useTaskStore } from '@/stores/taskStore'
 import { useHabitStore } from '@/stores/habitStore'
 import { useAreaStore } from '@/stores/areaStore'
+import { AREA_TEMPLATES } from '@/types/area'
 import { useBadgeStore } from '@/stores/badgeStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { xpToNextLevel, getXPProgress } from '@/engines/levelEngine'
@@ -18,7 +19,6 @@ import {
   STATIC_BADGE_DEFS,
   BADGE_CATEGORY_ORDER,
   makeAreaBadgeDef,
-  makeAreaBadgeId,
   type BadgeCategory,
   type BadgeDef,
 } from '@/types/badge'
@@ -147,7 +147,7 @@ export function MilestoneHall() {
         return {
           name: displayName,
           value: skillXPToLevel(getAreaSkillXP(tasks, a.category)),
-          emoji: a.emoji,
+          emoji: a.templateId ? AREA_TEMPLATES[a.templateId]?.prosperityEmojis[0] : undefined,
         }
       })
   }, [areas, tasks, t])

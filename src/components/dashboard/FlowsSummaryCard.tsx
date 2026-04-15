@@ -1,12 +1,12 @@
-import React, { useMemo } from 'react'
+import { useMemo } from 'react'
 import { useSOPStore } from '@/stores/sopStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { getSystemFolder, getSystemSOPs } from '@/data/systemSOPs'
 import { useT } from '@/i18n'
 import type { SOP } from '@/types/sop'
 
-function getSOPTypeIcon(type: SOP['type']): string {
-  return { schedule: '⏰', workflow: '🔄', checklist: '☑️', itemlist: '📝' }[type]
+function getDisplayStyleIcon(style: SOP['displayStyle']): string {
+  return { numbered: '≡', bullet: '•', timeline: '⏰' }[style]
 }
 
 interface Props {
@@ -161,7 +161,7 @@ function SOPRow({ sop, onClick }: { sop: SOP; onClick: () => void }) {
       onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--color-surface-hover)' }}
       onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
     >
-      <span style={{ flexShrink: 0 }}>{getSOPTypeIcon(sop.type)}</span>
+      <span style={{ flexShrink: 0 }}>{getDisplayStyleIcon(sop.displayStyle)}</span>
       <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
         {sop.title}
       </span>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useMemo } from 'react'
 import { Drawer } from '@/components/ui/Drawer'
 import { StarRating } from '@/components/ui/StarRating'
 import { CategorySelect } from '@/components/ui/CategorySelect'
@@ -12,6 +12,7 @@ import { useToast } from '@/components/feedback/Toast'
 import { AnimatePresence, motion } from 'framer-motion'
 import { SubTaskItem } from './SubTaskItem'
 import { makeSubTask } from '@/utils/subTaskUtils'
+import { TagInput } from './TagInput'
 
 interface TaskDrawerProps {
   open: boolean
@@ -29,10 +30,11 @@ type FormData = {
   hasDueDate: boolean
   description: string
   actualMinutes: string
+  tags: string[]
 }
 
 export function TaskDrawer({ open, onClose, editTask, initialCategory }: TaskDrawerProps) {
-  const { addTask, updateTask, deleteTask, addSubTask, removeSubTask, lastCategory } = useTaskStore()
+  const { addTask, updateTask, addSubTask, addTag, removeTag, lastCategory, tasks } = useTaskStore()
   const currentTask = useTaskStore((s) => editTask ? s.tasks.find((t) => t.id === editTask.id) : null)
   const { addEvent } = useGrowthEventStore()
   const { showToast } = useToast()
@@ -52,6 +54,7 @@ export function TaskDrawer({ open, onClose, editTask, initialCategory }: TaskDra
     hasDueDate: editTask ? editTask.dueDate !== null : true,
     description: editTask?.description ?? '',
     actualMinutes: editTask?.actualMinutes ? String(editTask.actualMinutes) : '',
+    tags: editTask?.tags ?? [],
   }
 
   const [form, setForm] = useState<FormData>(defaultForm)
@@ -67,6 +70,7 @@ export function TaskDrawer({ open, onClose, editTask, initialCategory }: TaskDra
         hasDueDate: editTask ? editTask.dueDate !== null : true,
         description: editTask?.description ?? '',
         actualMinutes: editTask?.actualMinutes ? String(editTask.actualMinutes) : '',
+        tags: editTask?.tags ?? [],
       })
       setSubtaskInput('')
       setPendingSubTasks([])
@@ -89,6 +93,7 @@ export function TaskDrawer({ open, onClose, editTask, initialCategory }: TaskDra
       priority: form.priority,
       dueDate: form.hasDueDate ? form.dueDate : null,
       description: form.description,
+      tags: form.tags,
       ...(editTask?.status === 'done' && form.actualMinutes !== ''
         ? { actualMinutes: Number(form.actualMinutes) }
         : {}),
@@ -126,6 +131,12 @@ export function TaskDrawer({ open, onClose, editTask, initialCategory }: TaskDra
     { value: 'medium' as TaskPriority, label: t.taskPriority_medium, color: 'var(--color-text-dim)' },
     { value: 'low' as TaskPriority, label: t.taskPriority_low, color: 'var(--color-border)' },
   ]
+
+  const allTags = useMemo(() => {
+    const set = new Set<string>()
+    tasks.forEach((t) => t.tags?.forEach((tag) => set.add(tag)))
+    return [...set].sort()
+  }, [tasks])
 
   // 编辑模式：从 store 实时拿；新建模式：用本地暂存列表
   const subTasks = editTask ? (currentTask?.subTasks ?? editTask.subTasks ?? []) : pendingSubTasks
@@ -167,6 +178,16 @@ export function TaskDrawer({ open, onClose, editTask, initialCategory }: TaskDra
             value={form.category}
             onChange={(v) => setForm((f) => ({ ...f, category: v }))}
             categories={getAreaCategories()}
+          />
+        </div>
+
+        {/* 标签 */}
+        <div className="flex flex-col gap-1.5">
+          <label style={{ fontSize: 12, color: 'var(--color-text-dim)' }}>{t.tag_add}</label>
+          <TagInput
+            tags={form.tags}
+            allTags={allTags}
+            onChange={(tags) => setForm((f) => ({ ...f, tags }))}
           />
         </div>
 
@@ -239,55 +260,8 @@ export function TaskDrawer({ open, onClose, editTask, initialCategory }: TaskDra
           )}
         </div>
 
-        {/* 实际用时（编辑已完成任务时显示） */}
-        {editTask && (
-          <div className="flex flex-col gap-1.5">
-            <label style={{ fontSize: 12, color: 'var(--color-text-dim)' }}>{t.task_actualMinutes}</label>
-            {editTask.status === 'done' ? (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <input
-                  type="number"
-                  min={0}
-                  value={form.actualMinutes}
-                  onChange={(e) => setForm((f) => ({ ...f, actualMinutes: e.target.value }))}
-                  style={{
-                    width: 100, height: 36, padding: '0 12px',
-                    borderRadius: 'var(--radius-md)',
-                    border: '1px solid var(--color-border)',
-                    background: 'var(--color-bg)',
-                    color: 'var(--color-text)',
-                    fontSize: 14, outline: 'none',
-                  }}
-                />
-                <span style={{ fontSize: 13, color: 'var(--color-text-dim)' }}>{t.task_minuteUnit}</span>
-              </div>
-            ) : (
-              <div style={{ fontSize: 13, color: 'var(--color-text-dim)', padding: '8px 0' }}>
-                {t.task_actualMinutesPlaceholder}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* 备注 */}
-        <div className="flex flex-col gap-1.5">
-          <label style={{ fontSize: 12, color: 'var(--color-text-dim)' }}>{t.taskDrawer_notes}</label>
-          <textarea
-            value={form.description}
-            onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-            placeholder={`${t.taskDrawer_optional}...`}
-            rows={3}
-            style={{
-              padding: '8px 12px',
-              borderRadius: 'var(--radius-md)',
-              border: '1px solid var(--color-border)',
-              background: 'var(--color-bg)',
-              color: 'var(--color-text)',
-              fontSize: 14, outline: 'none', resize: 'vertical',
-              fontFamily: 'var(--font-zh)',
-            }}
-          />
-        </div>
+        {/* ─── 分割线 ─── */}
+        <div style={{ height: 1, background: 'var(--color-border)' }} />
 
         {/* 子项管理（新建和编辑模式均显示） */}
         <div className="flex flex-col gap-2">
@@ -373,6 +347,59 @@ export function TaskDrawer({ open, onClose, editTask, initialCategory }: TaskDra
             </button>
           </div>
         </div>
+
+        {/* ─── 分割线 ─── */}
+        <div style={{ height: 1, background: 'var(--color-border)' }} />
+
+        {/* 备注 */}
+        <div className="flex flex-col gap-1.5">
+          <label style={{ fontSize: 12, color: 'var(--color-text-dim)' }}>{t.taskDrawer_notes}</label>
+          <textarea
+            value={form.description}
+            onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+            placeholder={`${t.taskDrawer_optional}...`}
+            rows={3}
+            style={{
+              padding: '8px 12px',
+              borderRadius: 'var(--radius-md)',
+              border: '1px solid var(--color-border)',
+              background: 'var(--color-bg)',
+              color: 'var(--color-text)',
+              fontSize: 14, outline: 'none', resize: 'vertical',
+              fontFamily: 'var(--font-zh)',
+            }}
+          />
+        </div>
+
+        {/* 实际用时（编辑已完成任务时显示） */}
+        {editTask && (
+          <div className="flex flex-col gap-1.5">
+            <label style={{ fontSize: 12, color: 'var(--color-text-dim)' }}>{t.task_actualMinutes}</label>
+            {editTask.status === 'done' ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <input
+                  type="number"
+                  min={0}
+                  value={form.actualMinutes}
+                  onChange={(e) => setForm((f) => ({ ...f, actualMinutes: e.target.value }))}
+                  style={{
+                    width: 100, height: 36, padding: '0 12px',
+                    borderRadius: 'var(--radius-md)',
+                    border: '1px solid var(--color-border)',
+                    background: 'var(--color-bg)',
+                    color: 'var(--color-text)',
+                    fontSize: 14, outline: 'none',
+                  }}
+                />
+                <span style={{ fontSize: 13, color: 'var(--color-text-dim)' }}>{t.task_minuteUnit}</span>
+              </div>
+            ) : (
+              <div style={{ fontSize: 13, color: 'var(--color-text-dim)', padding: '8px 0' }}>
+                {t.task_actualMinutesPlaceholder}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* 铭刻为里程碑 */}
         {editTask && (editTask.status === 'done' || editTask.status === 'doing') && (

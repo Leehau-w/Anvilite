@@ -11,6 +11,7 @@ import { useCharacterStore } from '@/stores/characterStore'
 import { useGrowthEventStore } from '@/stores/growthEventStore'
 import { getProsperityInfo, getAreaSkillXP } from '@/engines/prosperityEngine'
 import { PROSPERITY_NAMES } from '@/types/area'
+import type { Task } from '@/types/task'
 import { useT } from '@/i18n'
 import { getAreaDisplayName } from '@/utils/area'
 
@@ -25,7 +26,7 @@ function getMilestoneProsperityLevel(characterLevel: number): number {
 
 function getAreaProsperityLevel(
   category: string,
-  tasks: ReturnType<typeof useTaskStore.getState>['tasks'],
+  tasks: Task[],
   characterLevel: number,
 ): number {
   if (category === '_milestone') return getMilestoneProsperityLevel(characterLevel)

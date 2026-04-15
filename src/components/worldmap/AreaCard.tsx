@@ -1,5 +1,4 @@
-import React from 'react'
-import { motion } from 'framer-motion'
+import { motion, type TargetAndTransition } from 'framer-motion'
 import type { Area } from '@/types/area'
 import { AREA_TEMPLATES, PROSPERITY_NAMES } from '@/types/area'
 import { useTaskStore } from '@/stores/taskStore'
@@ -43,7 +42,7 @@ export function AreaCard({ area, editMode, onClick, onRename, onDelete }: AreaCa
 
   return (
     <motion.div
-      whileHover={editMode ? undefined : { scale: 1.02, borderColor: 'var(--color-accent)' } as object}
+      whileHover={editMode ? undefined : { scale: 1.02, borderColor: 'var(--color-accent)' } as TargetAndTransition}
       onClick={() => !editMode && onClick()}
       style={{
         position: 'relative',
@@ -109,7 +108,7 @@ export function AreaCard({ area, editMode, onClick, onRename, onDelete }: AreaCa
         >
           <button
             onClick={(e) => { e.stopPropagation(); onRename(area.id) }}
-            title={t.worldmap_rename ?? '重命名'}
+            title={t.worldmap_rename}
             style={editBtnStyle}
           >
             ✏
@@ -117,7 +116,7 @@ export function AreaCard({ area, editMode, onClick, onRename, onDelete }: AreaCa
           {area.canDelete && (
             <button
               onClick={(e) => { e.stopPropagation(); onDelete(area.id) }}
-              title={t.worldmap_delete ?? '删除'}
+              title={t.worldmap_delete}
               style={{ ...editBtnStyle, color: 'var(--color-danger)' }}
             >
               ✕

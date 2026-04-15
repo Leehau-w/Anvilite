@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import type { SubTask } from '@/types/task'
 import { useTaskStore } from '@/stores/taskStore'
 import { useUIStore } from '@/stores/uiStore'
+import { Checkbox } from '@/components/ui/Checkbox'
 
 const MAX_DEPTH = 2 // depth 0/1/2 → 最多 3 层
 
@@ -55,17 +56,10 @@ export function SubTaskItem({ subTask, taskId, depth, compact }: SubTaskItemProp
         onMouseLeave={() => setHovered(false)}
       >
         {/* 复选框 */}
-        <input
-          type="checkbox"
+        <Checkbox
           checked={subTask.completed}
           onChange={() => toggleSubTask(taskId, subTask.id)}
-          style={{
-            width: 13,
-            height: 13,
-            flexShrink: 0,
-            cursor: 'pointer',
-            accentColor: 'var(--color-accent)',
-          }}
+          size={13}
         />
 
         {/* 子项折叠按钮（有子项时显示） */}

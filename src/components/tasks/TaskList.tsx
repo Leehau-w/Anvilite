@@ -10,8 +10,11 @@ import { TaskDrawer } from './TaskDrawer'
 import { HabitDrawer } from '@/components/dashboard/HabitDrawer'
 import { CollapsibleGroup } from '@/components/ui/CollapsibleGroup'
 import { useToast } from '@/components/feedback/Toast'
-import type { Task } from '@/types/task'
-import type { Habit, SubHabit } from '@/types/habit'
+import { TagFilterBar } from './TagFilterBar'
+import { TimerBadge } from './TimerBadge'
+import type { Task, TaskGroup } from '@/types/task'
+import type { Habit, SubHabit, HabitGroup } from '@/types/habit'
+import type { Area } from '@/types/area'
 import { useUIStore } from '@/stores/uiStore'
 import { useT } from '@/i18n'
 import { categoryDisplay, getAreaDisplayName } from '@/utils/area'
@@ -41,6 +44,7 @@ export function TaskList() {
   const [hiddenMode, setHiddenMode] = useState(false)
   const [habitDrawerOpen, setHabitDrawerOpen] = useState(false)
   const [editHabit, setEditHabit] = useState<Habit | null>(null)
+  const [selectedTags, setSelectedTags] = useState<string[]>([])
 
   const visible = useMemo(() => tasks.filter((task) => {
     if (task.deletedAt) return false
@@ -50,9 +54,21 @@ export function TaskList() {
     return true
   }), [tasks, activeCategory])
 
-  const doing = useMemo(() => sortTasksInGroup(visible.filter((t) => t.status === 'doing')), [visible])
-  const todo = useMemo(() => sortTasksInGroup(visible.filter((t) => t.status === 'todo')), [visible])
-  const done = useMemo(() => visible.filter((t) => t.status === 'done'), [visible])
+  // Tag filtering (union mode)
+  const filtered = useMemo(() => {
+    if (selectedTags.length === 0) return visible
+    return visible.filter((t) => t.tags?.some((tag) => selectedTags.includes(tag)))
+  }, [visible, selectedTags])
+
+  const allVisibleTags = useMemo(() => {
+    const set = new Set<string>()
+    visible.forEach((t) => t.tags?.forEach((tag) => set.add(tag)))
+    return [...set].sort()
+  }, [visible])
+
+  const doing = useMemo(() => sortTasksInGroup(filtered.filter((t) => t.status === 'doing')), [filtered])
+  const todo = useMemo(() => sortTasksInGroup(filtered.filter((t) => t.status === 'todo')), [filtered])
+  const done = useMemo(() => filtered.filter((t) => t.status === 'done'), [filtered])
 
   // 拖拽排序的本地状态
   const [localDoing, setLocalDoing] = useState<Task[]>([])
@@ -99,6 +115,7 @@ export function TaskList() {
     setTrashMode(false)
     setHiddenMode(false)
     setActiveCategory(cat)
+    setSelectedTags([])
   }
 
   function isCatActive(cat: string) {
@@ -405,11 +422,24 @@ export function TaskList() {
       ) : (
         /* 正常任务视图 */
         <>
+          {allVisibleTags.length > 0 && (
+            <div className="px-4 pt-2 shrink-0">
+              <TagFilterBar
+                tags={allVisibleTags}
+                selectedTags={selectedTags}
+                onToggle={(tag) => setSelectedTags((prev) =>
+                  prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
+                )}
+                onClear={() => setSelectedTags([])}
+              />
+            </div>
+          )}
+
           <div className="px-4 py-3 shrink-0">
             <QuickInput onOpenDrawer={() => { setEditTask(null); setDrawerOpen(true) }} />
           </div>
 
-          <div className="flex-1 overflow-y-auto px-4 pb-4 flex flex-col gap-4">
+          <div key={activeCategory} className="flex-1 overflow-y-auto px-4 pb-4 flex flex-col gap-4">
             {localDoing.length > 0 && (
               <Section title={tr.tasklist_doing} count={localDoing.length} accentColor>
                 <Reorder.Group
@@ -524,8 +554,8 @@ function CompletedSection({
   done: Task[]
   completedViewMode: 'month' | 'area' | 'custom'
   setCompletedViewMode: (mode: 'month' | 'area' | 'custom') => void
-  customTaskGroups: ReturnType<typeof useTaskStore>['customTaskGroups']
-  addCustomTaskGroup: (name: string) => ReturnType<typeof useTaskStore>['customTaskGroups'][number]
+  customTaskGroups: TaskGroup[]
+  addCustomTaskGroup: (name: string) => TaskGroup
   renameCustomTaskGroup: (id: string, name: string) => void
   deleteCustomTaskGroup: (id: string) => void
   moveTaskToGroup: (taskId: string, groupId: string) => void
@@ -852,7 +882,7 @@ function DoneTaskWithGroupMenu({
   tr,
 }: {
   task: Task
-  groups: ReturnType<typeof useTaskStore>['customTaskGroups']
+  groups: TaskGroup[]
   currentGroupId: string | null
   onEdit: (t: Task) => void
   onMove: (taskId: string, groupId: string) => void
@@ -1011,7 +1041,7 @@ function formatDeletedDate(iso: string): string {
 }
 
 /** Resolve category key → display name using area data (user rename > i18n > raw key) */
-function resolveCatLabel(cat: string, areas: ReturnType<typeof useAreaStore>['areas'], t: ReturnType<typeof useT>): string {
+function resolveCatLabel(cat: string, areas: Area[], t: ReturnType<typeof useT>): string {
   const area = areas.find((a) => a.category === cat)
   if (area) return getAreaDisplayName(area, t)
   return categoryDisplay(cat, t)
@@ -1042,10 +1072,10 @@ function HabitsTab({
   const [addingHabitGroup, setAddingHabitGroup] = useState(false)
   const [newHabitGroupName, setNewHabitGroupName] = useState('')
 
-  const active = habits.filter((h) => !h.deletedAt && !h.isHidden && !h.parentId && (h.status === 'active' || h.status === 'completed_today'))
-  const paused = habits.filter((h) => !h.deletedAt && !h.isHidden && !h.parentId && h.status === 'paused')
-  const mastered = habits.filter((h) => !h.deletedAt && !h.isHidden && !h.parentId && h.status === 'mastered')
-  const hidden = habits.filter((h) => !h.deletedAt && !h.parentId && h.isHidden)
+  const active = habits.filter((h) => !h.deletedAt && !h.isHidden && (h.status === 'active' || h.status === 'completed_today'))
+  const paused = habits.filter((h) => !h.deletedAt && !h.isHidden && h.status === 'paused')
+  const mastered = habits.filter((h) => !h.deletedAt && !h.isHidden && h.status === 'mastered')
+  const hidden = habits.filter((h) => !h.deletedAt && h.isHidden)
   const deleted = habits.filter((h) => !!h.deletedAt).sort((a, b) => new Date(b.deletedAt!).getTime() - new Date(a.deletedAt!).getTime())
 
   function handleHide(id: string) {
@@ -1284,8 +1314,8 @@ function CompletedHabitsSection({
   addCustomHabitGroup,
   renameCustomHabitGroup,
   deleteCustomHabitGroup,
-  moveHabitToGroup,
-  removeHabitFromGroup,
+  moveHabitToGroup: _moveHabitToGroup,
+  removeHabitFromGroup: _removeHabitFromGroup,
   catLabel,
   onEdit,
   onDelete,
@@ -1299,8 +1329,8 @@ function CompletedHabitsSection({
   mastered: Habit[]
   completedHabitViewMode: 'area' | 'custom'
   setCompletedHabitViewMode: (mode: 'area' | 'custom') => void
-  customHabitGroups: ReturnType<typeof useHabitStore>['customHabitGroups']
-  addCustomHabitGroup: (name: string) => ReturnType<typeof useHabitStore>['customHabitGroups'][number]
+  customHabitGroups: HabitGroup[]
+  addCustomHabitGroup: (name: string) => HabitGroup
   renameCustomHabitGroup: (id: string, name: string) => void
   deleteCustomHabitGroup: (id: string) => void
   moveHabitToGroup: (habitId: string, groupId: string) => void
@@ -1575,6 +1605,18 @@ function HabitRow({
                 cursor: 'pointer', fontSize: 11, fontFamily: 'var(--font-num)',
                 flexShrink: 0, transition: 'all 0.15s',
               }}
+              onMouseEnter={(e) => {
+                if (!subHabitsExpanded) {
+                  (e.currentTarget as HTMLElement).style.color = 'var(--color-accent)';
+                  (e.currentTarget as HTMLElement).style.borderColor = 'var(--color-accent)'
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!subHabitsExpanded) {
+                  (e.currentTarget as HTMLElement).style.color = 'var(--color-text-dim)';
+                  (e.currentTarget as HTMLElement).style.borderColor = 'var(--color-border)'
+                }
+              }}
             >
               <span style={{ fontSize: 9, lineHeight: 1 }}>{subHabitsExpanded ? '▾' : '▸'}</span>
               <span>{completedSubCount}/{subHabits.length}</span>
@@ -1589,29 +1631,36 @@ function HabitRow({
             {habit.title}
           </span>
           {onStartPause && (
-            <button
-              onClick={(e) => { e.stopPropagation(); onStartPause() }}
-              title={isDoing ? tr.habit_pauseDoing : tr.habit_startDoing}
-              style={{
-                width: 26, height: 26, borderRadius: 'var(--radius-sm)',
-                border: `1px solid ${isDoing ? 'var(--color-accent)' : 'var(--color-border)'}`,
-                background: isDoing ? 'color-mix(in srgb, var(--color-accent) 15%, transparent)' : 'transparent',
-                color: isDoing ? 'var(--color-accent)' : 'var(--color-text-dim)',
-                cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                flexShrink: 0, transition: 'all 0.15s', padding: 0,
-              }}
-            >
-              {isDoing ? (
-                <svg width="9" height="9" viewBox="0 0 10 10" fill="currentColor">
-                  <rect x="2" y="2" width="2.5" height="6" rx="0.5"/>
-                  <rect x="5.5" y="2" width="2.5" height="6" rx="0.5"/>
-                </svg>
-              ) : (
+            isDoing ? (
+              <TimerBadge
+                startedAt={habit.timerStartedAt}
+                accumulated={habit.timerAccumulated ?? 0}
+                onToggle={() => { onStartPause() }}
+              />
+            ) : (habit.timerAccumulated ?? 0) > 0 ? (
+              <TimerBadge
+                startedAt={null}
+                accumulated={habit.timerAccumulated ?? 0}
+                onToggle={() => { onStartPause() }}
+              />
+            ) : (
+              <button
+                onClick={(e) => { e.stopPropagation(); onStartPause() }}
+                title={tr.habit_startDoing}
+                style={{
+                  width: 26, height: 26, borderRadius: 'var(--radius-sm)',
+                  border: '1px solid var(--color-border)',
+                  background: 'transparent',
+                  color: 'var(--color-text-dim)',
+                  cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  flexShrink: 0, transition: 'all 0.15s', padding: 0,
+                }}
+              >
                 <svg width="9" height="9" viewBox="0 0 10 10" fill="currentColor">
                   <path d="M3 2l5 3-5 3V2z"/>
                 </svg>
-              )}
-            </button>
+              </button>
+            )
           )}
         </div>
         {/* 元信息行 */}

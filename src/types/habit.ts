@@ -30,6 +30,7 @@ export interface Habit {
   isHidden: boolean
   deletedAt: string | null
   timerStartedAt: string | null
+  timerAccumulated: number
   actualMinutes: number
   consecutiveCount: number
   totalCompletions: number

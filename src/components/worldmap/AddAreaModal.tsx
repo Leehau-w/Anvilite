@@ -1,5 +1,5 @@
-import React, { useState } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { useState } from 'react'
+import { motion } from 'framer-motion'
 import type { AreaTemplateId } from '@/types/area'
 import { AREA_TEMPLATES } from '@/types/area'
 import { useT } from '@/i18n'

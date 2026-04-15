@@ -1,6 +1,6 @@
-import React, { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useCharacterStore } from '@/stores/characterStore'
-import { getXPProgress, xpToNextLevel } from '@/engines/levelEngine'
+import { xpToNextLevel } from '@/engines/levelEngine'
 
 /**
  * 经验条组件：带填充动画和光晕效果
@@ -8,7 +8,6 @@ import { getXPProgress, xpToNextLevel } from '@/engines/levelEngine'
  */
 export function AnimatedXPBar() {
   const { character } = useCharacterStore()
-  const progress = getXPProgress(character.currentXP, character.level)
   const needed = xpToNextLevel(character.level)
 
   const [displayXP, setDisplayXP] = useState(character.currentXP)

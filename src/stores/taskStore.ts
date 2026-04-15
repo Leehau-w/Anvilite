@@ -57,6 +57,15 @@ interface TaskStore {
   getActiveTasks: () => Task[]
   getTodayStats: () => { completedCount: number; totalXP: number }
 
+  // ── 计时器 ──────────────────────────────────────────────────
+  startTimer: (taskId: string) => void
+  pauseTimer: (taskId: string) => void
+  stopTimer: (taskId: string) => void
+
+  // ── 标签 ────────────────────────────────────────────────────
+  addTag: (taskId: string, tag: string) => void
+  removeTag: (taskId: string, tag: string) => void
+
   createTaskFromSOP: (params: {
     title: string
     category: string
@@ -102,6 +111,9 @@ function makeDefaultTask(partial: Partial<Task> & { title: string }): Task {
     completedAt: null,
     deletedAt: null,
     isHidden: false,
+    timerStartedAt: null,
+    timerAccumulated: 0,
+    tags: partial.tags ?? [],
     sortOrder: partial.sortOrder ?? Date.now(),
     subTasks: partial.subTasks ?? [],
     createdAt: now,
@@ -168,11 +180,25 @@ export const useTaskStore = create<TaskStore>()(
         if (!task || task.status === 'done') return null
 
         const now = new Date().toISOString()
+
+        // Auto-record timer into actualMinutes
+        let taskActualMinutes = task.actualMinutes
+        if (task.timerStartedAt || task.timerAccumulated > 0) {
+          let totalSec = task.timerAccumulated
+          if (task.timerStartedAt) {
+            totalSec += Math.max(0, Math.floor((Date.now() - new Date(task.timerStartedAt).getTime()) / 1000))
+          }
+          taskActualMinutes = Math.round(totalSec / 60)
+        }
+
         const updatedTask: Task = {
           ...task,
           status: 'done',
           completedAt: now,
           updatedAt: now,
+          actualMinutes: taskActualMinutes,
+          timerStartedAt: null,
+          timerAccumulated: 0,
         }
 
         set((s) => ({
@@ -196,15 +222,33 @@ export const useTaskStore = create<TaskStore>()(
         const now = new Date().toISOString()
         set((s) => ({
           tasks: s.tasks.map((t) =>
-            t.id === id ? { ...t, status: 'doing', updatedAt: now } : t
+            t.id === id
+              ? { ...t, status: 'doing', updatedAt: now, timerStartedAt: t.timerStartedAt ?? now }
+              : t
           ),
         }))
       },
 
       pauseTask: (id) => {
+        const task = get().tasks.find((t) => t.id === id)
+        if (!task) return
+        // Accumulate elapsed time but don't settle into actualMinutes yet
+        // (only completeTask settles the timer)
+        let accumulated = task.timerAccumulated
+        if (task.timerStartedAt) {
+          accumulated += Math.max(0, Math.floor((Date.now() - new Date(task.timerStartedAt).getTime()) / 1000))
+        }
         set((s) => ({
           tasks: s.tasks.map((t) =>
-            t.id === id ? { ...t, status: 'todo', updatedAt: new Date().toISOString() } : t
+            t.id === id
+              ? {
+                  ...t,
+                  status: 'todo',
+                  updatedAt: new Date().toISOString(),
+                  timerStartedAt: null,
+                  timerAccumulated: accumulated,
+                }
+              : t
           ),
         }))
       },
@@ -265,6 +309,71 @@ export const useTaskStore = create<TaskStore>()(
               updatedAt: new Date().toISOString(),
             }
           }),
+        }))
+      },
+
+      // ── 计时器 actions ────────────────────────────────────────
+
+      startTimer: (taskId) => {
+        set((s) => ({
+          tasks: s.tasks.map((t) =>
+            t.id === taskId && !t.timerStartedAt
+              ? { ...t, timerStartedAt: new Date().toISOString() }
+              : t
+          ),
+        }))
+      },
+
+      pauseTimer: (taskId) => {
+        const task = get().tasks.find((t) => t.id === taskId)
+        if (!task || !task.timerStartedAt) return
+        const elapsed = Math.floor((Date.now() - new Date(task.timerStartedAt).getTime()) / 1000)
+        set((s) => ({
+          tasks: s.tasks.map((t) =>
+            t.id === taskId
+              ? { ...t, timerAccumulated: t.timerAccumulated + Math.max(0, elapsed), timerStartedAt: null }
+              : t
+          ),
+        }))
+      },
+
+      stopTimer: (taskId) => {
+        const task = get().tasks.find((t) => t.id === taskId)
+        if (!task) return
+        let totalSeconds = task.timerAccumulated
+        if (task.timerStartedAt) {
+          totalSeconds += Math.max(0, Math.floor((Date.now() - new Date(task.timerStartedAt).getTime()) / 1000))
+        }
+        set((s) => ({
+          tasks: s.tasks.map((t) =>
+            t.id === taskId
+              ? { ...t, actualMinutes: Math.round(totalSeconds / 60), timerAccumulated: 0, timerStartedAt: null }
+              : t
+          ),
+        }))
+      },
+
+      // ── 标签 actions ───────────────────────────────────────────
+
+      addTag: (taskId, tag) => {
+        const trimmed = tag.trim().slice(0, 20)
+        if (!trimmed) return
+        set((s) => ({
+          tasks: s.tasks.map((t) => {
+            if (t.id !== taskId) return t
+            if (t.tags.includes(trimmed) || t.tags.length >= 5) return t
+            return { ...t, tags: [...t.tags, trimmed], updatedAt: new Date().toISOString() }
+          }),
+        }))
+      },
+
+      removeTag: (taskId, tag) => {
+        set((s) => ({
+          tasks: s.tasks.map((t) =>
+            t.id === taskId
+              ? { ...t, tags: t.tags.filter((tg) => tg !== tag), updatedAt: new Date().toISOString() }
+              : t
+          ),
         }))
       },
 
@@ -347,6 +456,9 @@ export const useTaskStore = create<TaskStore>()(
           completedAt: null,
           deletedAt: null,
           isHidden: false,
+          timerStartedAt: null,
+          timerAccumulated: 0,
+          tags: [],
           sortOrder: get().tasks.length,
           createdAt: now,
           updatedAt: now,
@@ -409,19 +521,42 @@ export const useTaskStore = create<TaskStore>()(
         }
 
         // ── 兼容：确保所有任务都有 subTasks ──────────────────────
-        state.tasks = state.tasks.map((t) => {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const legacy = t as any
-          if ('timerStartedAt' in legacy) delete legacy.timerStartedAt
-          if ('timerElapsed' in legacy) delete legacy.timerElapsed
-          return {
+        state.tasks = state.tasks.map((t) => ({
+          ...t,
+          category: migrateCategory(t.category),
+          actualMinutes: t.actualMinutes ?? 0,
+          sortOrder: t.sortOrder ?? 0,
+          subTasks: t.subTasks ?? [],
+        }))
+
+        // ── v0.3.1 迁移：timer + tags 字段 ──────────────────────
+        const TIMER_TAGS_MIGRATION = 'anvilite-migration-timer-tags-v031'
+        if (!localStorage.getItem(TIMER_TAGS_MIGRATION)) {
+          state.tasks = state.tasks.map((t) => ({
             ...t,
-            category: migrateCategory(t.category),
-            actualMinutes: t.actualMinutes ?? 0,
-            sortOrder: t.sortOrder ?? 0,
-            subTasks: t.subTasks ?? [],
+            timerStartedAt: t.timerStartedAt ?? null,
+            timerAccumulated: t.timerAccumulated ?? 0,
+            tags: t.tags ?? [],
+          }))
+          localStorage.setItem(TIMER_TAGS_MIGRATION, new Date().toISOString())
+        }
+
+        // ── 4 小时过期自动暂停（每次 rehydrate 执行）──────────
+        const STALE_THRESHOLD = 4 * 60 * 60
+        const nowMs = Date.now()
+        let staleCount = 0
+        state.tasks = state.tasks.map((t) => {
+          if (!t.timerStartedAt) return t
+          const elapsed = (nowMs - new Date(t.timerStartedAt).getTime()) / 1000
+          if (elapsed > STALE_THRESHOLD) {
+            staleCount++
+            return { ...t, timerAccumulated: t.timerAccumulated + STALE_THRESHOLD, timerStartedAt: null }
           }
+          return t
         })
+        if (staleCount > 0) {
+          sessionStorage.setItem('anvilite-stale-timers', String(staleCount))
+        }
 
         state.lastCategory = migrateCategory(state.lastCategory)
         if (!state.completedViewMode) state.completedViewMode = 'month'

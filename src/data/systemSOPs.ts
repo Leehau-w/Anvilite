@@ -1,4 +1,5 @@
 import type { SOP, SOPFolder, SOPStep } from '@/types/sop'
+import type { JSONContent } from '@tiptap/react'
 
 export const SYSTEM_FOLDER_ID = '__system'
 
@@ -17,11 +18,29 @@ type BilingualStep = {
 }
 
 function resolveStep(s: BilingualStep, lang: Lang): SOPStep {
+  const note = (lang === 'zh' ? s.noteZh : s.noteEn) ?? ''
+  const warning = (lang === 'zh' ? s.warnZh : s.warnEn) ?? ''
+
+  const blocks: JSONContent[] = []
+  if (warning) {
+    blocks.push({
+      type: 'callout',
+      attrs: { variant: 'warning' },
+      content: [{ type: 'paragraph', content: [{ type: 'text', text: warning }] }],
+    })
+  }
+  if (note) {
+    blocks.push({
+      type: 'callout',
+      attrs: { variant: 'info' },
+      content: [{ type: 'paragraph', content: [{ type: 'text', text: note }] }],
+    })
+  }
+
   return {
     id: s.id,
     title: lang === 'zh' ? s.zh : s.en,
-    note: (lang === 'zh' ? s.noteZh : s.noteEn) ?? '',
-    warning: (lang === 'zh' ? s.warnZh : s.warnEn) ?? '',
+    content: blocks.length > 0 ? { type: 'doc', content: blocks } : null,
     time: s.time ?? null,
     sortOrder: s.sortOrder,
     childSteps: [],
@@ -120,26 +139,27 @@ const MEETING_PREP_STEPS: BilingualStep[] = [
 
 const SOP_META: Array<{
   id: string
-  type: SOP['type']
+  displayStyle: SOP['displayStyle']
   titleZh: string
   titleEn: string
   steps: BilingualStep[]
   sortOrder: number
 }> = [
-  { id: '__sys_workday',       type: 'schedule',  titleZh: '工作日日程',   titleEn: 'Workday Schedule',      steps: WORKDAY_STEPS,         sortOrder: 0 },
-  { id: '__sys_dayoff',        type: 'schedule',  titleZh: '休息日日程',   titleEn: 'Day Off Schedule',      steps: DAYOFF_STEPS,          sortOrder: 1 },
-  { id: '__sys_weeklyReview',  type: 'checklist', titleZh: '每周复盘',     titleEn: 'Weekly Review',         steps: WEEKLY_REVIEW_STEPS,   sortOrder: 2 },
-  { id: '__sys_meetingPrep',   type: 'checklist', titleZh: '会议准备检查', titleEn: 'Meeting Preparation',   steps: MEETING_PREP_STEPS,    sortOrder: 3 },
-  { id: '__sys_projectKickoff',type: 'workflow',  titleZh: '项目启动流程', titleEn: 'Project Kickoff',       steps: PROJECT_KICKOFF_STEPS, sortOrder: 4 },
-  { id: '__sys_learnSkill',    type: 'workflow',  titleZh: '学习新技能流程',titleEn: 'Learn a New Skill',    steps: LEARN_SKILL_STEPS,     sortOrder: 5 },
-  { id: '__sys_travelPacking', type: 'itemlist',  titleZh: '出差准备清单', titleEn: 'Business Trip Packing', steps: TRAVEL_PACKING_STEPS,  sortOrder: 6 },
-  { id: '__sys_deepClean',     type: 'itemlist',  titleZh: '大扫除清单',   titleEn: 'Deep Cleaning',         steps: DEEP_CLEAN_STEPS,      sortOrder: 7 },
+  { id: '__sys_workday',       displayStyle: 'timeline',  titleZh: '工作日日程',   titleEn: 'Workday Schedule',      steps: WORKDAY_STEPS,         sortOrder: 0 },
+  { id: '__sys_dayoff',        displayStyle: 'timeline',  titleZh: '休息日日程',   titleEn: 'Day Off Schedule',      steps: DAYOFF_STEPS,          sortOrder: 1 },
+  { id: '__sys_weeklyReview',  displayStyle: 'numbered',  titleZh: '每周复盘',     titleEn: 'Weekly Review',         steps: WEEKLY_REVIEW_STEPS,   sortOrder: 2 },
+  { id: '__sys_meetingPrep',   displayStyle: 'numbered',  titleZh: '会议准备检查', titleEn: 'Meeting Preparation',   steps: MEETING_PREP_STEPS,    sortOrder: 3 },
+  { id: '__sys_projectKickoff',displayStyle: 'numbered',  titleZh: '项目启动流程', titleEn: 'Project Kickoff',       steps: PROJECT_KICKOFF_STEPS, sortOrder: 4 },
+  { id: '__sys_learnSkill',    displayStyle: 'numbered',  titleZh: '学习新技能流程',titleEn: 'Learn a New Skill',    steps: LEARN_SKILL_STEPS,     sortOrder: 5 },
+  { id: '__sys_travelPacking', displayStyle: 'bullet',    titleZh: '出差准备清单', titleEn: 'Business Trip Packing', steps: TRAVEL_PACKING_STEPS,  sortOrder: 6 },
+  { id: '__sys_deepClean',     displayStyle: 'bullet',    titleZh: '大扫除清单',   titleEn: 'Deep Cleaning',         steps: DEEP_CLEAN_STEPS,      sortOrder: 7 },
 ]
 
 export function getSystemFolder(lang: Lang): SOPFolder {
   return {
     id: SYSTEM_FOLDER_ID,
     name: lang === 'zh' ? '系统模板' : 'System Templates',
+    parentId: null,
     sortOrder: -1,
     isSystem: true,
     createdAt: '2026-01-01T00:00:00Z',
@@ -151,7 +171,7 @@ export function getSystemSOPs(lang: Lang): SOP[] {
     id: meta.id,
     folderId: SYSTEM_FOLDER_ID,
     title: lang === 'zh' ? meta.titleZh : meta.titleEn,
-    type: meta.type,
+    displayStyle: meta.displayStyle,
     isSystem: true,
     lastUsedAt: null,
     sortOrder: meta.sortOrder,

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { motion, AnimatePresence, Reorder } from 'framer-motion'
 import { useHabitStore } from '@/stores/habitStore'
 import { useCharacterStore } from '@/stores/characterStore'
@@ -7,7 +7,8 @@ import { useFeedback } from '@/components/feedback/FeedbackContext'
 import { useToast } from '@/components/feedback/Toast'
 import { UndoToast } from '@/components/feedback/UndoToast'
 import { CollapsibleGroup } from '@/components/ui/CollapsibleGroup'
-import { getNextRefreshText } from '@/engines/habitEngine'
+import { getNextRefreshInfo, type NextRefreshInfo } from '@/engines/habitEngine'
+import { TimerBadge } from '@/components/tasks/TimerBadge'
 import type { Habit, SubHabit } from '@/types/habit'
 import { useT } from '@/i18n'
 import { useUIStore } from '@/stores/uiStore'
@@ -295,6 +296,26 @@ function CompletedHabitItem({
   )
 }
 
+function formatRefreshInfo(info: NextRefreshInfo | null, t: ReturnType<typeof useT>): string | null {
+  if (!info) return null
+  // timeline_dow: index 0=Sun, 1=Mon...6=Sat; NextRefreshInfo day: 1=Mon...7=Sun
+  const dowIndex = info.type === 'weekday' ? (info.day === 7 ? 0 : info.day) : 0
+  switch (info.type) {
+    case 'weekday':
+      return t.habitNext_weekday(t.timeline_dow[dowIndex])
+    case 'biweekly':
+      return t.habitNext_biweekly
+    case 'monthly':
+      return t.habitNext_monthly
+    case 'custom':
+      return t.habitNext_custom(info.days)
+    case 'monthly_day':
+      return t.habitNext_monthDay(info.day === -1 ? t.habitNext_monthEnd : t.habitNext_dayLabel(info.day))
+    case 'monthly_next':
+      return t.habitNext_monthNext(info.day === -1 ? t.habitNext_monthEnd : t.habitNext_dayLabel(info.day))
+  }
+}
+
 function HabitItem({
   habit,
   onComplete,
@@ -308,8 +329,9 @@ function HabitItem({
   onStartPause: () => void
   onEdit?: () => void
 }) {
-  const refreshText = getNextRefreshText(habit)
   const t = useT()
+  const refreshInfo = getNextRefreshInfo(habit)
+  const refreshText = formatRefreshInfo(refreshInfo, t)
   const { toggleSubHabit } = useHabitStore()
   const { isTaskCollapsed, toggleTaskCollapse } = useUIStore()
   const isDoing = !!habit.timerStartedAt
@@ -373,6 +395,18 @@ function HabitItem({
               cursor: 'pointer', fontSize: 11, fontFamily: 'var(--font-num)',
               flexShrink: 0, transition: 'all 0.15s',
             }}
+            onMouseEnter={(e) => {
+              if (!subHabitsExpanded) {
+                (e.currentTarget as HTMLElement).style.color = 'var(--color-accent)';
+                (e.currentTarget as HTMLElement).style.borderColor = 'var(--color-accent)'
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (!subHabitsExpanded) {
+                (e.currentTarget as HTMLElement).style.color = 'var(--color-text-dim)';
+                (e.currentTarget as HTMLElement).style.borderColor = 'var(--color-border)'
+              }
+            }}
           >
             <span style={{ fontSize: 9, lineHeight: 1 }}>{subHabitsExpanded ? '▾' : '▸'}</span>
             <span>{completedSubCount}/{subHabits.length}</span>
@@ -401,30 +435,37 @@ function HabitItem({
           </span>
         )}
 
-        {/* 开始/暂停按钮 */}
-        <button
-          onClick={onStartPause}
-          title={isDoing ? t.task_pauseDoing : t.task_startDoing}
-          style={{
-            width: 24, height: 24, borderRadius: 'var(--radius-sm)',
-            border: `1px solid ${isDoing ? 'var(--color-accent)' : 'var(--color-border)'}`,
-            background: isDoing ? 'color-mix(in srgb, var(--color-accent) 15%, transparent)' : 'transparent',
-            color: isDoing ? 'var(--color-accent)' : 'var(--color-text-dim)',
-            cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-            flexShrink: 0, transition: 'all 0.15s', padding: 0,
-          }}
-        >
-          {isDoing ? (
-            <svg width="9" height="9" viewBox="0 0 10 10" fill="currentColor">
-              <rect x="2" y="2" width="2.5" height="6" rx="0.5"/>
-              <rect x="5.5" y="2" width="2.5" height="6" rx="0.5"/>
-            </svg>
-          ) : (
+        {/* 计时中/暂停态：TimerBadge / 空闲：▶ 按钮 */}
+        {isDoing ? (
+          <TimerBadge
+            startedAt={habit.timerStartedAt}
+            accumulated={habit.timerAccumulated ?? 0}
+            onToggle={onStartPause}
+          />
+        ) : (habit.timerAccumulated ?? 0) > 0 ? (
+          <TimerBadge
+            startedAt={null}
+            accumulated={habit.timerAccumulated ?? 0}
+            onToggle={onStartPause}
+          />
+        ) : (
+          <button
+            onClick={onStartPause}
+            title={t.task_startDoing}
+            style={{
+              width: 24, height: 24, borderRadius: 'var(--radius-sm)',
+              border: '1px solid var(--color-border)',
+              background: 'transparent',
+              color: 'var(--color-text-dim)',
+              cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              flexShrink: 0, transition: 'all 0.15s', padding: 0,
+            }}
+          >
             <svg width="9" height="9" viewBox="0 0 10 10" fill="currentColor">
               <path d="M3 2l5 3-5 3V2z"/>
             </svg>
-          )}
-        </button>
+          </button>
+        )}
 
         {/* 跳过按钮 */}
         <button

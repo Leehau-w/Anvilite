@@ -206,11 +206,11 @@ export function Dashboard({ onNavigate, onOpenInspiration }: DashboardProps) {
           {visibleCards.includes('stats') && (
             <GridCard card={getCard('stats')} cw={cw} containerRef={containerRef} onUpdate={(p) => updateCard('stats', p)} locked={!editMode} onRemove={editMode ? () => removeCard('stats') : undefined} title={t.dash_stats}>
               <div style={{ display: 'flex', justifyContent: 'space-around', padding: '4px 0' }}>
-                <BigStat label={t.dash_statDone} value={totalCompleted} unit={t.dash_unitCount} />
+                <BigStat label={t.dash_statDone} value={totalCompleted} />
                 <div style={{ width: 1, background: 'var(--color-border)' }} />
-                <BigStat label={t.dash_statXP} value={totalXP} unit="xp" />
+                <BigStat label={t.dash_statXP} value={totalXP} />
                 <div style={{ width: 1, background: 'var(--color-border)' }} />
-                <BigStat label={t.dash_statStreak} value={character.streakDays} unit={t.dash_unitDays} emoji="🔥" />
+                <BigStat label={t.dash_statStreak} value={character.streakDays} emoji="🔥" />
               </div>
             </GridCard>
           )}
@@ -584,7 +584,7 @@ function SectionLabel({ label, color, dim }: { label: string; color?: string; di
   )
 }
 
-function BigStat({ label, value, unit, emoji }: { label: string; value: number; unit: string; emoji?: string }) {
+function BigStat({ label, value, emoji }: { label: string; value: number; emoji?: string }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
       <div style={{ fontSize: 20, fontWeight: 800, fontFamily: 'var(--font-num)', color: 'var(--color-text)', lineHeight: 1 }}>

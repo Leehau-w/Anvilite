@@ -384,7 +384,7 @@ function AreaEditRow({
       {/* 重命名 */}
       <button
         onClick={(e) => { e.stopPropagation(); onRename(area.id) }}
-        title={t.worldmap_rename ?? '重命名'}
+        title={t.worldmap_rename}
         style={{ ...editRowBtnStyle }}
       >
         ✏
@@ -394,7 +394,7 @@ function AreaEditRow({
       {area.canDelete && (
         <button
           onClick={(e) => { e.stopPropagation(); onDelete(area.id) }}
-          title={t.worldmap_delete ?? '删除'}
+          title={t.worldmap_delete}
           style={{ ...editRowBtnStyle, color: 'var(--color-danger)', borderColor: 'var(--color-danger)' }}
         >
           ✕

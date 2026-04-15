@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { Reorder, useDragControls } from 'framer-motion'
 import { useInspirationStore } from '@/stores/inspirationStore'
 import { useTaskStore } from '@/stores/taskStore'
@@ -6,7 +6,7 @@ import { useToast } from '@/components/feedback/Toast'
 import { useT } from '@/i18n'
 import type { Inspiration } from '@/types/inspiration'
 
-export function InspirationCard({ onOpenModal }: { onOpenModal?: () => void }) {
+export function InspirationCard({ onOpenModal: _onOpenModal }: { onOpenModal?: () => void }) {
   const { inspirations, deleteInspiration, markConverted, updateInspiration, reorderInspirations } = useInspirationStore()
   const { addTask } = useTaskStore()
   const { showToast } = useToast()

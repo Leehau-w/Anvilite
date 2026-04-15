@@ -1,4 +1,4 @@
-import React from 'react'
+
 import { motion, AnimatePresence } from 'framer-motion'
 import { useCharacterStore } from '@/stores/characterStore'
 import { useT } from '@/i18n'

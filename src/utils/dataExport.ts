@@ -11,7 +11,8 @@ import { useInspirationStore } from '@/stores/inspirationStore'
 import { getCurrentAccountId, getStoragePrefix } from '@/stores/accountManager'
 
 export const EXPORT_VERSION = 1
-export const APP_VERSION = '0.3.0'
+declare const __APP_VERSION__: string
+export const APP_VERSION: string = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '0.0.0'
 
 export interface ExportData {
   exportVersion: typeof EXPORT_VERSION

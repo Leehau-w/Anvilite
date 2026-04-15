@@ -1,4 +1,4 @@
-import React from 'react'
+
 import { useT } from '@/i18n'
 import { useAreaStore } from '@/stores/areaStore'
 import { getAreaDisplayName, categoryDisplay } from '@/utils/area'

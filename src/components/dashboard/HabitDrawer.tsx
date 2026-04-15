@@ -39,7 +39,6 @@ type FormData = {
   description: string
 }
 
-const TODAY = new Date().toISOString().split('T')[0]
 const REPEAT_OPTIONS: UIRepeatType[] = ['daily', 'weekdays', 'weekly', 'biweekly', 'monthly', 'custom']
 
 export function HabitDrawer({ open, onClose, editHabit, defaultCategory }: HabitDrawerProps) {
@@ -66,7 +65,7 @@ export function HabitDrawer({ open, onClose, editHabit, defaultCategory }: Habit
       monthlyDays: editHabit?.monthlyDays ?? [],
       targetCount: editHabit?.targetCount ?? 1,
       customIntervalDays: editHabit?.customIntervalDays ?? 2,
-      startDate: editHabit?.startDate ?? TODAY,
+      startDate: editHabit?.startDate ?? new Date().toISOString().split('T')[0],
       estimatedMinutes: editHabit?.estimatedMinutes ? String(editHabit.estimatedMinutes) : '',
       description: editHabit?.description ?? '',
     }
