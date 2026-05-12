@@ -386,8 +386,8 @@ export function SOPEditor({ sopId, defaultFolderId = '', onSave, onCancel }: Pro
   }
 
   function getAddSubstepMarginTop(step: SOPStep) {
-    if (step.childSteps.length > 0) return 1
-    return openContentIds.has(step.id) ? 5 : 0
+    if (step.childSteps.length > 0) return 0
+    return openContentIds.has(step.id) ? 4 : -3
   }
 
   function renderContentEditor(
@@ -567,7 +567,8 @@ export function SOPEditor({ sopId, defaultFolderId = '', onSave, onCancel }: Pro
               background: 'none',
               border: 'none',
               cursor: 'pointer',
-              padding: '1px 0',
+              padding: 0,
+              lineHeight: 1.1,
             }}
           >
             + {t.sop_addChildStep}
@@ -655,7 +656,8 @@ export function SOPEditor({ sopId, defaultFolderId = '', onSave, onCancel }: Pro
               background: 'none',
               border: 'none',
               cursor: 'pointer',
-              padding: '1px 0',
+              padding: 0,
+              lineHeight: 1.1,
             }}
           >
             + {t.sop_addChildStep}
