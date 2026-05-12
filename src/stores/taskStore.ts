@@ -3,7 +3,7 @@ import { persist } from 'zustand/middleware'
 import type { Task, SubTask, TaskGroup } from '@/types/task'
 import { getStoragePrefix } from './accountManager'
 import { generateId } from '@/utils/id'
-import { getTomorrowString } from '@/utils/time'
+import { getTodayString, getTomorrowString, isSameLocalDate } from '@/utils/time'
 import { migrateCategory } from '@/utils/area'
 import {
   addNestedSubTask,
@@ -13,6 +13,7 @@ import {
   reorderNested,
   makeSubTask,
   buildSubTasksFromFlat,
+  setSubTasksCompleted,
 } from '@/utils/subTaskUtils'
 
 const SUBTASK_MIGRATION_KEY = 'anvilite-subtask-migration-v3'
@@ -199,6 +200,7 @@ export const useTaskStore = create<TaskStore>()(
           actualMinutes: taskActualMinutes,
           timerStartedAt: null,
           timerAccumulated: 0,
+          subTasks: setSubTasksCompleted(task.subTasks, true),
         }
 
         set((s) => ({
@@ -482,9 +484,9 @@ export const useTaskStore = create<TaskStore>()(
       },
 
       getTodayStats: () => {
-        const today = new Date().toISOString().split('T')[0]
+        const today = getTodayString()
         const todayDone = get().tasks.filter(
-          (t) => t.completedAt && t.completedAt.startsWith(today)
+          (t) => isSameLocalDate(t.completedAt, today)
         )
         return {
           completedCount: todayDone.length,

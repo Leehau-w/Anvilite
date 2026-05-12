@@ -1,4 +1,5 @@
 import type { Task } from '@/types/task'
+import { getTodayString } from '@/utils/time'
 
 /** 基础XP: 难度1→1, 2→2, 3→3, 4→5, 5→8 */
 export const BASE_XP = [0, 1, 2, 3, 5, 8] as const
@@ -22,7 +23,7 @@ export function calculateTaskXP(task: Task, streakDays: number): { xp: number; o
 
   // 按时完成系数 ×1.2，无截止日或已过期 ×1.0
   const onTime = task.dueDate
-    ? task.dueDate >= new Date().toISOString().split('T')[0]
+    ? task.dueDate >= getTodayString()
     : false
   const onTimeMultiplier = onTime ? 1.2 : 1.0
 

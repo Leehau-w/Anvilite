@@ -75,7 +75,7 @@ export function TaskDrawer({ open, onClose, editTask, initialCategory }: TaskDra
       setSubtaskInput('')
       setPendingSubTasks([])
     }
-  }, [open, editTask?.id])
+  }, [open, editTask?.id, initialCategory, lastCategory])
 
   function handleClose() {
     setForm(defaultForm)

@@ -15,7 +15,7 @@ import {
   type CardId,
   type CardLayout,
 } from '@/stores/dashboardStore'
-import { getGreetingKey } from '@/utils/time'
+import { getGreetingKey, getTodayString, isSameLocalDate } from '@/utils/time'
 import { sortTasksInGroup } from '@/utils/task'
 import { useT } from '@/i18n'
 import { TaskItem } from '@/components/tasks/TaskItem'
@@ -90,9 +90,9 @@ export function Dashboard({ onNavigate, onOpenInspiration }: DashboardProps) {
     [tasks]
   )
   const doneTasks = useMemo(() => {
-    const today = new Date().toISOString().split('T')[0]
+    const today = getTodayString()
     return tasks
-      .filter((t) => !t.deletedAt && t.status === 'done' && t.completedAt && t.completedAt.startsWith(today))
+      .filter((t) => !t.deletedAt && t.status === 'done' && isSameLocalDate(t.completedAt, today))
       .slice(0, 8)
   }, [tasks])
 

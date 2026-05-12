@@ -15,14 +15,36 @@ export function formatTimer(seconds: number): string {
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
 }
 
+export function formatDateKey(date: Date = new Date()): string {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+export function parseDateKey(dateStr: string): Date {
+  const [year, month, day] = dateStr.split('-').map(Number)
+  return new Date(year, month - 1, day)
+}
+
+export function getDateKey(value: string | Date): string {
+  if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) return value
+  return formatDateKey(typeof value === 'string' ? new Date(value) : value)
+}
+
+export function isSameLocalDate(value: string | null | undefined, dateKey = getTodayString()): boolean {
+  if (!value) return false
+  return getDateKey(value) === dateKey
+}
+
 export function getTodayString(): string {
-  return new Date().toISOString().split('T')[0]
+  return formatDateKey()
 }
 
 export function getTomorrowString(): string {
   const d = new Date()
   d.setDate(d.getDate() + 1)
-  return d.toISOString().split('T')[0]
+  return formatDateKey(d)
 }
 
 export function isOverdue(dueDate: string | null): boolean {
@@ -36,7 +58,7 @@ export function formatRelativeDate(dateStr: string | null, lang: 'zh' | 'en' = '
   const tomorrow = getTomorrowString()
   if (dateStr === today) return lang === 'en' ? 'Today' : '今天'
   if (dateStr === tomorrow) return lang === 'en' ? 'Tomorrow' : '明天'
-  const d = new Date(dateStr)
+  const d = parseDateKey(dateStr)
   return `${d.getMonth() + 1}/${d.getDate()}`
 }
 

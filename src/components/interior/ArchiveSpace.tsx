@@ -12,6 +12,7 @@ import type { Habit } from '@/types/habit'
 import type { Area } from '@/types/area'
 import { AREA_TEMPLATES } from '@/types/area'
 import type { ProsperityInfo } from '@/engines/prosperityEngine'
+import { formatDateKey } from '@/utils/time'
 
 // ── 类型 ─────────────────────────────────────────────────────────────────────
 
@@ -28,21 +29,21 @@ interface ArchiveSpaceProps {
 
 function getPeriodRange(period: Period): { start: string; end: string } {
   const now = new Date()
-  const today = now.toISOString().split('T')[0]
+  const today = formatDateKey(now)
   if (period === 'today') return { start: today, end: today }
   if (period === 'week') {
     const dow = now.getDay() === 0 ? 7 : now.getDay()
     const monday = new Date(now)
     monday.setDate(now.getDate() - (dow - 1))
-    return { start: monday.toISOString().split('T')[0], end: today }
+    return { start: formatDateKey(monday), end: today }
   }
   // month
   const first = new Date(now.getFullYear(), now.getMonth(), 1)
-  return { start: first.toISOString().split('T')[0], end: today }
+  return { start: formatDateKey(first), end: today }
 }
 
 function inPeriod(ts: string, range: { start: string; end: string }): boolean {
-  const d = ts.split('T')[0]
+  const d = formatDateKey(new Date(ts))
   return d >= range.start && d <= range.end
 }
 

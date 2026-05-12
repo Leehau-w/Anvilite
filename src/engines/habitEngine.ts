@@ -1,11 +1,12 @@
 import type { Habit } from '@/types/habit'
+import { getTodayString } from '@/utils/time'
 
 /** 判断习惯今天是否应该出现 */
 export function isHabitDueToday(habit: Habit): boolean {
   if (habit.status === 'paused' || habit.status === 'archived') return false
 
   const today = new Date()
-  const todayStr = today.toISOString().split('T')[0]
+  const todayStr = getTodayString()
   const dayOfWeek = today.getDay() === 0 ? 7 : today.getDay() // 1=Mon, 7=Sun
 
   // 还未开始

@@ -32,7 +32,14 @@ export function getCurrentAccountId(): string {
   return localStorage.getItem(CURRENT_KEY) ?? DEFAULT_ID
 }
 
-/** 获取当前账号的 localStorage key 前缀 */
+/**
+ * 获取当前账号的 localStorage key 前缀。
+ *
+ * LOW-19: This value is evaluated at module load time. Changing accounts at runtime
+ * requires a full page reload (handled by `switchAccount()` calling `window.location.reload()`).
+ * All Zustand stores use this prefix in their `persist` config, so they are bound to
+ * the account that was active when the module was first imported.
+ */
 export function getStoragePrefix(): string {
   const id = getCurrentAccountId()
   return id === DEFAULT_ID ? 'anvilite' : `anvilite-${id}`
@@ -77,6 +84,11 @@ export function deleteAccount(id: string) {
   if (accounts.length <= 1) return false // 至少保留一个账号
 
   // 清除该账号的所有 localStorage 数据
+  // LOW-17: use the known account ID list to identify "other account" keys precisely,
+  // instead of relying on a fragile UUID regex.
+  const otherAccountIds = new Set(
+    accounts.filter((a) => a.id !== id && a.id !== DEFAULT_ID).map((a) => a.id)
+  )
   const keysToRemove: string[] = []
   for (let i = 0; i < localStorage.length; i++) {
     const key = localStorage.key(i)
@@ -85,9 +97,10 @@ export function deleteAccount(id: string) {
     if (key === ACCOUNTS_KEY || key === CURRENT_KEY) continue
     if (id === DEFAULT_ID) {
       // 默认账号 key 格式：anvilite-character, anvilite-areas 等
-      // 其他账号 key 格式：anvilite-{8位hex}...-character 等
+      // 其他账号 key 格式：anvilite-{uuid}-character 等
       const rest = key.slice('anvilite-'.length)
-      if (/^[a-f0-9]{8}-/.test(rest)) continue // 属于其他账号，跳过
+      const belongsToOther = [...otherAccountIds].some((aid) => rest.startsWith(`${aid}-`))
+      if (belongsToOther) continue // 属于其他账号，跳过
       keysToRemove.push(key)
     } else {
       // 非默认账号 key 格式：anvilite-{uuid}-xxx

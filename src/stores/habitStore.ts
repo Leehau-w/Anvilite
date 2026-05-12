@@ -4,6 +4,7 @@ import type { Habit, SubHabit, HabitGroup } from '@/types/habit'
 import { getStoragePrefix } from './accountManager'
 import { generateId } from '@/utils/id'
 import { migrateCategory } from '@/utils/area'
+import { getTodayString, isSameLocalDate } from '@/utils/time'
 import { isHabitDueToday, calculateNewStreak, calculateToleranceUpdate } from '@/engines/habitEngine'
 import { calculateHabitXP } from '@/engines/xpEngine'
 import { useCharacterStore } from './characterStore'
@@ -14,6 +15,7 @@ import {
   removeNestedHabit,
   editNestedHabit,
   makeSubHabit,
+  setSubHabitsCompleted,
 } from '@/utils/subTaskUtils'
 
 const SUBHABIT_MIGRATION_KEY = 'anvilite-subhabit-migration-v3'
@@ -227,6 +229,7 @@ export const useHabitStore = create<HabitStore>()(
                   actualMinutes: habitActualMinutes,
                   timerStartedAt: null,
                   timerAccumulated: 0,
+                  subHabits: setSubHabitsCompleted(h.subHabits, true),
                 }
               : h
           ),
@@ -431,7 +434,7 @@ export const useHabitStore = create<HabitStore>()(
 
       resetDailyHabits: () => {
         const now = new Date()
-        const today = now.toISOString().split('T')[0]
+        const today = getTodayString()
         const dow = now.getDay() === 0 ? 7 : now.getDay()
         const monday = new Date(now)
         monday.setDate(now.getDate() - (dow - 1))
@@ -441,7 +444,7 @@ export const useHabitStore = create<HabitStore>()(
           habits: s.habits.map((h) => {
             const staleCompleted =
               h.status === 'completed_today' &&
-              (!h.lastCompletedAt || !h.lastCompletedAt.startsWith(today))
+              !isSameLocalDate(h.lastCompletedAt, today)
             const weeklyCount = h.weeklyCompletionCount ?? 0
             const weeklyStale =
               weeklyCount > 0 &&
@@ -458,8 +461,9 @@ export const useHabitStore = create<HabitStore>()(
       },
 
       getTodayHabits: () => {
+        // LOW-20: include completed_today so finished habits remain visible in today's dashboard
         return get().habits.filter(
-          (h) => !h.deletedAt && !h.isHidden && h.status === 'active' && isHabitDueToday(h)
+          (h) => !h.deletedAt && !h.isHidden && (h.status === 'active' || h.status === 'completed_today') && isHabitDueToday(h)
         )
       },
 
@@ -470,9 +474,9 @@ export const useHabitStore = create<HabitStore>()(
       },
 
       getTodayStats: () => {
-        const today = new Date().toISOString().split('T')[0]
+        const today = getTodayString()
         const todayDone = get().habits.filter(
-          (h) => h.lastCompletedAt && h.lastCompletedAt.startsWith(today)
+          (h) => isSameLocalDate(h.lastCompletedAt, today)
         )
         return {
           completed: todayDone.length,
@@ -488,7 +492,7 @@ export const useHabitStore = create<HabitStore>()(
       onRehydrateStorage: () => (state) => {
         if (!state) return
         const now = new Date()
-        const today = now.toISOString().split('T')[0]
+        const today = getTodayString()
         const dow = now.getDay() === 0 ? 7 : now.getDay()
         const monday = new Date(now)
         monday.setDate(now.getDate() - (dow - 1))
@@ -504,7 +508,7 @@ export const useHabitStore = create<HabitStore>()(
         state.habits = state.habits.map((h) => {
           const staleCompleted =
             h.status === 'completed_today' &&
-            (!h.lastCompletedAt || !h.lastCompletedAt.startsWith(today))
+            !isSameLocalDate(h.lastCompletedAt, today)
           const weeklyCount = h.weeklyCompletionCount ?? 0
           const weeklyStale = weeklyCount > 0 &&
             (!h.lastCompletedAt || new Date(h.lastCompletedAt) < monday)

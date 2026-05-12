@@ -4,6 +4,7 @@ import type { SubTask } from '@/types/task'
 import { useTaskStore } from '@/stores/taskStore'
 import { useUIStore } from '@/stores/uiStore'
 import { Checkbox } from '@/components/ui/Checkbox'
+import { useT } from '@/i18n'
 
 const MAX_DEPTH = 2 // depth 0/1/2 → 最多 3 层
 
@@ -17,6 +18,7 @@ interface SubTaskItemProps {
 export function SubTaskItem({ subTask, taskId, depth, compact }: SubTaskItemProps) {
   const { toggleSubTask, removeSubTask, editSubTask, addSubTask } = useTaskStore()
   const { isTaskCollapsed, toggleTaskCollapse } = useUIStore()
+  const t = useT()
   const childrenExpanded = !isTaskCollapsed(subTask.id)
   const [editing, setEditing] = useState(false)
   const [editValue, setEditValue] = useState(subTask.title)
@@ -63,10 +65,11 @@ export function SubTaskItem({ subTask, taskId, depth, compact }: SubTaskItemProp
         />
 
         {/* 子项折叠按钮（有子项时显示） */}
-        {subTask.subTasks.length > 0 && (
+        {subTask.subTasks.length > 0 ? (
           <button
+            type="button"
             onClick={(e) => { e.stopPropagation(); toggleTaskCollapse(subTask.id) }}
-            title={childrenExpanded ? '收起' : '展开'}
+            title={childrenExpanded ? t.subtask_collapse : t.subtask_expand}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -86,6 +89,28 @@ export function SubTaskItem({ subTask, taskId, depth, compact }: SubTaskItemProp
           >
             <span style={{ fontSize: 8, lineHeight: 1 }}>{childrenExpanded ? '▾' : '▸'}</span>
             <span>{subTask.subTasks.filter(c => c.completed).length}/{subTask.subTasks.length}</span>
+          </button>
+        ) : (
+          <span style={{ width: 0, flexShrink: 0 }} />
+        )}
+
+        {/* 常驻添加子项按钮：和父任务行的 + 保持一致 */}
+        {depth < MAX_DEPTH && (
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); setAddingChild(true) }}
+            title={t.subtask_add}
+            style={inlineAddBtnStyle}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.color = 'var(--color-accent)'
+              e.currentTarget.style.borderColor = 'var(--color-accent)'
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.color = 'var(--color-text-dim)'
+              e.currentTarget.style.borderColor = 'var(--color-border)'
+            }}
+          >
+            +
           </button>
         )}
 
@@ -127,7 +152,7 @@ export function SubTaskItem({ subTask, taskId, depth, compact }: SubTaskItemProp
           </span>
         )}
 
-        {/* hover 操作：添加子项 + 删除（compact 模式隐藏） */}
+        {/* hover 操作：删除（compact 模式隐藏） */}
         <AnimatePresence>
           {!compact && hovered && !editing && (
             <motion.div
@@ -136,18 +161,10 @@ export function SubTaskItem({ subTask, taskId, depth, compact }: SubTaskItemProp
               exit={{ opacity: 0 }}
               style={{ display: 'flex', gap: 3, flexShrink: 0 }}
             >
-              {depth < MAX_DEPTH && (
-                <button
-                  onClick={(e) => { e.stopPropagation(); setAddingChild(true) }}
-                  title="添加子步骤"
-                  style={iconBtnStyle}
-                >
-                  +
-                </button>
-              )}
               <button
+                type="button"
                 onClick={(e) => { e.stopPropagation(); removeSubTask(taskId, subTask.id) }}
-                title="删除"
+                title={t.common_delete}
                 style={{ ...iconBtnStyle, color: 'var(--color-danger)' }}
               >
                 ×
@@ -162,14 +179,14 @@ export function SubTaskItem({ subTask, taskId, depth, compact }: SubTaskItemProp
         <SubTaskItem key={child.id} subTask={child} taskId={taskId} depth={depth + 1} compact={compact} />
       ))}
 
-      {/* 添加子步骤输入框（compact 模式不显示） */}
-      {!compact && addingChild && (
+      {/* 添加子项输入框 */}
+      {addingChild && (
         <div style={{ marginLeft: (depth + 1) * 18, marginTop: 2, display: 'flex', gap: 4, alignItems: 'center' }}>
           <input
             ref={childInputRef}
             value={childInput}
             onChange={(e) => setChildInput(e.target.value)}
-            placeholder="添加子步骤…"
+            placeholder={t.subtask_placeholder}
             onKeyDown={(e) => {
               if (e.key === 'Enter') handleChildAdd()
               if (e.key === 'Escape') { setChildInput(''); setAddingChild(false) }
@@ -188,12 +205,14 @@ export function SubTaskItem({ subTask, taskId, depth, compact }: SubTaskItemProp
             }}
           />
           <button
+            type="button"
             onClick={handleChildAdd}
             style={{ ...iconBtnStyle, color: 'var(--color-success)', border: '1px solid var(--color-success)' }}
           >
             ✓
           </button>
           <button
+            type="button"
             onClick={() => { setChildInput(''); setAddingChild(false) }}
             style={iconBtnStyle}
           >
@@ -219,4 +238,22 @@ const iconBtnStyle: React.CSSProperties = {
   cursor: 'pointer',
   padding: 0,
   lineHeight: 1,
+}
+
+const inlineAddBtnStyle: React.CSSProperties = {
+  width: 18,
+  height: 18,
+  borderRadius: 'var(--radius-sm)',
+  color: 'var(--color-text-dim)',
+  fontSize: 13,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  background: 'transparent',
+  border: '1px solid var(--color-border)',
+  cursor: 'pointer',
+  padding: 0,
+  flexShrink: 0,
+  lineHeight: 1,
+  transition: 'all 0.15s',
 }

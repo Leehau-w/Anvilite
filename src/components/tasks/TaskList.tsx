@@ -8,6 +8,7 @@ import { TaskItem } from './TaskItem'
 import { QuickInput } from './QuickInput'
 import { TaskDrawer } from './TaskDrawer'
 import { HabitDrawer } from '@/components/dashboard/HabitDrawer'
+import { HabitContextMenu } from '@/components/dashboard/HabitContextMenu'
 import { CollapsibleGroup } from '@/components/ui/CollapsibleGroup'
 import { useToast } from '@/components/feedback/Toast'
 import { TagFilterBar } from './TagFilterBar'
@@ -74,9 +75,10 @@ export function TaskList() {
   const [localDoing, setLocalDoing] = useState<Task[]>([])
   const [localTodo, setLocalTodo] = useState<Task[]>([])
 
-  // 同步外部排序结果到本地（只在非拖拽状态更新）
+  // MED-05: 同步外部排序结果到本地（只在非拖拽状态更新）
+  // 使用 useEffect 代替 useMemo，因为内部有 setState 副作用
   const isDraggingRef = useRef(false)
-  useMemo(() => {
+  useEffect(() => {
     if (!isDraggingRef.current) {
       setLocalDoing(doing)
       setLocalTodo(todo)
@@ -121,6 +123,8 @@ export function TaskList() {
   function isCatActive(cat: string) {
     return !trashMode && activeCategory === cat
   }
+
+  const quickCreateCategory = activeCategory !== 'ALL' ? activeCategory : undefined
 
   return (
     <div className="flex flex-col h-full">
@@ -436,7 +440,10 @@ export function TaskList() {
           )}
 
           <div className="px-4 py-3 shrink-0">
-            <QuickInput onOpenDrawer={() => { setEditTask(null); setDrawerOpen(true) }} />
+            <QuickInput
+              onOpenDrawer={() => { setEditTask(null); setDrawerOpen(true) }}
+              defaultCategory={quickCreateCategory}
+            />
           </div>
 
           <div key={activeCategory} className="flex-1 overflow-y-auto px-4 pb-4 flex flex-col gap-4">
@@ -524,6 +531,7 @@ export function TaskList() {
         open={drawerOpen}
         onClose={() => { setDrawerOpen(false); setEditTask(null) }}
         editTask={editTask}
+        initialCategory={editTask ? undefined : quickCreateCategory}
       />
       </>
       )}
@@ -1057,7 +1065,7 @@ function HabitsTab({
   onEdit: (h: Habit) => void
 }) {
   const {
-    habits, pauseHabit, resumeHabit, hideHabit, unhideHabit, deleteHabit, restoreHabit, permanentlyDeleteHabit, masterHabit, startHabitTimer, pauseHabitTimer,
+    habits, pauseHabit, resumeHabit, hideHabit, unhideHabit, deleteHabit, restoreHabit, permanentlyDeleteHabit, masterHabit, startHabitTimer, pauseHabitTimer, undoComplete,
     completedHabitViewMode, setCompletedHabitViewMode,
     customHabitGroups, addCustomHabitGroup, renameCustomHabitGroup, deleteCustomHabitGroup,
     moveHabitToGroup, removeHabitFromGroup,
@@ -1085,6 +1093,11 @@ function HabitsTab({
 
   function handleDelete(id: string) {
     deleteHabit(id)
+  }
+
+  function handleUndoHabit(habit: Habit) {
+    undoComplete(habit.id)
+    showToast(tr.habit_undoneToast(habit.title))
   }
 
   function handleMaster(habit: Habit) {
@@ -1250,14 +1263,21 @@ function HabitsTab({
           {active.length > 0 && (
             <HabitSection title={tr.habits_active} count={active.length}>
               <AnimatePresence mode="popLayout">
-                {active.map((h) => (
-                  <HabitRow key={h.id} habit={h}
-                    onEdit={onEdit} onPause={() => pauseHabit(h.id)}
-                    onHide={() => handleHide(h.id)} onDelete={() => handleDelete(h.id)}
-                    onMaster={() => handleMaster(h)} onInscribe={() => handleInscribe(h)}
-                    onStartPause={() => h.timerStartedAt ? pauseHabitTimer(h.id) : startHabitTimer(h.id)}
-                  />
-                ))}
+                {active.map((h) => {
+                  const completedToday = h.status === 'completed_today'
+                  return (
+                    <HabitRow key={h.id} habit={h}
+                      onEdit={onEdit}
+                      onPause={completedToday ? undefined : () => pauseHabit(h.id)}
+                      onHide={() => handleHide(h.id)} onDelete={() => handleDelete(h.id)}
+                      onMaster={completedToday ? undefined : () => handleMaster(h)}
+                      onInscribe={() => handleInscribe(h)}
+                      onUndo={completedToday ? () => handleUndoHabit(h) : undefined}
+                      onStartPause={completedToday ? undefined : () => h.timerStartedAt ? pauseHabitTimer(h.id) : startHabitTimer(h.id)}
+                      dim={completedToday}
+                    />
+                  )
+                })}
               </AnimatePresence>
             </HabitSection>
           )}
@@ -1515,6 +1535,7 @@ function HabitRow({
   onDelete,
   onMaster,
   onInscribe,
+  onUndo,
   onStartPause,
   dim,
 }: {
@@ -1526,6 +1547,7 @@ function HabitRow({
   onDelete?: () => void
   onMaster?: () => void
   onInscribe?: () => void
+  onUndo?: () => void
   onStartPause?: () => void
   dim?: boolean
 }) {
@@ -1536,6 +1558,7 @@ function HabitRow({
   const repeatLabel = getHabitRepeatLabel(habit, tr)
   const [hovered, setHovered] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState(false)
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null)
   const deleteTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const isDoing = !!habit.timerStartedAt
@@ -1562,6 +1585,14 @@ function HabitRow({
     onDelete?.()
   }
 
+  function handleContextMenu(e: React.MouseEvent) {
+    const target = e.target as HTMLElement
+    if (target.closest('button,input,textarea,select,a')) return
+    e.preventDefault()
+    e.stopPropagation()
+    setContextMenu({ x: e.clientX, y: e.clientY })
+  }
+
   return (
     <div>
       <motion.div
@@ -1586,6 +1617,7 @@ function HabitRow({
           cursor: onEdit ? 'pointer' : 'default',
         }}
         whileHover={{ boxShadow: 'var(--shadow-md)' }}
+        onContextMenu={handleContextMenu}
         onClick={() => onEdit?.(habit)}
       >
         {/* 标题行 */}
@@ -1684,6 +1716,7 @@ function HabitRow({
             >
               {onPause && <HabitTextBtn onClick={onPause}>{tr.habit_pause}</HabitTextBtn>}
               {onResume && <HabitTextBtn onClick={onResume} color="var(--color-success)">{tr.habit_resume}</HabitTextBtn>}
+              {onUndo && <HabitTextBtn onClick={onUndo}>{tr.common_undo}</HabitTextBtn>}
               {onInscribe && <HabitTextBtn onClick={onInscribe} color="var(--color-xp)">⭐ {tr.habit_inscribe}</HabitTextBtn>}
               {onMaster && <HabitTextBtn onClick={onMaster} color="var(--color-success)">{tr.habit_master}</HabitTextBtn>}
               {onHide && <HabitTextBtn onClick={onHide}>{tr.habit_hide}</HabitTextBtn>}
@@ -1707,6 +1740,15 @@ function HabitRow({
               <SubHabitItem key={sub.id} sub={sub} habitId={habit.id} depth={0} />
             ))}
           </div>
+        )}
+        {contextMenu && (
+          <HabitContextMenu
+            habit={habit}
+            position={contextMenu}
+            onClose={() => setContextMenu(null)}
+            onEdit={onEdit ? () => onEdit(habit) : undefined}
+            onUndo={onUndo}
+          />
         )}
       </motion.div>
     </div>

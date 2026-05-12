@@ -41,6 +41,16 @@ export function SOPEditor({ sopId, defaultFolderId = '', onSave, onCancel }: Pro
 
   const [creatingFolder, setCreatingFolder] = useState(false)
   const [newFolderName, setNewFolderName] = useState('')
+  const [openContentIds, setOpenContentIds] = useState<Set<string>>(() => {
+    const ids = new Set<string>()
+    existingSOP?.steps.forEach((step) => {
+      if (step.content) ids.add(step.id)
+      step.childSteps.forEach((child) => {
+        if (child.content) ids.add(child.id)
+      })
+    })
+    return ids
+  })
 
   const userFolders = folders.filter((f) => !f.isSystem)
 
@@ -288,6 +298,53 @@ export function SOPEditor({ sopId, defaultFolderId = '', onSave, onCancel }: Pro
     lineHeight: 1,
   }
 
+  function openContentEditor(stepId: string) {
+    setOpenContentIds((prev) => {
+      const next = new Set(prev)
+      next.add(stepId)
+      return next
+    })
+  }
+
+  function renderContentEditor(
+    step: SOPStep,
+    onChange: (content: JSONContent | null) => void,
+    fallbackHeight: number,
+  ) {
+    const isOpen = openContentIds.has(step.id) || !!step.content
+    if (!isOpen) {
+      return (
+        <button
+          type="button"
+          onClick={() => openContentEditor(step.id)}
+          style={{
+            alignSelf: 'flex-start',
+            fontSize: 12,
+            color: 'var(--color-text-dim)',
+            background: 'none',
+            border: '1px dashed var(--color-border)',
+            borderRadius: 'var(--radius-sm)',
+            padding: '4px 8px',
+            cursor: 'pointer',
+          }}
+        >
+          + {t.sop_content_placeholder}
+        </button>
+      )
+    }
+
+    return (
+      <Suspense fallback={<div style={{ height: fallbackHeight, background: 'var(--color-bg)', borderRadius: 'var(--radius-sm)' }} />}>
+        <SOPRichEditor
+          compact
+          content={step.content}
+          onChange={onChange}
+          placeholder={t.sop_content_placeholder}
+        />
+      </Suspense>
+    )
+  }
+
   // ── Render step card ─────────────────────────────────────
   function renderStepCard(step: SOPStep, idx: number) {
     return (
@@ -331,13 +388,7 @@ export function SOPEditor({ sopId, defaultFolderId = '', onSave, onCancel }: Pro
               />
             </div>
 
-            <Suspense fallback={<div style={{ height: 80, background: 'var(--color-bg)', borderRadius: 'var(--radius-sm)' }} />}>
-              <SOPRichEditor
-                content={step.content}
-                onChange={(content: JSONContent | null) => handleUpdateStep(idx, { content })}
-                placeholder={t.sop_content_placeholder}
-              />
-            </Suspense>
+            {renderContentEditor(step, (content) => handleUpdateStep(idx, { content }), 52)}
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2, flexShrink: 0 }}>
@@ -418,13 +469,7 @@ export function SOPEditor({ sopId, defaultFolderId = '', onSave, onCancel }: Pro
               placeholder={t.sop_stepPlaceholder}
               style={{ ...inputStyle, height: 30, fontSize: 13 }}
             />
-            <Suspense fallback={<div style={{ height: 60, background: 'var(--color-bg)', borderRadius: 'var(--radius-sm)' }} />}>
-              <SOPRichEditor
-                content={child.content}
-                onChange={(content: JSONContent | null) => updateChildStep(parentIdx, childIdx, { content })}
-                placeholder={t.sop_content_placeholder}
-              />
-            </Suspense>
+            {renderContentEditor(child, (content) => updateChildStep(parentIdx, childIdx, { content }), 44)}
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2, flexShrink: 0 }}>

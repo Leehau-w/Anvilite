@@ -22,6 +22,7 @@
     "icon": "build/icon.ico",
     "signAndEditExecutable": false
   },
+  "afterPack": "./scripts/after-pack.cjs",
   "nsis": {
     "oneClick": false,
     "perMachine": false,

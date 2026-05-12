@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback } from 'react'
+import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { generateId } from '@/utils/id'
 
@@ -21,14 +21,26 @@ export function useToast() {
 
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [toasts, setToasts] = useState<ToastItem[]>([])
+  // LOW-15: track timer IDs and clear on unmount
+  const timersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
+
+  useEffect(() => {
+    return () => {
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+      timersRef.current.forEach((t) => clearTimeout(t))
+      timersRef.current.clear()
+    }
+  }, [])
 
   const showToast = useCallback(
     (message: string, action?: ToastItem['action'], duration = 5000) => {
       const id = generateId()
       setToasts((prev) => [...prev, { id, message, action, duration }])
-      setTimeout(() => {
+      const timer = setTimeout(() => {
+        timersRef.current.delete(id)
         setToasts((prev) => prev.filter((t) => t.id !== id))
       }, duration)
+      timersRef.current.set(id, timer)
     },
     []
   )

@@ -3,40 +3,61 @@ import type { SubHabit } from '@/types/habit'
 import { generateId } from '@/utils/id'
 
 // ─── SubTask helpers ────────────────────────────────────────────
+// MED-11: All recursive helpers accept an optional `depth` parameter
+// and refuse to recurse beyond MAX_NESTING_DEPTH to prevent stack overflow.
 
-export function addNestedSubTask(subs: SubTask[], parentId: string, newSub: SubTask): SubTask[] {
+const MAX_NESTING_DEPTH = 3
+
+export function addNestedSubTask(subs: SubTask[], parentId: string, newSub: SubTask, depth = 0): SubTask[] {
+  if (depth >= MAX_NESTING_DEPTH) return subs
   return subs.map((s) => {
     if (s.id === parentId) {
       return { ...s, subTasks: [...s.subTasks, { ...newSub, sortOrder: s.subTasks.length }] }
     }
-    return { ...s, subTasks: addNestedSubTask(s.subTasks, parentId, newSub) }
+    return { ...s, subTasks: addNestedSubTask(s.subTasks, parentId, newSub, depth + 1) }
   })
 }
 
-export function toggleNested(subs: SubTask[], targetId: string): SubTask[] {
+export function toggleNested(subs: SubTask[], targetId: string, depth = 0): SubTask[] {
+  if (depth >= MAX_NESTING_DEPTH) return subs
   return subs.map((s) => {
-    if (s.id === targetId) return { ...s, completed: !s.completed }
-    return { ...s, subTasks: toggleNested(s.subTasks, targetId) }
+    if (s.id === targetId) return setSubTaskCompleted(s, !s.completed)
+    return { ...s, subTasks: toggleNested(s.subTasks, targetId, depth + 1) }
   })
 }
 
-export function removeNested(subs: SubTask[], targetId: string): SubTask[] {
+function setSubTaskCompleted(sub: SubTask, completed: boolean): SubTask {
+  return {
+    ...sub,
+    completed,
+    subTasks: setSubTasksCompleted(sub.subTasks, completed),
+  }
+}
+
+export function setSubTasksCompleted(subs: SubTask[], completed: boolean): SubTask[] {
+  return subs.map((sub) => setSubTaskCompleted(sub, completed))
+}
+
+export function removeNested(subs: SubTask[], targetId: string, depth = 0): SubTask[] {
+  if (depth >= MAX_NESTING_DEPTH) return subs
   return subs
     .filter((s) => s.id !== targetId)
-    .map((s) => ({ ...s, subTasks: removeNested(s.subTasks, targetId) }))
+    .map((s) => ({ ...s, subTasks: removeNested(s.subTasks, targetId, depth + 1) }))
 }
 
-export function editNested(subs: SubTask[], targetId: string, title: string): SubTask[] {
+export function editNested(subs: SubTask[], targetId: string, title: string, depth = 0): SubTask[] {
+  if (depth >= MAX_NESTING_DEPTH) return subs
   return subs.map((s) => {
     if (s.id === targetId) return { ...s, title }
-    return { ...s, subTasks: editNested(s.subTasks, targetId, title) }
+    return { ...s, subTasks: editNested(s.subTasks, targetId, title, depth + 1) }
   })
 }
 
 export function reorderNested(
   subs: SubTask[],
   parentId: string | null,
-  newOrder: string[]
+  newOrder: string[],
+  depth = 0,
 ): SubTask[] {
   if (parentId === null) {
     // 重排根级子任务
@@ -49,6 +70,7 @@ export function reorderNested(
     const rest = subs.filter((s) => !reorderedIds.has(s.id))
     return [...reordered, ...rest]
   }
+  if (depth >= MAX_NESTING_DEPTH) return subs
   return subs.map((s) => {
     if (s.id === parentId) {
       const map = new Map(s.subTasks.map((c) => [c.id, c]))
@@ -60,7 +82,7 @@ export function reorderNested(
       const rest = s.subTasks.filter((c) => !reorderedIds.has(c.id))
       return { ...s, subTasks: [...reordered, ...rest] }
     }
-    return { ...s, subTasks: reorderNested(s.subTasks, parentId, newOrder) }
+    return { ...s, subTasks: reorderNested(s.subTasks, parentId, newOrder, depth + 1) }
   })
 }
 
@@ -95,32 +117,48 @@ export function buildSubTasksFromFlat(
 
 // ─── SubHabit helpers ───────────────────────────────────────────
 
-export function addNestedSubHabit(subs: SubHabit[], parentId: string, newSub: SubHabit): SubHabit[] {
+export function addNestedSubHabit(subs: SubHabit[], parentId: string, newSub: SubHabit, depth = 0): SubHabit[] {
+  if (depth >= MAX_NESTING_DEPTH) return subs
   return subs.map((s) => {
     if (s.id === parentId) {
       return { ...s, subHabits: [...s.subHabits, { ...newSub, sortOrder: s.subHabits.length }] }
     }
-    return { ...s, subHabits: addNestedSubHabit(s.subHabits, parentId, newSub) }
+    return { ...s, subHabits: addNestedSubHabit(s.subHabits, parentId, newSub, depth + 1) }
   })
 }
 
-export function toggleNestedHabit(subs: SubHabit[], targetId: string): SubHabit[] {
+export function toggleNestedHabit(subs: SubHabit[], targetId: string, depth = 0): SubHabit[] {
+  if (depth >= MAX_NESTING_DEPTH) return subs
   return subs.map((s) => {
-    if (s.id === targetId) return { ...s, completed: !s.completed }
-    return { ...s, subHabits: toggleNestedHabit(s.subHabits, targetId) }
+    if (s.id === targetId) return setSubHabitCompleted(s, !s.completed)
+    return { ...s, subHabits: toggleNestedHabit(s.subHabits, targetId, depth + 1) }
   })
 }
 
-export function removeNestedHabit(subs: SubHabit[], targetId: string): SubHabit[] {
+function setSubHabitCompleted(sub: SubHabit, completed: boolean): SubHabit {
+  return {
+    ...sub,
+    completed,
+    subHabits: sub.subHabits.map((child) => setSubHabitCompleted(child, completed)),
+  }
+}
+
+export function setSubHabitsCompleted(subs: SubHabit[], completed: boolean): SubHabit[] {
+  return subs.map((sub) => setSubHabitCompleted(sub, completed))
+}
+
+export function removeNestedHabit(subs: SubHabit[], targetId: string, depth = 0): SubHabit[] {
+  if (depth >= MAX_NESTING_DEPTH) return subs
   return subs
     .filter((s) => s.id !== targetId)
-    .map((s) => ({ ...s, subHabits: removeNestedHabit(s.subHabits, targetId) }))
+    .map((s) => ({ ...s, subHabits: removeNestedHabit(s.subHabits, targetId, depth + 1) }))
 }
 
-export function editNestedHabit(subs: SubHabit[], targetId: string, title: string): SubHabit[] {
+export function editNestedHabit(subs: SubHabit[], targetId: string, title: string, depth = 0): SubHabit[] {
+  if (depth >= MAX_NESTING_DEPTH) return subs
   return subs.map((s) => {
     if (s.id === targetId) return { ...s, title }
-    return { ...s, subHabits: editNestedHabit(s.subHabits, targetId, title) }
+    return { ...s, subHabits: editNestedHabit(s.subHabits, targetId, title, depth + 1) }
   })
 }
 

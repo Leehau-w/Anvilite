@@ -76,9 +76,10 @@ interface Props {
   content: JSONContent | null
   onChange: (content: JSONContent | null) => void
   placeholder?: string
+  compact?: boolean
 }
 
-export function SOPRichEditor({ content, onChange, placeholder }: Props) {
+export function SOPRichEditor({ content, onChange, placeholder, compact }: Props) {
   const t = useT()
 
   const editor = useEditor({
@@ -107,7 +108,7 @@ export function SOPRichEditor({ content, onChange, placeholder }: Props) {
           editor={editor}
           style={{
             padding: '8px 12px',
-            minHeight: 80,
+            minHeight: compact ? 44 : 80,
             fontSize: 13,
             color: 'var(--color-text)',
           }}

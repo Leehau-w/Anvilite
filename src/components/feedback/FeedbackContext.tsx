@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, useEffect } from 'react'
+import React, { createContext, useContext, useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { LevelUpCelebration } from './LevelUpCelebration'
 import { StreakMilestonePopup } from './StreakMilestonePopup'
@@ -55,8 +55,6 @@ interface XPFloatItem {
   ore: number
 }
 
-let _id = 0
-
 export function FeedbackProvider({ children }: { children: React.ReactNode }) {
   const [floats, setFloats] = useState<XPFloatItem[]>([])
   const [levelUp, setLevelUp] = useState<{ visible: boolean; oldLevel: number; newLevel: number }>({
@@ -65,17 +63,40 @@ export function FeedbackProvider({ children }: { children: React.ReactNode }) {
   const [streakMilestone, setStreakMilestone] = useState<StreakMilestone | null>(null)
   const [prestigeVisible, setPrestigeVisible] = useState(false)
 
+  // MED-13: use useRef counter inside provider instead of module-level mutable
+  const idRef = useRef(0)
+  // MED-12: track all active timer IDs for cleanup on unmount
+  const timersRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set())
+
+  useEffect(() => {
+    return () => {
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+      timersRef.current.forEach((t) => clearTimeout(t))
+      timersRef.current.clear()
+    }
+  }, [])
+
+  /** Schedule a setTimeout and auto-track it for cleanup */
+  const safeTimeout = useCallback((fn: () => void, ms: number) => {
+    const t = setTimeout(() => {
+      timersRef.current.delete(t)
+      fn()
+    }, ms)
+    timersRef.current.add(t)
+    return t
+  }, [])
+
   const showPrestigeModal = useCallback(() => setPrestigeVisible(true), [])
 
   const triggerFeedback = useCallback((payload: FeedbackPayload) => {
-    const id = ++_id
+    const id = ++idRef.current
     setFloats((prev) => [...prev, { id, xp: payload.xp, ore: payload.ore }])
-    setTimeout(() => {
+    safeTimeout(() => {
       setFloats((prev) => prev.filter((f) => f.id !== id))
     }, 1100)
 
     if (payload.leveledUp) {
-      setTimeout(() => {
+      safeTimeout(() => {
         setLevelUp({ visible: true, oldLevel: payload.oldLevel, newLevel: payload.newLevel })
       }, 1200)
     }
@@ -84,15 +105,15 @@ export function FeedbackProvider({ children }: { children: React.ReactNode }) {
     if (!payload.leveledUp && payload.oldStreakDays !== undefined && payload.newStreakDays !== undefined) {
       const milestone = crossedMilestone(payload.oldStreakDays, payload.newStreakDays)
       if (milestone) {
-        setTimeout(() => setStreakMilestone(milestone), 1200)
+        safeTimeout(() => setStreakMilestone(milestone), 1200)
       }
     }
 
     // 淬火重铸解锁：升级庆祝结束后弹出（约 4500ms）
     if (payload.prestigeUnlocked) {
-      setTimeout(() => setPrestigeVisible(true), 4500)
+      safeTimeout(() => setPrestigeVisible(true), 4500)
     }
-  }, [])
+  }, [safeTimeout])
 
   return (
     <FeedbackContext.Provider value={{ triggerFeedback, showPrestigeModal }}>
@@ -191,6 +212,9 @@ function XPFloatItem({ xp, ore }: { xp: number; ore: number }) {
 /**
  * 自动徽章检测器：监听关键状态变化，调用 badgeEngine 检测并授予新徽章。
  * 渲染为 null，只用于副作用。
+ *
+ * CRIT-04: Debounce badge checks to avoid running on every task/habit mutation.
+ * Derives stable summary values so the effect only fires on meaningful changes.
  */
 function BadgeChecker() {
   const tasks = useTaskStore((s) => s.tasks)
@@ -202,23 +226,48 @@ function BadgeChecker() {
 
   const unlockedThemeCount = settings.unlockedThemes?.length ?? 1
 
+  // Derive stable summary values so we don't re-check on every array mutation
+  const completedTaskCount = useMemo(
+    () => tasks.filter((t) => t.status === 'done' && !t.deletedAt).length,
+    [tasks],
+  )
+  const maxHabitStreak = useMemo(
+    () => Math.max(0, ...habits.map((h) => h.consecutiveCount)),
+    [habits],
+  )
+  const totalMinutes = useMemo(
+    () => tasks.reduce((sum, t) => sum + (t.actualMinutes ?? 0), 0),
+    [tasks],
+  )
+  const areaCount = areas.length
+
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
   useEffect(() => {
-    const earned = new Set(Object.keys(earnedIds))
-    const newIds = checkNewBadges({
-      tasks,
-      habits,
-      areas,
-      level: character.level,
-      streakDays: character.streakDays,
-      unlockedThemeCount,
-      prestigeLevel: character.prestigeLevel ?? 0,
-      earnedIds: earned,
-    })
-    if (newIds.length > 0) earn(newIds)
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(() => {
+      const earned = new Set(Object.keys(earnedIds))
+      const newIds = checkNewBadges({
+        tasks,
+        habits,
+        areas,
+        level: character.level,
+        streakDays: character.streakDays,
+        unlockedThemeCount,
+        prestigeLevel: character.prestigeLevel ?? 0,
+        earnedIds: earned,
+      })
+      if (newIds.length > 0) earn(newIds)
+    }, 500)
+
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current)
+    }
   }, [
-    tasks,
-    habits,
-    areas,
+    completedTaskCount,
+    maxHabitStreak,
+    totalMinutes,
+    areaCount,
     character.level,
     character.streakDays,
     character.prestigeLevel,

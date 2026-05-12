@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useGrowthEventStore } from '@/stores/growthEventStore'
 import { useT } from '@/i18n'
+import { formatDateKey } from '@/utils/time'
 
 type HeatmapMode = 'month' | 'week'
 
@@ -30,7 +31,7 @@ const HEAT_COLORS = [
 type SlotMap = Map<string, number>
 
 function hourToSlot(hour: number): 0 | 1 | 2 | 3 {
-  if (hour >= 1 && hour < 6)   return 0
+  if (hour >= 0 && hour < 6)   return 0
   if (hour >= 6 && hour < 12)  return 1
   if (hour >= 12 && hour < 18) return 2
   return 3
@@ -85,7 +86,7 @@ export function Heatmap() {
     events.forEach((e) => {
       const xp = e.details.xpGained ?? 0
       if (!xp) return
-      const date = e.timestamp.split('T')[0]
+      const date = formatDateKey(new Date(e.timestamp))
       const existing = map.get(date)
       if (existing) { existing.xp += xp; existing.count += 1 }
       else map.set(date, { date, xp, count: 1 })
@@ -98,7 +99,7 @@ export function Heatmap() {
     events.forEach((e) => {
       const xp = e.details.xpGained ?? 0
       if (!xp) return
-      const date = e.timestamp.split('T')[0]
+      const date = formatDateKey(new Date(e.timestamp))
       const slot = hourToSlot(new Date(e.timestamp).getHours())
       const key = `${date}-${slot}`
       map.set(key, (map.get(key) ?? 0) + xp)
@@ -148,7 +149,7 @@ function MonthHeatmap({ dayMap, gap }: { dayMap: Map<string, DayData>; gap: numb
   const startDow = (firstDay.getDay() + 6) % 7
   const cells: (string | null)[] = Array(startDow).fill(null)
   for (let d = 1; d <= lastDay.getDate(); d++) {
-    cells.push(`${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`)
+    cells.push(formatDateKey(new Date(year, month, d)))
   }
   while (cells.length % 7 !== 0) cells.push(null)
 
@@ -159,7 +160,7 @@ function MonthHeatmap({ dayMap, gap }: { dayMap: Map<string, DayData>; gap: numb
   const { ref, cell } = useContainerCellSize(7, weeks.length, gap, 12 + gap)
 
   const maxXP = Math.max(...Array.from(dayMap.values()).map((d) => d.xp), 1)
-  const todayStr = today.toISOString().split('T')[0]
+  const todayStr = formatDateKey(today)
   const DOW_LABELS = t.heatmap_dow
 
   return (
@@ -204,7 +205,7 @@ function WeekHeatmap({ slotMap, gap }: { slotMap: SlotMap; gap: number }) {
   // headerH = DOW 标题行高度(12) + 下方 gap；rows = 4 时段
   const { ref, cell } = useContainerCellSize(7, 4, gap, 12 + gap, SLOT_LABEL_W + 4)
   // 与 hourToSlot 对应的时间范围
-  const SLOT_RANGES = ['1–5', '6–11', '12–17', '18–0']
+  const SLOT_RANGES = ['0–5', '6–11', '12–17', '18–23']
 
   const today = new Date()
   const dayOfWeek = today.getDay() === 0 ? 7 : today.getDay()
@@ -214,11 +215,11 @@ function WeekHeatmap({ slotMap, gap }: { slotMap: SlotMap; gap: number }) {
   for (let i = 0; i < 7; i++) {
     const d = new Date(monday)
     d.setDate(monday.getDate() + i)
-    days.push(d.toISOString().split('T')[0])
+    days.push(formatDateKey(d))
   }
 
   const SLOT_LABELS = t.heatmap_slots
-  const todayStr = today.toISOString().split('T')[0]
+  const todayStr = formatDateKey(today)
   const DOW_LABELS = t.heatmap_dow
 
   const maxSlotXP = Math.max(

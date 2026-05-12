@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { motion, AnimatePresence, Reorder } from 'framer-motion'
 import { useHabitStore } from '@/stores/habitStore'
 import { useCharacterStore } from '@/stores/characterStore'
@@ -12,6 +12,7 @@ import { TimerBadge } from '@/components/tasks/TimerBadge'
 import type { Habit, SubHabit } from '@/types/habit'
 import { useT } from '@/i18n'
 import { useUIStore } from '@/stores/uiStore'
+import { HabitContextMenu } from './HabitContextMenu'
 
 interface UndoEntry {
   habitId: string
@@ -26,8 +27,10 @@ export function HabitCard({ onEdit }: { onEdit?: (habit: Habit) => void }) {
   const { showToast } = useToast()
   const t = useT()
 
-  const todayHabits = getTodayHabits().sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
-  const allActive = habits.filter((h) => h.status === 'active')
+  const todayHabits = getTodayHabits()
+    .filter((h) => h.status === 'active')
+    .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
+  const allActive = habits.filter((h) => !h.deletedAt && !h.isHidden && h.status === 'active')
 
   // Completed today habits (for the collapsible group at bottom of dashboard)
   const completedTodayHabits = habits.filter(
@@ -179,6 +182,7 @@ export function HabitCard({ onEdit }: { onEdit?: (habit: Habit) => void }) {
                   key={habit.id}
                   habit={habit}
                   onUndo={() => handleUndoComplete(habit)}
+                  onEdit={onEdit ? () => onEdit(habit) : undefined}
                   undoLabel={t.common_undo}
                 />
               ))}
@@ -211,13 +215,24 @@ export function HabitCard({ onEdit }: { onEdit?: (habit: Habit) => void }) {
 function CompletedHabitItem({
   habit,
   onUndo,
+  onEdit,
   undoLabel,
 }: {
   habit: Habit
   onUndo: () => void
+  onEdit?: () => void
   undoLabel: string
 }) {
   const [hovered, setHovered] = useState(false)
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null)
+
+  function handleContextMenu(e: React.MouseEvent) {
+    const target = e.target as HTMLElement
+    if (target.closest('button,input,textarea,select,a')) return
+    e.preventDefault()
+    e.stopPropagation()
+    setContextMenu({ x: e.clientX, y: e.clientY })
+  }
 
   return (
     <motion.div
@@ -227,6 +242,7 @@ function CompletedHabitItem({
       exit={{ opacity: 0, height: 0, marginBottom: 0 }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
+      onContextMenu={handleContextMenu}
       style={{
         display: 'flex',
         alignItems: 'center',
@@ -292,6 +308,15 @@ function CompletedHabitItem({
           </motion.button>
         )}
       </AnimatePresence>
+      {contextMenu && (
+        <HabitContextMenu
+          habit={habit}
+          position={contextMenu}
+          onClose={() => setContextMenu(null)}
+          onEdit={onEdit}
+          onUndo={onUndo}
+        />
+      )}
     </motion.div>
   )
 }
@@ -335,10 +360,19 @@ function HabitItem({
   const { toggleSubHabit } = useHabitStore()
   const { isTaskCollapsed, toggleTaskCollapse } = useUIStore()
   const isDoing = !!habit.timerStartedAt
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null)
 
   const subHabits = habit.subHabits ?? []
   const subHabitsExpanded = !isTaskCollapsed(habit.id)
   const completedSubCount = subHabits.filter((s) => s.completed).length
+
+  function handleContextMenu(e: React.MouseEvent) {
+    const target = e.target as HTMLElement
+    if (target.closest('button,input,textarea,select,a')) return
+    e.preventDefault()
+    e.stopPropagation()
+    setContextMenu({ x: e.clientX, y: e.clientY })
+  }
 
   return (
     <motion.div
@@ -346,6 +380,7 @@ function HabitItem({
       initial={{ opacity: 0, y: -8 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, height: 0, marginBottom: 0 }}
+      onContextMenu={handleContextMenu}
       style={{
         padding: '8px 0',
         borderBottom: '1px solid var(--color-border)',
@@ -490,6 +525,14 @@ function HabitItem({
             <DashSubHabitItem key={sub.id} sub={sub} habitId={habit.id} depth={0} onToggle={toggleSubHabit} />
           ))}
         </div>
+      )}
+      {contextMenu && (
+        <HabitContextMenu
+          habit={habit}
+          position={contextMenu}
+          onClose={() => setContextMenu(null)}
+          onEdit={onEdit}
+        />
       )}
     </motion.div>
   )

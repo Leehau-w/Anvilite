@@ -4,7 +4,7 @@ import type { Character } from '@/types/character'
 import { getStoragePrefix } from './accountManager'
 import { applyXP, getTitle } from '@/engines/levelEngine'
 import { calculateTaskXP } from '@/engines/xpEngine'
-import { getTodayString } from '@/utils/time'
+import { formatDateKey, getTodayString } from '@/utils/time'
 import { useGrowthEventStore } from './growthEventStore'
 import { useTaskStore } from './taskStore'
 
@@ -120,7 +120,7 @@ export const useCharacterStore = create<CharacterStore>()(
 
         const yesterday = new Date()
         yesterday.setDate(yesterday.getDate() - 1)
-        const yesterdayStr = yesterday.toISOString().split('T')[0]
+        const yesterdayStr = formatDateKey(yesterday)
         const isConsecutive = character.lastActiveDate === yesterdayStr
         const newStreak = isConsecutive ? character.streakDays + 1 : 1
 
@@ -175,8 +175,10 @@ export const useCharacterStore = create<CharacterStore>()(
             totalXP += xp
           })
           // 用重算后的 XP 重置等级
+          // MED-10: safety guard — break if lvl exceeds 500 or totalXP is invalid
           let lvl = 1, curXP = totalXP
-          while (true) {
+          if (!Number.isFinite(curXP) || curXP < 0) curXP = 0
+          while (lvl <= 500) {
             const needed = Math.round(5 * Math.log(lvl + 1) * lvl)
             if (curXP < needed) break
             curXP -= needed

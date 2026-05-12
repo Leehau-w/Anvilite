@@ -20,6 +20,7 @@ import { DecoShop } from './DecoShop'
 import { ArchiveSpace } from './ArchiveSpace'
 import { ALL_DECORATIONS } from '@/types/decoration'
 import { isOverdue, formatRelativeDate } from '@/utils/time'
+import { getAreaDisplayName } from '@/utils/area'
 import { useT } from '@/i18n'
 
 interface InteriorSpaceProps {
@@ -35,6 +36,7 @@ function delay(ms: number) {
 export function InteriorSpace({ area, prosperity, onExit }: InteriorSpaceProps) {
   const t = useT()
   const isMilestone = area.category === '_milestone'
+  const areaDisplayName = getAreaDisplayName(area, t)
 
   if (isMilestone) {
     return <ArchiveSpace area={area} prosperity={prosperity} onExit={onExit} />
@@ -217,7 +219,7 @@ export function InteriorSpace({ area, prosperity, onExit }: InteriorSpaceProps) 
 
         {/* 区域标题 */}
         <span style={{ fontSize: 22 }}>{emoji}</span>
-        <span style={{ fontSize: 16, fontWeight: 700, color: 'var(--color-text)' }}>{area.name}</span>
+        <span style={{ fontSize: 16, fontWeight: 700, color: 'var(--color-text)' }}>{areaDisplayName}</span>
         <span
           style={{
             fontSize: 11,

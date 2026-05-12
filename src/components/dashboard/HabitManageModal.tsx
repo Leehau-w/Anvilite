@@ -2,9 +2,11 @@ import React, { useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Drawer } from '@/components/ui/Drawer'
 import { useHabitStore } from '@/stores/habitStore'
+import { useAreaStore } from '@/stores/areaStore'
 import { useToast } from '@/components/feedback/Toast'
 import { useT } from '@/i18n'
-import { categoryDisplay } from '@/utils/area'
+import { categoryDisplay, getAreaDisplayName } from '@/utils/area'
+import { HabitContextMenu } from './HabitContextMenu'
 import type { Habit } from '@/types/habit'
 
 interface HabitManageModalProps {
@@ -14,7 +16,7 @@ interface HabitManageModalProps {
 }
 
 export function HabitManageModal({ open, onClose, onEdit }: HabitManageModalProps) {
-  const { habits, pauseHabit, resumeHabit, hideHabit, unhideHabit, deleteHabit, restoreHabit, permanentlyDeleteHabit, startHabitTimer, pauseHabitTimer } = useHabitStore()
+  const { habits, pauseHabit, resumeHabit, hideHabit, unhideHabit, deleteHabit, restoreHabit, permanentlyDeleteHabit, startHabitTimer, pauseHabitTimer, undoComplete } = useHabitStore()
   const [hiddenMode, setHiddenMode] = useState(false)
   const [trashMode, setTrashMode] = useState(false)
   const tr = useT()
@@ -33,6 +35,11 @@ export function HabitManageModal({ open, onClose, onEdit }: HabitManageModalProp
 
   function handleDelete(id: string) {
     deleteHabit(id)
+  }
+
+  function handleUndoHabit(habit: Habit) {
+    undoComplete(habit.id)
+    showToast(tr.habit_undoneToast(habit.title))
   }
 
   return (
@@ -81,9 +88,20 @@ export function HabitManageModal({ open, onClose, onEdit }: HabitManageModalProp
             {active.length > 0 && (
               <Section title={tr.habits_active} count={active.length}>
                 <AnimatePresence mode="popLayout">
-                  {active.map((h) => (
-                    <HabitRow key={h.id} habit={h} onEdit={() => { onEdit(h); onClose() }} onStartPause={() => h.timerStartedAt ? pauseHabitTimer(h.id) : startHabitTimer(h.id)} onPause={() => pauseHabit(h.id)} onHide={() => handleHide(h.id)} onDelete={() => handleDelete(h.id)} />
-                  ))}
+                  {active.map((h) => {
+                    const completedToday = h.status === 'completed_today'
+                    return (
+                      <HabitRow key={h.id} habit={h}
+                        onEdit={() => { onEdit(h); onClose() }}
+                        onStartPause={completedToday ? undefined : () => h.timerStartedAt ? pauseHabitTimer(h.id) : startHabitTimer(h.id)}
+                        onPause={completedToday ? undefined : () => pauseHabit(h.id)}
+                        onUndo={completedToday ? () => handleUndoHabit(h) : undefined}
+                        onHide={() => handleHide(h.id)}
+                        onDelete={() => handleDelete(h.id)}
+                        dim={completedToday}
+                      />
+                    )
+                  })}
                 </AnimatePresence>
               </Section>
             )}
@@ -144,6 +162,7 @@ function HabitRow({
   onStartPause,
   onPause,
   onResume,
+  onUndo,
   onHide,
   onUnhide,
   onDelete,
@@ -156,6 +175,7 @@ function HabitRow({
   onStartPause?: () => void
   onPause?: () => void
   onResume?: () => void
+  onUndo?: () => void
   onHide?: () => void
   onUnhide?: () => void
   onDelete?: () => void
@@ -164,7 +184,24 @@ function HabitRow({
   dim?: boolean
 }) {
   const tr = useT()
+  const areas = useAreaStore((s) => s.areas)
   const repeatLabel = getHabitRepeatLabel(habit, tr)
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null)
+  const canUseTaskMenu = !habit.deletedAt && !habit.isHidden
+
+  function getCategoryLabel(category: string): string {
+    const area = areas.find((a) => a.category === category)
+    return area ? getAreaDisplayName(area, tr) : categoryDisplay(category, tr)
+  }
+
+  function handleContextMenu(e: React.MouseEvent) {
+    if (!canUseTaskMenu) return
+    const target = e.target as HTMLElement
+    if (target.closest('button,input,textarea,select,a')) return
+    e.preventDefault()
+    e.stopPropagation()
+    setContextMenu({ x: e.clientX, y: e.clientY })
+  }
 
   return (
     <motion.div
@@ -181,6 +218,7 @@ function HabitRow({
         borderRadius: 'var(--radius-md)',
         border: '1px solid var(--color-border)',
       }}
+      onContextMenu={handleContextMenu}
     >
       {/* Info */}
       <div style={{ flex: 1, minWidth: 0 }}>
@@ -197,7 +235,7 @@ function HabitRow({
           {habit.title}
         </div>
         <div style={{ fontSize: 12, color: 'var(--color-text-dim)', marginTop: 2, display: 'flex', gap: 6 }}>
-          <span>{categoryDisplay(habit.category, tr)}</span>
+          <span>{getCategoryLabel(habit.category)}</span>
           <span>·</span>
           <span>{repeatLabel}</span>
           {habit.consecutiveCount > 0 && (
@@ -240,6 +278,11 @@ function HabitRow({
             ▶
           </IconBtn>
         )}
+        {onUndo && (
+          <IconBtn onClick={onUndo} title={tr.common_undo} color="var(--color-text-dim)">
+            ↶
+          </IconBtn>
+        )}
         {onHide && (
           <IconBtn onClick={onHide} title={tr.habit_hide} color="var(--color-text-dim)">
             🙈
@@ -266,6 +309,15 @@ function HabitRow({
           </IconBtn>
         )}
       </div>
+      {contextMenu && (
+        <HabitContextMenu
+          habit={habit}
+          position={contextMenu}
+          onClose={() => setContextMenu(null)}
+          onEdit={onEdit}
+          onUndo={onUndo}
+        />
+      )}
     </motion.div>
   )
 }

@@ -4,6 +4,7 @@ import type { JSONContent } from '@tiptap/react'
 import { useSOPStore } from '@/stores/sopStore'
 import { useT } from '@/i18n'
 import { renderContentHTML, preprocessContent } from './SOPRichEditor'
+import { getSOPStepPrefix } from '@/utils/sop'
 
 interface Props {
   sop: SOP
@@ -65,7 +66,7 @@ function StepRow({
 }) {
   const checked = executionMode && checkedIds.has(step.id)
   const childSteps = [...step.childSteps].sort((a, b) => a.sortOrder - b.sortOrder)
-  const prefix = getPrefix(displayStyle, index, parentIndex)
+  const prefix = getSOPStepPrefix(displayStyle, index, parentIndex)
 
   return (
     <div style={{ marginLeft: depth * 24 }}>
@@ -117,21 +118,6 @@ function StepRow({
       )}
     </div>
   )
-}
-
-function getPrefix(
-  displayStyle: SOP['displayStyle'],
-  index: number,
-  parentIndex?: string
-): string {
-  switch (displayStyle) {
-    case 'numbered':
-      return parentIndex ? `${parentIndex}.${index + 1}` : `${index + 1}.`
-    case 'bullet':
-      return '•'
-    case 'timeline':
-      return ''
-  }
 }
 
 // Shared rich content viewer

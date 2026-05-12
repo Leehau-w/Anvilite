@@ -9,6 +9,7 @@ import { useAreaStore } from '@/stores/areaStore'
 import { useGrowthEventStore } from '@/stores/growthEventStore'
 import { useToast } from '@/components/feedback/Toast'
 import { useT } from '@/i18n'
+import { getTodayString } from '@/utils/time'
 
 interface HabitDrawerProps {
   open: boolean
@@ -65,7 +66,7 @@ export function HabitDrawer({ open, onClose, editHabit, defaultCategory }: Habit
       monthlyDays: editHabit?.monthlyDays ?? [],
       targetCount: editHabit?.targetCount ?? 1,
       customIntervalDays: editHabit?.customIntervalDays ?? 2,
-      startDate: editHabit?.startDate ?? new Date().toISOString().split('T')[0],
+      startDate: editHabit?.startDate ?? getTodayString(),
       estimatedMinutes: editHabit?.estimatedMinutes ? String(editHabit.estimatedMinutes) : '',
       description: editHabit?.description ?? '',
     }

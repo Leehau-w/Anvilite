@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useGrowthEventStore } from '@/stores/growthEventStore'
 import { useT } from '@/i18n'
 import type { GrowthEvent } from '@/types/growthEvent'
+import { formatDateKey, getTodayString, parseDateKey } from '@/utils/time'
 
 // ─── 类型 ─────────────────────────────────────────────────────────────────────
 
@@ -59,7 +60,7 @@ function getFilterTypes(t: ReturnType<typeof useT>): { value: FilterType; label:
 // ─── 数据处理 ─────────────────────────────────────────────────────────────────
 
 function formatDateLabel(dateStr: string, t: ReturnType<typeof useT>): string {
-  const d = new Date(dateStr)
+  const d = parseDateKey(dateStr)
   return t.timeline_dateLabel(d.getMonth() + 1, d.getDate(), t.timeline_dow[d.getDay()])
 }
 
@@ -69,7 +70,7 @@ function formatMonthLabel(monthKey: string, t: ReturnType<typeof useT>): string 
 }
 
 function getWeekLabel(dateStr: string): string {
-  const d = new Date(dateStr)
+  const d = parseDateKey(dateStr)
   const dow = d.getDay() === 0 ? 7 : d.getDay()
   const monday = new Date(d)
   monday.setDate(d.getDate() - (dow - 1))
@@ -82,7 +83,7 @@ function groupEvents(events: GrowthEvent[], t: ReturnType<typeof useT>): MonthGr
   const dayMap = new Map<string, DayGroup>()
 
   events.forEach((e) => {
-    const date = e.timestamp.split('T')[0]
+    const date = formatDateKey(new Date(e.timestamp))
     if (!dayMap.has(date)) {
       dayMap.set(date, {
         date,
@@ -145,8 +146,8 @@ export function Timeline() {
   const [milestoneModal, setMilestoneModal] = useState<{ eventId: string; title: string } | null>(null)
   const filterTypes = getFilterTypes(t)
 
-  const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0]
-  const monthAgo = new Date(Date.now() - 30 * 86400000).toISOString().split('T')[0]
+  const weekAgo = formatDateKey(new Date(Date.now() - 7 * 86400000))
+  const monthAgo = formatDateKey(new Date(Date.now() - 30 * 86400000))
 
   // 筛选
   const filtered = useMemo(() => {
@@ -156,8 +157,9 @@ export function Timeline() {
         if (filterType === 'milestone' && e.type !== 'custom_milestone') return false
         else if (filterType !== 'milestone') return false
       }
-      if (timeRange === 'week' && e.timestamp.split('T')[0] < weekAgo) return false
-      if (timeRange === 'month' && e.timestamp.split('T')[0] < monthAgo) return false
+      const eventDate = formatDateKey(new Date(e.timestamp))
+      if (timeRange === 'week' && eventDate < weekAgo) return false
+      if (timeRange === 'month' && eventDate < monthAgo) return false
       if (search) {
         const q = search.toLowerCase()
         if (!e.title.toLowerCase().includes(q) && !(e.details.description ?? '').toLowerCase().includes(q)) {
@@ -397,7 +399,7 @@ function DaySection({
   onMarkMilestone: (id: string, title: string) => void
 }) {
   const t = useT()
-  const today = new Date().toISOString().split('T')[0]
+  const today = getTodayString()
   const isToday = day.date === today
 
   return (

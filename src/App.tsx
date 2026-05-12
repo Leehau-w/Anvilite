@@ -21,12 +21,14 @@ function App() {
   const [activeTab, setActiveTab] = useState<NavTab>('dashboard')
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [inspirationOpen, setInspirationOpen] = useState(false)
+  const [, setDateTick] = useState(0)
 
   useProsperityWatcher()
 
   useEffect(() => {
     return startDateWatcher(() => {
       useHabitStore.getState().resetDailyHabits()
+      setDateTick((v) => v + 1)
     })
   }, [])
 
@@ -91,13 +93,14 @@ function App() {
 function StaleTimerWatcher() {
   const { showToast } = useToast()
   const t = useT()
+  // MED-08: include showToast and t in deps
   useEffect(() => {
     const stale = sessionStorage.getItem('anvilite-stale-timers')
     if (stale) {
       sessionStorage.removeItem('anvilite-stale-timers')
       showToast(t.timer_stalePaused(Number(stale)))
     }
-  }, [])
+  }, [showToast, t])
   return null
 }
 

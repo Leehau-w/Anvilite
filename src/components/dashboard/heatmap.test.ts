@@ -3,10 +3,10 @@ import { describe, it, expect } from 'vitest'
 // ── 从 Heatmap.tsx 提取的纯函数（直接复制以保持测试独立） ──────────────
 
 function hourToSlot(hour: number): 0 | 1 | 2 | 3 {
-  if (hour >= 1 && hour < 6)   return 0  // 凌晨 01-05
+  if (hour >= 0 && hour < 6)   return 0  // 凌晨 00-05
   if (hour >= 6 && hour < 12)  return 1  // 上午 06-11
   if (hour >= 12 && hour < 18) return 2  // 下午 12-17
-  return 3                                // 晚上 18-00
+  return 3                                // 晚上 18-23
 }
 
 function getHeatLevel(xp: number, max: number): 0 | 1 | 2 | 3 | 4 {
@@ -21,7 +21,7 @@ function getHeatLevel(xp: number, max: number): 0 | 1 | 2 | 3 | 4 {
 // ── hourToSlot ────────────────────────────────────────────────────────────
 
 describe('hourToSlot', () => {
-  it('0时（午夜）→ 晚上(3)', () => expect(hourToSlot(0)).toBe(3))
+  it('0时（午夜）→ 凌晨(0)', () => expect(hourToSlot(0)).toBe(0))
   it('1时 → 凌晨(0)', () => expect(hourToSlot(1)).toBe(0))
   it('5时 → 凌晨(0)', () => expect(hourToSlot(5)).toBe(0))
   it('6时 → 上午(1)', () => expect(hourToSlot(6)).toBe(1))

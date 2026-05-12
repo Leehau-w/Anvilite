@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import type { Task } from '@/types/task'
 import { PriorityDot } from '@/components/ui/PriorityBadge'
@@ -6,10 +7,12 @@ import { formatRelativeDate, isOverdue } from '@/utils/time'
 import { useTaskStore } from '@/stores/taskStore'
 import { useCharacterStore } from '@/stores/characterStore'
 import { useGrowthEventStore } from '@/stores/growthEventStore'
+import { useAreaStore } from '@/stores/areaStore'
 import { calculateTaskXP } from '@/engines/xpEngine'
 import { useToast } from '@/components/feedback/Toast'
 import { useFeedback } from '@/components/feedback/FeedbackContext'
 import { useT } from '@/i18n'
+import { categoryDisplay, getAreaDisplayName } from '@/utils/area'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useUIStore } from '@/stores/uiStore'
 import { SubTaskItem } from './SubTaskItem'
@@ -32,10 +35,12 @@ export function TaskItem({ task, compact, onEdit }: TaskItemProps) {
 
   const t = useT()
   const lang = useSettingsStore((s) => s.settings.language)
+  const areas = useAreaStore((s) => s.areas)
   const [completing, setCompleting] = useState(false)
   const [confirmHigh, setConfirmHigh] = useState(false)
   const [hovered, setHovered] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState(false)
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null)
   const [showDurationInput, setShowDurationInput] = useState(false)
   const [durationInput, setDurationInput] = useState('')
   const { isTaskCollapsed, toggleTaskCollapse } = useUIStore()
@@ -53,10 +58,36 @@ export function TaskItem({ task, compact, onEdit }: TaskItemProps) {
 
   const subTasks = task.subTasks ?? []
   const completedSubCount = subTasks.filter((s) => s.completed).length
+  const taskCategories = React.useMemo(() => {
+    const categories = areas
+      .filter((area) => area.category !== '_milestone')
+      .map((area) => area.category)
+
+    if (!categories.includes('other')) categories.push('other')
+    return categories.includes(task.category) ? categories : [task.category, ...categories]
+  }, [areas, task.category])
 
   useEffect(() => {
     if (showSubTaskInput && subTaskInputRef.current) subTaskInputRef.current.focus()
   }, [showSubTaskInput])
+
+  useEffect(() => {
+    if (!contextMenu) return
+    function closeMenu() {
+      setContextMenu(null)
+    }
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') closeMenu()
+    }
+    window.addEventListener('click', closeMenu)
+    window.addEventListener('scroll', closeMenu, true)
+    window.addEventListener('keydown', handleKeyDown)
+    return () => {
+      window.removeEventListener('click', closeMenu)
+      window.removeEventListener('scroll', closeMenu, true)
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [contextMenu])
 
   useEffect(() => {
     return () => {
@@ -93,20 +124,52 @@ export function TaskItem({ task, compact, onEdit }: TaskItemProps) {
     setCompleting(true)
     await delay(250)
 
-    const completed = completeTask(task.id)
-    if (!completed) { setCompleting(false); return }
+    // CRIT-03: wrap cross-store completion in try-catch for atomicity
+    let completed: Task | null = null
+    let xp = 0
+    let ore = 0
+    let leveledUp = false
+    let oldLevel = 0
+    let newLevel = 0
+    let prestigeUnlocked = false
+    let oldStreak = 0
+    let newStreak = 0
 
-    const { xp, ore } = calculateTaskXP(completed, character.streakDays)
-    updateTask(task.id, { xpReward: xp })
-    const { leveledUp, oldLevel, newLevel, prestigeUnlocked } = gainXPAndOre(xp, ore)
-    const { oldStreak, newStreak } = recordActivity()
+    try {
+      completed = completeTask(task.id)
+      if (!completed) { setCompleting(false); return }
 
-    addEvent({
-      type: 'task_complete',
-      title: t.task_eventTitle(task.title),
-      details: { xpGained: xp, oreGained: ore, actualMinutes: completed.actualMinutes, categoryName: task.category },
-      isMilestone: false,
-    })
+      const result = calculateTaskXP(completed, character.streakDays)
+      xp = result.xp
+      ore = result.ore
+      updateTask(task.id, { xpReward: xp })
+
+      const levelResult = gainXPAndOre(xp, ore)
+      leveledUp = levelResult.leveledUp
+      oldLevel = levelResult.oldLevel
+      newLevel = levelResult.newLevel
+      prestigeUnlocked = levelResult.prestigeUnlocked
+
+      const streakResult = recordActivity()
+      oldStreak = streakResult.oldStreak
+      newStreak = streakResult.newStreak
+
+      addEvent({
+        type: 'task_complete',
+        title: t.task_eventTitle(task.title),
+        details: { xpGained: xp, oreGained: ore, actualMinutes: completed.actualMinutes, categoryName: task.category },
+        isMilestone: false,
+      })
+    } catch (err) {
+      // Rollback: undo task completion and revoke XP if partially applied
+      console.error('[TaskItem] completion flow error, rolling back:', err)
+      if (completed) {
+        undoComplete(task.id)
+        if (xp > 0) revokeXP(xp)
+      }
+      setCompleting(false)
+      return
+    }
 
     await delay(50)
     triggerFeedback({ xp, ore, leveledUp, oldLevel, newLevel, oldStreakDays: oldStreak, newStreakDays: newStreak, prestigeUnlocked })
@@ -128,7 +191,7 @@ export function TaskItem({ task, compact, onEdit }: TaskItemProps) {
       setDurationInput('')
       setShowDurationInput(true)
     }
-  }, [completing, isDone, task, confirmHigh, character.streakDays])
+  }, [completing, isDone, task, confirmHigh, character.streakDays, completeTask, undoComplete, updateTask, gainXPAndOre, recordActivity, revokeXP, addEvent, removeEvent, showToast, triggerFeedback, t])
 
   function handleStatusToggle(e: React.MouseEvent) {
     e.stopPropagation()
@@ -146,14 +209,17 @@ export function TaskItem({ task, compact, onEdit }: TaskItemProps) {
     setShowDurationInput(false)
   }
 
-  function handleHide(e: React.MouseEvent) {
-    e.stopPropagation()
+  function hideCurrentTask() {
     hideTask(task.id)
     showToast(t.task_toastHidden)
   }
 
-  function handleInscribe(e: React.MouseEvent) {
+  function handleHide(e: React.MouseEvent) {
     e.stopPropagation()
+    hideCurrentTask()
+  }
+
+  function inscribeTask() {
     addEvent({
       type: 'custom_milestone',
       title: task.title,
@@ -169,6 +235,21 @@ export function TaskItem({ task, compact, onEdit }: TaskItemProps) {
     showToast(`⭐ ${task.title}`)
   }
 
+  function handleInscribe(e: React.MouseEvent) {
+    e.stopPropagation()
+    inscribeTask()
+  }
+
+  function deleteTaskWithCleanup() {
+    if (task.status === 'done' && task.xpReward > 0) revokeXP(task.xpReward)
+    const ev = useGrowthEventStore.getState().events.find(
+      (ev) => ev.type === 'task_complete' && ev.title === t.task_eventTitle(task.title)
+    )
+    if (ev) removeEvent(ev.id)
+    deleteTask(task.id)
+    showToast(t.task_toastDeleted)
+  }
+
   function handleDeleteDone(e: React.MouseEvent) {
     e.stopPropagation()
     if (!deleteConfirm) {
@@ -178,13 +259,15 @@ export function TaskItem({ task, compact, onEdit }: TaskItemProps) {
       return
     }
     setDeleteConfirm(false)
-    if (task.xpReward > 0) revokeXP(task.xpReward)
-    const ev = useGrowthEventStore.getState().events.find(
-      (ev) => ev.type === 'task_complete' && ev.title === t.task_eventTitle(task.title)
-    )
-    if (ev) removeEvent(ev.id)
-    deleteTask(task.id)
-    showToast(t.task_toastDeleted)
+    deleteTaskWithCleanup()
+  }
+
+  function handleContextMenu(e: React.MouseEvent) {
+    const target = e.target as HTMLElement
+    if (target.closest('button,input,textarea,select,a')) return
+    e.preventDefault()
+    e.stopPropagation()
+    setContextMenu({ x: e.clientX, y: e.clientY })
   }
 
   function handleBodyClick() {
@@ -196,6 +279,11 @@ export function TaskItem({ task, compact, onEdit }: TaskItemProps) {
     if (v) addSubTask(task.id, v)
     setSubTaskInput('')
     setShowSubTaskInput(false)
+  }
+
+  function getCategoryLabel(category: string): string {
+    const area = areas.find((a) => a.category === category)
+    return area ? getAreaDisplayName(area, t) : categoryDisplay(category, t)
   }
 
   const cardVariants = {
@@ -237,6 +325,7 @@ export function TaskItem({ task, compact, onEdit }: TaskItemProps) {
         setHovered(false)
         setDeleteConfirm(false)
       }}
+      onContextMenu={handleContextMenu}
       style={{
         position: 'relative',
         padding: compact ? '8px 12px' : '10px 12px',
@@ -562,6 +651,67 @@ export function TaskItem({ task, compact, onEdit }: TaskItemProps) {
         </div>
       )}
 
+      {contextMenu && createPortal(
+        <div
+          onClick={(e) => e.stopPropagation()}
+          onContextMenu={(e) => e.preventDefault()}
+          style={{
+            position: 'fixed',
+            left: Math.max(8, Math.min(contextMenu.x, window.innerWidth - 224)),
+            top: Math.max(8, Math.min(contextMenu.y, window.innerHeight - 280)),
+            width: 216,
+            padding: 6,
+            borderRadius: 'var(--radius-md)',
+            border: '1px solid var(--color-border)',
+            background: 'var(--color-surface)',
+            boxShadow: 'var(--shadow-lg)',
+            zIndex: 1200,
+          }}
+        >
+          {onEdit && (
+            <ContextMenuButton onClick={() => { setContextMenu(null); onEdit(task) }}>
+              {t.common_edit}
+            </ContextMenuButton>
+          )}
+          <ContextMenuButton onClick={() => { setContextMenu(null); inscribeTask() }}>
+            {t.task_inscribe}
+          </ContextMenuButton>
+          <ContextMenuButton onClick={() => { setContextMenu(null); hideCurrentTask() }}>
+            {t.task_hide}
+          </ContextMenuButton>
+          <div style={{ padding: '6px 8px 4px', color: 'var(--color-text-dim)', fontSize: 11 }}>
+            {t.taskDrawer_category}
+          </div>
+          <select
+            value={task.category}
+            onChange={(e) => {
+              updateTask(task.id, { category: e.target.value })
+              setContextMenu(null)
+            }}
+            style={{
+              width: '100%',
+              height: 30,
+              marginBottom: 4,
+              borderRadius: 'var(--radius-sm)',
+              border: '1px solid var(--color-border)',
+              background: 'var(--color-bg)',
+              color: 'var(--color-text)',
+              fontSize: 12,
+              outline: 'none',
+            }}
+          >
+            {taskCategories.map((category) => (
+              <option key={category} value={category}>{getCategoryLabel(category)}</option>
+            ))}
+          </select>
+          <div style={{ height: 1, background: 'var(--color-border)', margin: '4px 0' }} />
+          <ContextMenuButton danger onClick={() => { setContextMenu(null); deleteTaskWithCleanup() }}>
+            {t.task_delete}
+          </ContextMenuButton>
+        </div>,
+        document.body,
+      )}
+
       {/* 高难度确认提示 */}
       <AnimatePresence>
         {confirmHigh && (
@@ -644,6 +794,43 @@ function ActionButton({
   )
 }
 
+function ContextMenuButton({
+  onClick,
+  children,
+  danger,
+}: {
+  onClick: () => void
+  children: React.ReactNode
+  danger?: boolean
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        width: '100%',
+        minHeight: 30,
+        padding: '6px 8px',
+        borderRadius: 'var(--radius-sm)',
+        border: 'none',
+        background: 'transparent',
+        color: danger ? 'var(--color-danger)' : 'var(--color-text)',
+        cursor: 'pointer',
+        fontSize: 12,
+        textAlign: 'left',
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.background = danger
+          ? 'color-mix(in srgb, var(--color-danger) 10%, transparent)'
+          : 'color-mix(in srgb, var(--color-accent) 8%, transparent)'
+      }}
+      onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
+    >
+      {children}
+    </button>
+  )
+}
+
 function smallBtnStyle(color?: string): React.CSSProperties {
   return {
     fontSize: 11, padding: '2px 8px', borderRadius: 'var(--radius-sm)',
@@ -660,14 +847,7 @@ function PlayIcon() {
   )
 }
 
-function PauseIcon() {
-  return (
-    <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor">
-      <rect x="2" y="2" width="2.5" height="6" rx="0.5" />
-      <rect x="5.5" y="2" width="2.5" height="6" rx="0.5" />
-    </svg>
-  )
-}
+// LOW-16: PauseIcon removed — was defined but never referenced
 
 function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))

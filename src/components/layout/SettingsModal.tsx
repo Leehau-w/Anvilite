@@ -8,6 +8,17 @@ import { useT } from '@/i18n'
 import type { Translations } from '@/i18n/zh'
 import { getAccounts, getCurrentAccountId, createAccount, switchAccount, deleteAccount } from '@/stores/accountManager'
 import { exportData, importData } from '@/utils/dataExport'
+import {
+  chooseSyncDir,
+  getLastSyncExportedAt,
+  getSyncDir,
+  getSyncFileName,
+  hasNativeSyncSupport,
+  readSyncMetadata,
+  restoreFromSync,
+  writeSyncSnapshot,
+  type SyncMetadata,
+} from '@/utils/dataSync'
 import { getStorageUsage, formatBytes } from '@/utils/storageMonitor'
 
 /** Map theme id → i18n key */
@@ -62,6 +73,13 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
   const [importConfirm, setImportConfirm] = useState(false)
   const [pendingImportFile, setPendingImportFile] = useState<File | null>(null)
   const importInputRef = useRef<HTMLInputElement>(null)
+  const syncSupported = hasNativeSyncSupport()
+  const [syncDir, setSyncDirState] = useState<string | null>(() => getSyncDir())
+  const [syncMeta, setSyncMeta] = useState<SyncMetadata | null>(null)
+  const [syncExists, setSyncExists] = useState<boolean | null>(null)
+  const [syncBusy, setSyncBusy] = useState(false)
+  const [syncRestoreConfirm, setSyncRestoreConfirm] = useState(false)
+  const [lastSyncAt, setLastSyncAt] = useState<string | null>(() => getLastSyncExportedAt())
 
   async function handleExport() {
     await exportData()
@@ -87,6 +105,52 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
       showToast(msg)
     }
     // success: page reloads automatically
+  }
+
+  async function refreshSyncMetadata(dir = syncDir) {
+    if (!dir || !syncSupported) return
+    const result = await readSyncMetadata(dir)
+    if (result.success) {
+      setSyncExists(!!result.exists)
+      setSyncMeta(result.metadata ?? null)
+    } else {
+      setSyncExists(null)
+      setSyncMeta(null)
+    }
+  }
+
+  async function handleChooseSyncDir() {
+    setSyncBusy(true)
+    const result = await chooseSyncDir()
+    setSyncBusy(false)
+    if (!result.success || !result.dir) {
+      if (result.error !== 'canceled') showToast(t.data_syncError)
+      return
+    }
+    setSyncDirState(result.dir)
+    await refreshSyncMetadata(result.dir)
+  }
+
+  async function handleWriteSync() {
+    setSyncBusy(true)
+    const result = await writeSyncSnapshot(syncDir)
+    setSyncBusy(false)
+    if (!result.success) {
+      showToast(t.data_syncError)
+      return
+    }
+    setSyncMeta(result.metadata ?? null)
+    setSyncExists(true)
+    setLastSyncAt(result.metadata?.exportedAt ?? getLastSyncExportedAt())
+    showToast(t.data_syncWrote)
+  }
+
+  async function handleRestoreSync() {
+    setSyncBusy(true)
+    const result = await restoreFromSync(syncDir)
+    setSyncBusy(false)
+    setSyncRestoreConfirm(false)
+    if (!result.success) showToast(t.data_syncError)
   }
 
   // ── 账号管理 ──
@@ -155,7 +219,11 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
 
   const [storageUsage, setStorageUsage] = useState(() => getStorageUsage())
   useEffect(() => {
-    if (open) setStorageUsage(getStorageUsage())
+    if (!open) return
+    setStorageUsage(getStorageUsage())
+    setSyncDirState(getSyncDir())
+    setLastSyncAt(getLastSyncExportedAt())
+    refreshSyncMetadata(getSyncDir())
   }, [open])
 
   return (
@@ -431,6 +499,62 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
                   </button>
                   <input ref={importInputRef} type="file" accept=".json" style={{ display: 'none' }} onChange={handleImportSelect} />
                 </div>
+
+                <div style={{
+                  marginTop: 12,
+                  padding: 12,
+                  borderRadius: 'var(--radius-md)',
+                  border: '1px solid var(--color-border)',
+                  background: 'var(--color-bg)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 10,
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center' }}>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text)' }}>{t.data_syncTitle}</div>
+                      <div style={{ fontSize: 11, color: 'var(--color-text-dim)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {syncSupported
+                          ? syncDir ?? t.data_syncFolderUnset
+                          : t.data_syncUnavailable}
+                      </div>
+                    </div>
+                    {syncSupported && (
+                      <button
+                        onClick={handleChooseSyncDir}
+                        disabled={syncBusy}
+                        style={smallOutlineBtnStyle}
+                      >
+                        {syncDir ? t.data_syncChangeFolder : t.data_syncChooseFolder}
+                      </button>
+                    )}
+                  </div>
+
+                  {syncSupported && syncDir && (
+                    <>
+                      <div style={{ fontSize: 11, color: 'var(--color-text-dim)', lineHeight: 1.7 }}>
+                        <div>{t.data_syncFile}: {getSyncFileName()}</div>
+                        <div>{t.data_syncLastRemote}: {syncMeta ? formatDateTime(syncMeta.exportedAt) : syncExists === false ? t.data_syncNoFile : '—'}</div>
+                        <div>{t.data_syncLastLocal}: {lastSyncAt ? formatDateTime(lastSyncAt) : '—'}</div>
+                      </div>
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <button onClick={handleWriteSync} disabled={syncBusy} style={{ ...smallOutlineBtnStyle, flex: 1 }}>
+                          {t.data_syncSave}
+                        </button>
+                        <button
+                          onClick={() => setSyncRestoreConfirm(true)}
+                          disabled={syncBusy || syncExists === false}
+                          style={{ ...smallOutlineBtnStyle, flex: 1, color: 'var(--color-warning)', borderColor: 'var(--color-warning)' }}
+                        >
+                          {t.data_syncRestore}
+                        </button>
+                        <button onClick={() => refreshSyncMetadata()} disabled={syncBusy} style={smallOutlineBtnStyle}>
+                          {t.data_syncRefresh}
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
               </section>
 
               {/* 存储用量 */}
@@ -475,6 +599,30 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
                   <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
                     <button onClick={() => { setImportConfirm(false); setPendingImportFile(null) }} style={{ padding: '6px 14px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', background: 'transparent', color: 'var(--color-text-dim)', cursor: 'pointer', fontSize: 13 }}>{t.data_importCancel}</button>
                     <button onClick={handleImportConfirm} style={{ padding: '6px 14px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-danger)', background: 'color-mix(in srgb, var(--color-danger) 12%, transparent)', color: 'var(--color-danger)', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>{t.data_importConfirm}</button>
+                  </div>
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* 同步恢复确认弹窗 */}
+          <AnimatePresence>
+            {syncRestoreConfirm && (
+              <motion.div
+                initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                style={{ position: 'fixed', inset: 0, zIndex: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                onClick={() => setSyncRestoreConfirm(false)}
+              >
+                <motion.div
+                  initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}
+                  onClick={(e) => e.stopPropagation()}
+                  style={{ width: 330, background: 'var(--color-surface)', borderRadius: 'var(--radius-xl)', border: '1px solid var(--color-border)', padding: 20, boxShadow: '0 8px 32px rgba(0,0,0,0.15)' }}
+                >
+                  <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 10 }}>⚠️ {t.data_syncRestoreConfirmTitle}</div>
+                  <p style={{ fontSize: 13, color: 'var(--color-text-dim)', marginBottom: 16, lineHeight: 1.6 }}>{t.data_syncRestoreConfirmMsg}</p>
+                  <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                    <button onClick={() => setSyncRestoreConfirm(false)} style={{ padding: '6px 14px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', background: 'transparent', color: 'var(--color-text-dim)', cursor: 'pointer', fontSize: 13 }}>{t.common_cancel}</button>
+                    <button onClick={handleRestoreSync} style={{ padding: '6px 14px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-warning)', background: 'color-mix(in srgb, var(--color-warning) 12%, transparent)', color: 'var(--color-warning)', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>{t.data_syncRestore}</button>
                   </div>
                 </motion.div>
               </motion.div>
@@ -656,6 +804,26 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
       {children}
     </p>
   )
+}
+
+function formatDateTime(value: string): string {
+  return new Date(value).toLocaleString([], {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
+const smallOutlineBtnStyle: React.CSSProperties = {
+  padding: '5px 10px',
+  borderRadius: 'var(--radius-sm)',
+  border: '1px solid var(--color-border)',
+  background: 'transparent',
+  color: 'var(--color-text-dim)',
+  cursor: 'pointer',
+  fontSize: 12,
+  whiteSpace: 'nowrap',
 }
 
 function ThemeButton({
