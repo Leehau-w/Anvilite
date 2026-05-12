@@ -857,6 +857,9 @@ export const zh = {
   sop_folderLabel: '文件夹',
   sop_stepsLabel: '步骤',
   sop_addChildStep: '添加子步骤',
+  sop_insertStepAfter: '在下方插入步骤',
+  sop_editDetails: '编辑详情',
+  sop_hideDetails: '收起详情',
   sop_moveUp: '上移',
   sop_moveDown: '下移',
 

@@ -859,6 +859,9 @@ export const en: Translations = {
   sop_folderLabel: 'Folder',
   sop_stepsLabel: 'Steps',
   sop_addChildStep: 'Add Sub-step',
+  sop_insertStepAfter: 'Insert step below',
+  sop_editDetails: 'Edit details',
+  sop_hideDetails: 'Hide details',
   sop_moveUp: 'Move Up',
   sop_moveDown: 'Move Down',
 

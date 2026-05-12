@@ -1,9 +1,10 @@
-import React, { useState, lazy, Suspense } from 'react'
+import React, { useEffect, useRef, useState, lazy, Suspense } from 'react'
 import type { SOP, SOPStep } from '@/types/sop'
 import type { JSONContent } from '@tiptap/react'
 import { useSOPStore } from '@/stores/sopStore'
 import { useT } from '@/i18n'
 import { generateId } from '@/utils/id'
+import { extractSOPPlainText } from '@/utils/sop'
 
 const SOPRichEditor = lazy(() =>
   import('./SOPRichEditor').then((m) => ({ default: m.SOPRichEditor }))
@@ -41,22 +42,36 @@ export function SOPEditor({ sopId, defaultFolderId = '', onSave, onCancel }: Pro
 
   const [creatingFolder, setCreatingFolder] = useState(false)
   const [newFolderName, setNewFolderName] = useState('')
-  const [openContentIds, setOpenContentIds] = useState<Set<string>>(() => {
-    const ids = new Set<string>()
-    existingSOP?.steps.forEach((step) => {
-      if (step.content) ids.add(step.id)
-      step.childSteps.forEach((child) => {
-        if (child.content) ids.add(child.id)
-      })
-    })
-    return ids
-  })
+  const [openContentIds, setOpenContentIds] = useState<Set<string>>(() => new Set())
+  const [focusStepId, setFocusStepId] = useState<string | null>(null)
+  const stepInputRefs = useRef(new Map<string, HTMLInputElement>())
 
   const userFolders = folders.filter((f) => !f.isSystem)
 
+  useEffect(() => {
+    if (!focusStepId) return
+    const input = stepInputRefs.current.get(focusStepId)
+    if (!input) return
+    input.focus()
+    input.select()
+    setFocusStepId(null)
+  }, [focusStepId, steps])
+
   // ── Step operations ──────────────────────────────────────
   function handleAddStep() {
-    setSteps((prev) => [...prev, makeStep(prev.length)])
+    const step = makeStep(steps.length)
+    setSteps((prev) => [...prev, step])
+    setFocusStepId(step.id)
+  }
+
+  function handleInsertStepAfter(idx: number) {
+    const step = makeStep(idx + 1)
+    setSteps((prev) => {
+      const next = [...prev]
+      next.splice(idx + 1, 0, step)
+      return next.map((s, i) => ({ ...s, sortOrder: i }))
+    })
+    setFocusStepId(step.id)
   }
 
   function handleRemoveStep(idx: number) {
@@ -79,13 +94,28 @@ export function SOPEditor({ sopId, defaultFolderId = '', onSave, onCancel }: Pro
 
   // ── Child step operations ────────────────────────────────
   function addChildStep(parentIndex: number) {
+    const step = makeStep(steps[parentIndex]?.childSteps.length ?? 0)
     setSteps((prev) =>
       prev.map((s, i) =>
         i === parentIndex
-          ? { ...s, childSteps: [...s.childSteps, makeStep(s.childSteps.length)] }
+          ? { ...s, childSteps: [...s.childSteps, step] }
           : s
       )
     )
+    setFocusStepId(step.id)
+  }
+
+  function insertChildStepAfter(parentIndex: number, childIndex: number) {
+    const step = makeStep(childIndex + 1)
+    setSteps((prev) =>
+      prev.map((s, i) => {
+        if (i !== parentIndex) return s
+        const next = [...s.childSteps]
+        next.splice(childIndex + 1, 0, step)
+        return { ...s, childSteps: next.map((c, ci) => ({ ...c, sortOrder: ci })) }
+      })
+    )
+    setFocusStepId(step.id)
   }
 
   function updateChildStep(parentIndex: number, childIndex: number, patch: Partial<SOPStep>) {
@@ -133,6 +163,7 @@ export function SOPEditor({ sopId, defaultFolderId = '', onSave, onCancel }: Pro
 
   // ── Grandchild step operations ───────────────────────────
   function addGrandChildStep(parentIndex: number, childIndex: number) {
+    const step = makeStep(steps[parentIndex]?.childSteps[childIndex]?.childSteps.length ?? 0)
     setSteps((prev) =>
       prev.map((s, i) =>
         i === parentIndex
@@ -140,13 +171,34 @@ export function SOPEditor({ sopId, defaultFolderId = '', onSave, onCancel }: Pro
               ...s,
               childSteps: s.childSteps.map((c, ci) =>
                 ci === childIndex
-                  ? { ...c, childSteps: [...c.childSteps, makeStep(c.childSteps.length)] }
+                  ? { ...c, childSteps: [...c.childSteps, step] }
                   : c
               ),
             }
           : s
       )
     )
+    setFocusStepId(step.id)
+  }
+
+  function insertGrandChildStepAfter(parentIndex: number, childIndex: number, grandChildIndex: number) {
+    const step = makeStep(grandChildIndex + 1)
+    setSteps((prev) =>
+      prev.map((s, i) =>
+        i === parentIndex
+          ? {
+              ...s,
+              childSteps: s.childSteps.map((c, ci) => {
+                if (ci !== childIndex) return c
+                const next = [...c.childSteps]
+                next.splice(grandChildIndex + 1, 0, step)
+                return { ...c, childSteps: next.map((gc, gci) => ({ ...gc, sortOrder: gci })) }
+              }),
+            }
+          : s
+      )
+    )
+    setFocusStepId(step.id)
   }
 
   function updateGrandChildStep(
@@ -306,19 +358,42 @@ export function SOPEditor({ sopId, defaultFolderId = '', onSave, onCancel }: Pro
     })
   }
 
+  function closeContentEditor(stepId: string) {
+    setOpenContentIds((prev) => {
+      const next = new Set(prev)
+      next.delete(stepId)
+      return next
+    })
+  }
+
+  function bindStepInput(stepId: string) {
+    return (node: HTMLInputElement | null) => {
+      if (node) stepInputRefs.current.set(stepId, node)
+      else stepInputRefs.current.delete(stepId)
+    }
+  }
+
+  function handleStepInputKeyDown(e: React.KeyboardEvent<HTMLInputElement>, insertAfter: () => void) {
+    if (e.key !== 'Enter' || e.nativeEvent.isComposing) return
+    e.preventDefault()
+    insertAfter()
+  }
+
   function renderContentEditor(
     step: SOPStep,
     onChange: (content: JSONContent | null) => void,
     fallbackHeight: number,
   ) {
-    const isOpen = openContentIds.has(step.id) || !!step.content
+    const isOpen = openContentIds.has(step.id)
+    const summary = extractSOPPlainText(step.content, 120)
+
     if (!isOpen) {
       return (
         <button
           type="button"
           onClick={() => openContentEditor(step.id)}
           style={{
-            alignSelf: 'flex-start',
+            alignSelf: summary ? 'stretch' : 'flex-start',
             fontSize: 12,
             color: 'var(--color-text-dim)',
             background: 'none',
@@ -326,22 +401,56 @@ export function SOPEditor({ sopId, defaultFolderId = '', onSave, onCancel }: Pro
             borderRadius: 'var(--radius-sm)',
             padding: '4px 8px',
             cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 8,
+            textAlign: 'left',
           }}
         >
-          + {t.sop_content_placeholder}
+          {summary ? (
+            <>
+              <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {summary}
+              </span>
+              <span style={{ flexShrink: 0, color: 'var(--color-accent)' }}>
+                {t.sop_editDetails}
+              </span>
+            </>
+          ) : (
+            <span>+ {t.sop_content_placeholder}</span>
+          )}
         </button>
       )
     }
 
     return (
-      <Suspense fallback={<div style={{ height: fallbackHeight, background: 'var(--color-bg)', borderRadius: 'var(--radius-sm)' }} />}>
-        <SOPRichEditor
-          compact
-          content={step.content}
-          onChange={onChange}
-          placeholder={t.sop_content_placeholder}
-        />
-      </Suspense>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+          <button
+            type="button"
+            onClick={() => closeContentEditor(step.id)}
+            style={{
+              border: 'none',
+              background: 'none',
+              color: 'var(--color-text-dim)',
+              cursor: 'pointer',
+              fontSize: 11,
+              padding: '0 2px',
+            }}
+          >
+            {t.sop_hideDetails}
+          </button>
+        </div>
+        <Suspense fallback={<div style={{ height: fallbackHeight, background: 'var(--color-bg)', borderRadius: 'var(--radius-sm)' }} />}>
+          <SOPRichEditor
+            compact
+            content={step.content}
+            onChange={onChange}
+            placeholder={t.sop_content_placeholder}
+          />
+        </Suspense>
+      </div>
     )
   }
 
@@ -381,8 +490,10 @@ export function SOPEditor({ sopId, defaultFolderId = '', onSave, onCancel }: Pro
                 />
               )}
               <input
+                ref={bindStepInput(step.id)}
                 value={step.title}
                 onChange={(e) => handleUpdateStep(idx, { title: e.target.value })}
+                onKeyDown={(e) => handleStepInputKeyDown(e, () => handleInsertStepAfter(idx))}
                 placeholder={t.sop_stepPlaceholder}
                 style={inputStyle}
               />
@@ -409,6 +520,14 @@ export function SOPEditor({ sopId, defaultFolderId = '', onSave, onCancel }: Pro
               title={t.sop_moveDown}
             >
               ↓
+            </button>
+            <button
+              type="button"
+              onClick={() => handleInsertStepAfter(idx)}
+              style={{ ...smallBtnStyle, color: 'var(--color-accent)' }}
+              title={t.sop_insertStepAfter}
+            >
+              +
             </button>
             <button
               type="button"
@@ -464,8 +583,10 @@ export function SOPEditor({ sopId, defaultFolderId = '', onSave, onCancel }: Pro
           </span>
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
             <input
+              ref={bindStepInput(child.id)}
               value={child.title}
               onChange={(e) => updateChildStep(parentIdx, childIdx, { title: e.target.value })}
+              onKeyDown={(e) => handleStepInputKeyDown(e, () => insertChildStepAfter(parentIdx, childIdx))}
               placeholder={t.sop_stepPlaceholder}
               style={{ ...inputStyle, height: 30, fontSize: 13 }}
             />
@@ -488,6 +609,14 @@ export function SOPEditor({ sopId, defaultFolderId = '', onSave, onCancel }: Pro
               style={{ ...smallBtnStyle, fontSize: 12, opacity: childIdx === steps[parentIdx].childSteps.length - 1 ? 0.3 : 1 }}
             >
               ↓
+            </button>
+            <button
+              type="button"
+              onClick={() => insertChildStepAfter(parentIdx, childIdx)}
+              style={{ ...smallBtnStyle, fontSize: 12, color: 'var(--color-accent)' }}
+              title={t.sop_insertStepAfter}
+            >
+              +
             </button>
             <button
               type="button"
@@ -536,48 +665,60 @@ export function SOPEditor({ sopId, defaultFolderId = '', onSave, onCancel }: Pro
       <div
         key={gc.id}
         style={{
-          display: 'flex',
-          gap: 6,
-          alignItems: 'flex-start',
           padding: '4px 6px',
           borderRadius: 'var(--radius-sm)',
           border: '1px solid var(--color-border)',
           background: 'var(--color-bg)',
         }}
       >
-        <span style={{ fontSize: 11, color: 'var(--color-text-dim)', minWidth: 36, paddingTop: 6 }}>
-          {parentIdx + 1}.{childIdx + 1}.{gcIdx + 1}
-        </span>
-        <input
-          value={gc.title}
-          onChange={(e) => updateGrandChildStep(parentIdx, childIdx, gcIdx, { title: e.target.value })}
-          placeholder={t.sop_stepPlaceholder}
-          style={{ ...inputStyle, height: 28, fontSize: 12, flex: 1 }}
-        />
-        <div style={{ display: 'flex', gap: 2, flexShrink: 0 }}>
-          <button
-            type="button"
-            onClick={() => moveGrandChildStep(parentIdx, childIdx, gcIdx, 'up')}
-            disabled={gcIdx === 0}
-            style={{ ...smallBtnStyle, fontSize: 11, opacity: gcIdx === 0 ? 0.3 : 1 }}
-          >
-            ↑
-          </button>
-          <button
-            type="button"
-            onClick={() => moveGrandChildStep(parentIdx, childIdx, gcIdx, 'down')}
-            disabled={!parentChild || gcIdx === parentChild.childSteps.length - 1}
-            style={{ ...smallBtnStyle, fontSize: 11, opacity: !parentChild || gcIdx === parentChild.childSteps.length - 1 ? 0.3 : 1 }}
-          >
-            ↓
-          </button>
-          <button
-            type="button"
-            onClick={() => removeGrandChildStep(parentIdx, childIdx, gcIdx)}
-            style={{ ...smallBtnStyle, fontSize: 11, color: 'var(--color-danger)' }}
-          >
-            ×
-          </button>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'flex-start' }}>
+          <span style={{ fontSize: 11, color: 'var(--color-text-dim)', minWidth: 36, paddingTop: 6 }}>
+            {parentIdx + 1}.{childIdx + 1}.{gcIdx + 1}
+          </span>
+          <input
+            ref={bindStepInput(gc.id)}
+            value={gc.title}
+            onChange={(e) => updateGrandChildStep(parentIdx, childIdx, gcIdx, { title: e.target.value })}
+            onKeyDown={(e) => handleStepInputKeyDown(e, () => insertGrandChildStepAfter(parentIdx, childIdx, gcIdx))}
+            placeholder={t.sop_stepPlaceholder}
+            style={{ ...inputStyle, height: 28, fontSize: 12, flex: 1 }}
+          />
+          <div style={{ display: 'flex', gap: 2, flexShrink: 0 }}>
+            <button
+              type="button"
+              onClick={() => moveGrandChildStep(parentIdx, childIdx, gcIdx, 'up')}
+              disabled={gcIdx === 0}
+              style={{ ...smallBtnStyle, fontSize: 11, opacity: gcIdx === 0 ? 0.3 : 1 }}
+            >
+              ↑
+            </button>
+            <button
+              type="button"
+              onClick={() => moveGrandChildStep(parentIdx, childIdx, gcIdx, 'down')}
+              disabled={!parentChild || gcIdx === parentChild.childSteps.length - 1}
+              style={{ ...smallBtnStyle, fontSize: 11, opacity: !parentChild || gcIdx === parentChild.childSteps.length - 1 ? 0.3 : 1 }}
+            >
+              ↓
+            </button>
+            <button
+              type="button"
+              onClick={() => insertGrandChildStepAfter(parentIdx, childIdx, gcIdx)}
+              style={{ ...smallBtnStyle, fontSize: 11, color: 'var(--color-accent)' }}
+              title={t.sop_insertStepAfter}
+            >
+              +
+            </button>
+            <button
+              type="button"
+              onClick={() => removeGrandChildStep(parentIdx, childIdx, gcIdx)}
+              style={{ ...smallBtnStyle, fontSize: 11, color: 'var(--color-danger)' }}
+            >
+              ×
+            </button>
+          </div>
+        </div>
+        <div style={{ marginLeft: 42, marginTop: 4 }}>
+          {renderContentEditor(gc, (content) => updateGrandChildStep(parentIdx, childIdx, gcIdx, { content }), 40)}
         </div>
       </div>
     )
