@@ -385,6 +385,11 @@ export function SOPEditor({ sopId, defaultFolderId = '', onSave, onCancel }: Pro
     insertAfter()
   }
 
+  function getAddSubstepMarginTop(step: SOPStep) {
+    if (step.childSteps.length > 0) return 1
+    return openContentIds.has(step.id) ? 5 : 0
+  }
+
   function renderContentEditor(
     step: SOPStep,
     onChange: (content: JSONContent | null) => void,
@@ -552,7 +557,7 @@ export function SOPEditor({ sopId, defaultFolderId = '', onSave, onCancel }: Pro
           </div>
         )}
 
-        <div style={{ marginLeft: 26, marginTop: step.childSteps.length > 0 ? 1 : 2 }}>
+        <div style={{ marginLeft: 26, marginTop: getAddSubstepMarginTop(step) }}>
           <button
             type="button"
             onClick={() => addChildStep(idx)}
@@ -640,7 +645,7 @@ export function SOPEditor({ sopId, defaultFolderId = '', onSave, onCancel }: Pro
           </div>
         )}
 
-        <div style={{ marginLeft: 31, marginTop: child.childSteps.length > 0 ? 1 : 2 }}>
+        <div style={{ marginLeft: 31, marginTop: getAddSubstepMarginTop(child) }}>
           <button
             type="button"
             onClick={() => addGrandChildStep(parentIdx, childIdx)}
