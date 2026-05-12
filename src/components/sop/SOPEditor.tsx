@@ -350,6 +350,12 @@ export function SOPEditor({ sopId, defaultFolderId = '', onSave, onCancel }: Pro
     lineHeight: 1,
   }
 
+  const stepTitleInputStyle: React.CSSProperties = {
+    ...inputStyle,
+    height: 32,
+    padding: '0 10px',
+  }
+
   function openContentEditor(stepId: string) {
     setOpenContentIds((prev) => {
       const next = new Set(prev)
@@ -399,12 +405,12 @@ export function SOPEditor({ sopId, defaultFolderId = '', onSave, onCancel }: Pro
             background: 'none',
             border: '1px dashed var(--color-border)',
             borderRadius: 'var(--radius-sm)',
-            padding: '4px 8px',
+            padding: '3px 6px',
             cursor: 'pointer',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            gap: 8,
+            gap: 6,
             textAlign: 'left',
           }}
         >
@@ -460,33 +466,33 @@ export function SOPEditor({ sopId, defaultFolderId = '', onSave, onCancel }: Pro
       <div
         key={step.id}
         style={{
-          padding: 12,
+          padding: '8px 10px',
           borderRadius: 'var(--radius-md)',
           border: '1px solid var(--color-border)',
           background: 'var(--color-bg)',
         }}
       >
-        <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'flex-start' }}>
           <span
             style={{
               fontSize: 13,
               fontWeight: 600,
               color: 'var(--color-accent)',
               minWidth: 20,
-              paddingTop: 8,
+              paddingTop: 7,
             }}
           >
             {idx + 1}.
           </span>
 
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}>
-            <div style={{ display: 'flex', gap: 8 }}>
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <div style={{ display: 'flex', gap: 6 }}>
               {displayStyle === 'timeline' && (
                 <input
                   type="time"
                   value={step.time ?? ''}
                   onChange={(e) => handleUpdateStep(idx, { time: e.target.value || null })}
-                  style={{ ...inputStyle, width: 110, flexShrink: 0 }}
+                  style={{ ...stepTitleInputStyle, width: 104, flexShrink: 0 }}
                 />
               )}
               <input
@@ -495,7 +501,7 @@ export function SOPEditor({ sopId, defaultFolderId = '', onSave, onCancel }: Pro
                 onChange={(e) => handleUpdateStep(idx, { title: e.target.value })}
                 onKeyDown={(e) => handleStepInputKeyDown(e, () => handleInsertStepAfter(idx))}
                 placeholder={t.sop_stepPlaceholder}
-                style={inputStyle}
+                style={stepTitleInputStyle}
               />
             </div>
 
@@ -541,12 +547,12 @@ export function SOPEditor({ sopId, defaultFolderId = '', onSave, onCancel }: Pro
         </div>
 
         {step.childSteps.length > 0 && (
-          <div style={{ marginLeft: 28, marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div style={{ marginLeft: 26, marginTop: 5, display: 'flex', flexDirection: 'column', gap: 4 }}>
             {step.childSteps.map((child, ci) => renderChildStepCard(child, idx, ci))}
           </div>
         )}
 
-        <div style={{ marginLeft: 28, marginTop: 8 }}>
+        <div style={{ marginLeft: 26, marginTop: step.childSteps.length > 0 ? 3 : 4 }}>
           <button
             type="button"
             onClick={() => addChildStep(idx)}
@@ -556,7 +562,7 @@ export function SOPEditor({ sopId, defaultFolderId = '', onSave, onCancel }: Pro
               background: 'none',
               border: 'none',
               cursor: 'pointer',
-              padding: '2px 0',
+              padding: '1px 0',
             }}
           >
             + {t.sop_addChildStep}
@@ -571,24 +577,24 @@ export function SOPEditor({ sopId, defaultFolderId = '', onSave, onCancel }: Pro
       <div
         key={child.id}
         style={{
-          padding: 8,
+          padding: '6px 7px',
           borderRadius: 'var(--radius-sm)',
           border: '1px solid var(--color-border)',
           background: 'var(--color-surface)',
         }}
       >
-        <div style={{ display: 'flex', gap: 6, alignItems: 'flex-start' }}>
-          <span style={{ fontSize: 12, color: 'var(--color-text-dim)', minWidth: 28, paddingTop: 6 }}>
+        <div style={{ display: 'flex', gap: 5, alignItems: 'flex-start' }}>
+          <span style={{ fontSize: 12, color: 'var(--color-text-dim)', minWidth: 26, paddingTop: 5 }}>
             {parentIdx + 1}.{childIdx + 1}
           </span>
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 3 }}>
             <input
               ref={bindStepInput(child.id)}
               value={child.title}
               onChange={(e) => updateChildStep(parentIdx, childIdx, { title: e.target.value })}
               onKeyDown={(e) => handleStepInputKeyDown(e, () => insertChildStepAfter(parentIdx, childIdx))}
               placeholder={t.sop_stepPlaceholder}
-              style={{ ...inputStyle, height: 30, fontSize: 13 }}
+              style={{ ...inputStyle, height: 28, padding: '0 9px', fontSize: 13 }}
             />
             {renderContentEditor(child, (content) => updateChildStep(parentIdx, childIdx, { content }), 44)}
           </div>
@@ -629,12 +635,12 @@ export function SOPEditor({ sopId, defaultFolderId = '', onSave, onCancel }: Pro
         </div>
 
         {child.childSteps.length > 0 && (
-          <div style={{ marginLeft: 34, marginTop: 6, display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <div style={{ marginLeft: 31, marginTop: 4, display: 'flex', flexDirection: 'column', gap: 3 }}>
             {child.childSteps.map((gc, gci) => renderGrandChildStepCard(gc, parentIdx, childIdx, gci))}
           </div>
         )}
 
-        <div style={{ marginLeft: 34, marginTop: 4 }}>
+        <div style={{ marginLeft: 31, marginTop: child.childSteps.length > 0 ? 2 : 3 }}>
           <button
             type="button"
             onClick={() => addGrandChildStep(parentIdx, childIdx)}
@@ -644,7 +650,7 @@ export function SOPEditor({ sopId, defaultFolderId = '', onSave, onCancel }: Pro
               background: 'none',
               border: 'none',
               cursor: 'pointer',
-              padding: '2px 0',
+              padding: '1px 0',
             }}
           >
             + {t.sop_addChildStep}
@@ -665,14 +671,14 @@ export function SOPEditor({ sopId, defaultFolderId = '', onSave, onCancel }: Pro
       <div
         key={gc.id}
         style={{
-          padding: '4px 6px',
+          padding: '3px 5px',
           borderRadius: 'var(--radius-sm)',
           border: '1px solid var(--color-border)',
           background: 'var(--color-bg)',
         }}
       >
-        <div style={{ display: 'flex', gap: 6, alignItems: 'flex-start' }}>
-          <span style={{ fontSize: 11, color: 'var(--color-text-dim)', minWidth: 36, paddingTop: 6 }}>
+        <div style={{ display: 'flex', gap: 5, alignItems: 'flex-start' }}>
+          <span style={{ fontSize: 11, color: 'var(--color-text-dim)', minWidth: 34, paddingTop: 5 }}>
             {parentIdx + 1}.{childIdx + 1}.{gcIdx + 1}
           </span>
           <input
@@ -681,7 +687,7 @@ export function SOPEditor({ sopId, defaultFolderId = '', onSave, onCancel }: Pro
             onChange={(e) => updateGrandChildStep(parentIdx, childIdx, gcIdx, { title: e.target.value })}
             onKeyDown={(e) => handleStepInputKeyDown(e, () => insertGrandChildStepAfter(parentIdx, childIdx, gcIdx))}
             placeholder={t.sop_stepPlaceholder}
-            style={{ ...inputStyle, height: 28, fontSize: 12, flex: 1 }}
+            style={{ ...inputStyle, height: 26, padding: '0 8px', fontSize: 12, flex: 1 }}
           />
           <div style={{ display: 'flex', gap: 2, flexShrink: 0 }}>
             <button
@@ -717,7 +723,7 @@ export function SOPEditor({ sopId, defaultFolderId = '', onSave, onCancel }: Pro
             </button>
           </div>
         </div>
-        <div style={{ marginLeft: 42, marginTop: 4 }}>
+        <div style={{ marginLeft: 39, marginTop: 3 }}>
           {renderContentEditor(gc, (content) => updateGrandChildStep(parentIdx, childIdx, gcIdx, { content }), 40)}
         </div>
       </div>
@@ -848,7 +854,7 @@ export function SOPEditor({ sopId, defaultFolderId = '', onSave, onCancel }: Pro
 
       <div style={{ marginBottom: 16 }}>
         <label style={labelStyle}>{t.sop_stepsLabel}</label>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           {steps.map((step, idx) => renderStepCard(step, idx))}
         </div>
 
@@ -856,13 +862,13 @@ export function SOPEditor({ sopId, defaultFolderId = '', onSave, onCancel }: Pro
           type="button"
           onClick={handleAddStep}
           style={{
-            marginTop: 8,
+            marginTop: 6,
             fontSize: 13,
             color: 'var(--color-accent)',
             background: 'none',
             border: '1px dashed var(--color-accent)',
             borderRadius: 'var(--radius-md)',
-            padding: '6px 14px',
+            padding: '5px 12px',
             cursor: 'pointer',
             width: '100%',
           }}
