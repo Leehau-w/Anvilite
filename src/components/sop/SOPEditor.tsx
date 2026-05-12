@@ -405,12 +405,12 @@ export function SOPEditor({ sopId, defaultFolderId = '', onSave, onCancel }: Pro
             background: 'none',
             border: '1px dashed var(--color-border)',
             borderRadius: 'var(--radius-sm)',
-            padding: '3px 6px',
+            padding: '4px 8px',
             cursor: 'pointer',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            gap: 6,
+            gap: 8,
             textAlign: 'left',
           }}
         >
@@ -485,7 +485,7 @@ export function SOPEditor({ sopId, defaultFolderId = '', onSave, onCancel }: Pro
             {idx + 1}.
           </span>
 
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}>
             <div style={{ display: 'flex', gap: 6 }}>
               {displayStyle === 'timeline' && (
                 <input
@@ -552,7 +552,7 @@ export function SOPEditor({ sopId, defaultFolderId = '', onSave, onCancel }: Pro
           </div>
         )}
 
-        <div style={{ marginLeft: 26, marginTop: step.childSteps.length > 0 ? 3 : 4 }}>
+        <div style={{ marginLeft: 26, marginTop: step.childSteps.length > 0 ? 1 : 2 }}>
           <button
             type="button"
             onClick={() => addChildStep(idx)}
@@ -587,7 +587,7 @@ export function SOPEditor({ sopId, defaultFolderId = '', onSave, onCancel }: Pro
           <span style={{ fontSize: 12, color: 'var(--color-text-dim)', minWidth: 26, paddingTop: 5 }}>
             {parentIdx + 1}.{childIdx + 1}
           </span>
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 3 }}>
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
             <input
               ref={bindStepInput(child.id)}
               value={child.title}
@@ -640,7 +640,7 @@ export function SOPEditor({ sopId, defaultFolderId = '', onSave, onCancel }: Pro
           </div>
         )}
 
-        <div style={{ marginLeft: 31, marginTop: child.childSteps.length > 0 ? 2 : 3 }}>
+        <div style={{ marginLeft: 31, marginTop: child.childSteps.length > 0 ? 1 : 2 }}>
           <button
             type="button"
             onClick={() => addGrandChildStep(parentIdx, childIdx)}
@@ -723,7 +723,7 @@ export function SOPEditor({ sopId, defaultFolderId = '', onSave, onCancel }: Pro
             </button>
           </div>
         </div>
-        <div style={{ marginLeft: 39, marginTop: 3 }}>
+        <div style={{ marginLeft: 39, marginTop: 4 }}>
           {renderContentEditor(gc, (content) => updateGrandChildStep(parentIdx, childIdx, gcIdx, { content }), 40)}
         </div>
       </div>
