@@ -246,7 +246,7 @@ function TimelineLayout({
 
               {childSteps.length > 0 && (
                 <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  {childSteps.map((child, ci) => (
+                  {childSteps.map((child) => (
                     <div key={child.id}>
                       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
                         {executionMode && (

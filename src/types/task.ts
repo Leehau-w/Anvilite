@@ -21,6 +21,7 @@ export interface Task {
   status: 'todo' | 'doing' | 'done'
   xpReward: number
   completedAt: string | null
+  completionId?: string
   deletedAt: string | null
   isHidden: boolean
   sortOrder: number

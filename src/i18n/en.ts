@@ -2,6 +2,7 @@ import type { Translations } from './zh'
 
 // English translations
 export const en: Translations = {
+  subtask_reorder: 'Drag to reorder sub-items',
   // ─── App ─────────────────────────────────────────────────────────────────────
   app_subtitle: 'Forge',
   topbar_settings: 'Settings',
@@ -307,6 +308,7 @@ export const en: Translations = {
   common_undo: 'Undo',
   habit_undoComplete: 'Undo Completion',
   habit_undoneToast: (name: string) => `Undid completion of "${name}"`,
+  habit_undoUnavailable: 'Cannot undo: the record changed, the day ended, or a legacy recovery record is missing.',
   habit_completedToast: (name: string, xp: number) => `${name} done! +${xp} XP`,
 
   // ─── Heatmap ─────────────────────────────────────────────────────────────

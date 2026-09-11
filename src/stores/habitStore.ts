@@ -1,6 +1,8 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import type { Habit, SubHabit, HabitGroup } from '@/types/habit'
+import type { Habit, SubHabit, HabitGroup, HabitAction } from '@/types/habit'
+import { habitCycleKey, refreshHabitCycle } from '@/utils/habitCycle'
+import { findCompletionEvent } from '@/utils/completionEvent'
 import { getStoragePrefix } from './accountManager'
 import { generateId } from '@/utils/id'
 import { migrateCategory } from '@/utils/area'
@@ -16,6 +18,7 @@ import {
   editNestedHabit,
   makeSubHabit,
   setSubHabitsCompleted,
+  reorderNestedHabits,
 } from '@/utils/subTaskUtils'
 
 const SUBHABIT_MIGRATION_KEY = 'anvilite-subhabit-migration-v3'
@@ -39,7 +42,7 @@ interface HabitStore {
   pauseHabitTimer: (id: string) => void
 
   completeHabit: (id: string) => { xp: number; ore: number; newStreak: number; partial: boolean } | null
-  undoComplete: (id: string) => void
+  undoComplete: (id: string, actionId?: string) => boolean
   skipHabit: (id: string) => { newStreak: number } | null
   missHabit: (id: string) => { usedTolerance: boolean; newStreak: number } | null
 
@@ -48,6 +51,7 @@ interface HabitStore {
   toggleSubHabit: (habitId: string, subHabitId: string) => void
   removeSubHabit: (habitId: string, subHabitId: string) => void
   editSubHabit: (habitId: string, subHabitId: string, title: string) => void
+  reorderSubHabits: (habitId: string, parentId: string | null, ids: string[]) => void
 
   reorderHabits: (ids: string[]) => void
   resetDailyHabits: () => void
@@ -61,6 +65,16 @@ interface HabitStore {
   deleteCustomHabitGroup: (id: string) => void
   moveHabitToGroup: (habitId: string, groupId: string) => void
   removeHabitFromGroup: (habitId: string, groupId: string) => void
+}
+
+function actionSnapshot(habit: Habit, kind: HabitAction['kind'], xp: number): HabitAction {
+  const { consecutiveCount, totalCompletions, toleranceCharges, toleranceNextAt,
+    weeklyCompletionCount, currentCycleCount, lastCompletedAt, lastDueAt, subHabits, actualMinutes } = habit
+  return {
+    id: generateId(), kind, xp, at: new Date().toISOString(),
+    before: { consecutiveCount, totalCompletions, toleranceCharges, toleranceNextAt,
+      weeklyCompletionCount, currentCycleCount, lastCompletedAt, lastDueAt, subHabits, actualMinutes },
+  }
 }
 
 function makeDefaultHabit(partial: Parameters<HabitStore['addHabit']>[0]): Habit {
@@ -167,8 +181,9 @@ export const useHabitStore = create<HabitStore>()(
       },
 
       completeHabit: (id) => {
+        get().resetDailyHabits()
         const habit = get().habits.find((h) => h.id === id)
-        if (!habit || habit.isHidden || habit.status === 'archived') return null
+        if (!habit || habit.deletedAt || habit.isHidden || habit.status !== 'active' || !isHabitDueToday(habit)) return null
 
         const targetCount = habit.targetCount ?? 1
         const newCycleCount = (habit.currentCycleCount ?? 0) + 1
@@ -208,7 +223,7 @@ export const useHabitStore = create<HabitStore>()(
           if (habit.timerStartedAt) {
             totalSec += Math.max(0, Math.floor((Date.now() - new Date(habit.timerStartedAt).getTime()) / 1000))
           }
-          habitActualMinutes = Math.round(totalSec / 60)
+          habitActualMinutes += Math.round(totalSec / 60)
         }
 
         set((s) => ({
@@ -217,6 +232,8 @@ export const useHabitStore = create<HabitStore>()(
               ? {
                   ...h,
                   status: 'completed_today',
+                  cycleKey: habitCycleKey({ ...h, lastDueAt: now }),
+                  lastAction: actionSnapshot({ ...habit, actualMinutes: habitActualMinutes }, 'complete', xp),
                   consecutiveCount: newStreak,
                   totalCompletions: h.totalCompletions + 1,
                   toleranceCharges: tolerance.charges,
@@ -238,47 +255,31 @@ export const useHabitStore = create<HabitStore>()(
         return { xp, ore, newStreak, partial: false }
       },
 
-      undoComplete: (id) => {
+      undoComplete: (id, actionId) => {
         const habit = get().habits.find((h) => h.id === id)
-        if (!habit || habit.status !== 'completed_today') return
-
-        // Recalculate the XP that was granted to revoke it
-        const xpToRevoke = calculateHabitXP(habit.difficulty, habit.consecutiveCount, habit.repeatType).xp
-
+        if (!habit || habit.status !== 'completed_today') return false
+        const action = habit.lastAction
+        // Legacy records cannot reconstruct a prior snapshot or a reliable event identity.
+        if (!action || (actionId && action.id !== actionId) || !isSameLocalDate(action.at, getTodayString())) return false
+        const event = findCompletionEvent(useGrowthEventStore.getState().events, id, action.id)
         set((s) => ({
-          habits: s.habits.map((h) => {
-            if (h.id !== id) return h
-            return {
-              ...h,
-              status: 'active' as const,
-              consecutiveCount: Math.max(0, h.consecutiveCount - 1),
-              totalCompletions: Math.max(0, (h.totalCompletions ?? 0) - 1),
-              currentCycleCount: (h.targetCount ?? 1) > 1
-                ? Math.max(0, (h.currentCycleCount ?? 0) - 1)
-                : (h.currentCycleCount ?? 0),
-              updatedAt: new Date().toISOString(),
-            }
-          }),
+          habits: s.habits.map((h) => h.id === id ? {
+            ...h, ...action.before, status: 'active', lastAction: null,
+            cycleKey: habitCycleKey({ ...h, ...action.before }),
+            updatedAt: new Date().toISOString(),
+          } : h),
         }))
-
-        // Revoke XP (ore is kept per project rules)
-        if (xpToRevoke > 0) {
-          useCharacterStore.getState().revokeXP(xpToRevoke)
+        if (action.kind === 'complete' && action.xp > 0) {
+          useCharacterStore.getState().revokeXP(action.xp)
         }
-
-        // Remove the most recent habit_complete growth event matching this habit's title
-        const events = useGrowthEventStore.getState().events
-        const matchEvent = events.find(
-          (e) => e.type === 'habit_complete' && e.title.includes(habit.title)
-        )
-        if (matchEvent) {
-          useGrowthEventStore.getState().removeEvent(matchEvent.id)
-        }
+        if (event) useGrowthEventStore.getState().removeEvent(event.id)
+        return true
       },
 
       skipHabit: (id) => {
+        get().resetDailyHabits()
         const habit = get().habits.find((h) => h.id === id)
-        if (!habit) return null
+        if (!habit || habit.deletedAt || habit.isHidden || habit.status !== 'active' || !isHabitDueToday(habit)) return null
 
         const newStreak = calculateNewStreak(habit, 'skip')
         const now = new Date().toISOString()
@@ -291,6 +292,8 @@ export const useHabitStore = create<HabitStore>()(
                   status: 'completed_today',
                   consecutiveCount: newStreak,
                   lastDueAt: now,
+                  cycleKey: habitCycleKey({ ...h, lastDueAt: now }),
+                  lastAction: actionSnapshot(habit, 'skip', 0),
                   updatedAt: now,
                 }
               : h
@@ -373,6 +376,12 @@ export const useHabitStore = create<HabitStore>()(
         }))
       },
 
+      reorderSubHabits: (habitId, parentId, ids) => {
+        set(s => ({ habits: s.habits.map(h => h.id === habitId
+          ? { ...h, subHabits: reorderNestedHabits(h.subHabits, parentId, ids), updatedAt: new Date().toISOString() }
+          : h) }))
+      },
+
       setCompletedHabitViewMode: (mode) => {
         set({ completedHabitViewMode: mode })
       },
@@ -433,31 +442,7 @@ export const useHabitStore = create<HabitStore>()(
       },
 
       resetDailyHabits: () => {
-        const now = new Date()
-        const today = getTodayString()
-        const dow = now.getDay() === 0 ? 7 : now.getDay()
-        const monday = new Date(now)
-        monday.setDate(now.getDate() - (dow - 1))
-        monday.setHours(0, 0, 0, 0)
-
-        set((s) => ({
-          habits: s.habits.map((h) => {
-            const staleCompleted =
-              h.status === 'completed_today' &&
-              !isSameLocalDate(h.lastCompletedAt, today)
-            const weeklyCount = h.weeklyCompletionCount ?? 0
-            const weeklyStale =
-              weeklyCount > 0 &&
-              (!h.lastCompletedAt || new Date(h.lastCompletedAt) < monday)
-            if (!staleCompleted && !weeklyStale) return h
-            return {
-              ...h,
-              status: staleCompleted ? ('active' as const) : h.status,
-              weeklyCompletionCount: weeklyStale ? 0 : weeklyCount,
-              updatedAt: new Date().toISOString(),
-            }
-          }),
-        }))
+        set(s => ({ habits: s.habits.map(h => refreshHabitCycle(h)) }))
       },
 
       getTodayHabits: () => {
@@ -476,13 +461,14 @@ export const useHabitStore = create<HabitStore>()(
       getTodayStats: () => {
         const today = getTodayString()
         const todayDone = get().habits.filter(
-          (h) => isSameLocalDate(h.lastCompletedAt, today)
+          (h) => !h.deletedAt && isSameLocalDate(h.lastCompletedAt, today) &&
+            (h.lastAction?.kind === 'complete' || (!h.lastAction && h.status === 'completed_today'))
         )
         return {
           completed: todayDone.length,
           totalXP: todayDone.reduce((sum, h) => {
             const { xp } = calculateHabitXP(h.difficulty, h.consecutiveCount, h.repeatType)
-            return sum + xp
+            return sum + (h.lastAction?.xp ?? xp)
           }, 0),
         }
       },
@@ -492,7 +478,6 @@ export const useHabitStore = create<HabitStore>()(
       onRehydrateStorage: () => (state) => {
         if (!state) return
         const now = new Date()
-        const today = getTodayString()
         const dow = now.getDay() === 0 ? 7 : now.getDay()
         const monday = new Date(now)
         monday.setDate(now.getDate() - (dow - 1))
@@ -506,9 +491,6 @@ export const useHabitStore = create<HabitStore>()(
         }
 
         state.habits = state.habits.map((h) => {
-          const staleCompleted =
-            h.status === 'completed_today' &&
-            !isSameLocalDate(h.lastCompletedAt, today)
           const weeklyCount = h.weeklyCompletionCount ?? 0
           const weeklyStale = weeklyCount > 0 &&
             (!h.lastCompletedAt || new Date(h.lastCompletedAt) < monday)
@@ -523,14 +505,14 @@ export const useHabitStore = create<HabitStore>()(
             actualMinutes: h.actualMinutes ?? 0,
             subHabits: h.subHabits ?? [],
             category: migrateCategory(h.category),
-            status: legacy.status === 'archived' ? 'paused' : staleCompleted ? 'active' : h.status,
+            status: legacy.status === 'archived' ? 'paused' : h.status,
             weeklyCompletionCount: weeklyStale ? 0 : weeklyCount,
           }
           // 清理旧字段
           delete (patched as any).parentId
           delete (patched as any).childIds
           delete (patched as any).nestingLevel
-          return patched
+          return refreshHabitCycle(patched)
         })
 
         // ── v0.3.1 迁移：timerAccumulated ──────────────────────

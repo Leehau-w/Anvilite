@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { TagPill } from './TagPill'
 import { useT } from '@/i18n'
 

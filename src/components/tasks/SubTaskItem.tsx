@@ -1,5 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion, AnimatePresence, Reorder, useDragControls } from 'framer-motion'
+import type { SubHabit } from '@/types/habit'
+import { useHabitStore } from '@/stores/habitStore'
 import type { SubTask } from '@/types/task'
 import { useTaskStore } from '@/stores/taskStore'
 import { useUIStore } from '@/stores/uiStore'
@@ -13,10 +15,17 @@ interface SubTaskItemProps {
   taskId: string
   depth: number
   compact?: boolean
+  habit?: boolean
+  dragHandle?: React.ReactNode
 }
 
-export function SubTaskItem({ subTask, taskId, depth, compact }: SubTaskItemProps) {
-  const { toggleSubTask, removeSubTask, editSubTask, addSubTask } = useTaskStore()
+export function SubTaskItem({ subTask, taskId, depth, compact, habit = false, dragHandle }: SubTaskItemProps) {
+  const tasks = useTaskStore()
+  const habits = useHabitStore()
+  const toggleSubTask = habit ? habits.toggleSubHabit : tasks.toggleSubTask
+  const removeSubTask = habit ? habits.removeSubHabit : tasks.removeSubTask
+  const editSubTask = habit ? habits.editSubHabit : tasks.editSubTask
+  const addSubTask = habit ? habits.addSubHabit : tasks.addSubTask
   const { isTaskCollapsed, toggleTaskCollapse } = useUIStore()
   const t = useT()
   const childrenExpanded = !isTaskCollapsed(subTask.id)
@@ -50,7 +59,7 @@ export function SubTaskItem({ subTask, taskId, depth, compact }: SubTaskItemProp
   }
 
   return (
-    <div style={{ marginLeft: depth * 18 }}>
+    <div style={{ minWidth: 0 }} onClick={e => e.stopPropagation()}>
       <div
         className="group"
         style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '2px 0' }}
@@ -58,6 +67,7 @@ export function SubTaskItem({ subTask, taskId, depth, compact }: SubTaskItemProp
         onMouseLeave={() => setHovered(false)}
       >
         {/* 复选框 */}
+        {dragHandle}
         <Checkbox
           checked={subTask.completed}
           onChange={() => toggleSubTask(taskId, subTask.id)}
@@ -122,8 +132,9 @@ export function SubTaskItem({ subTask, taskId, depth, compact }: SubTaskItemProp
             onChange={(e) => setEditValue(e.target.value)}
             onBlur={handleEditCommit}
             onKeyDown={(e) => {
-              if (e.key === 'Enter') handleEditCommit()
-              if (e.key === 'Escape') { setEditValue(subTask.title); setEditing(false) }
+              if (e.nativeEvent.isComposing) return
+              if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); handleEditCommit() }
+              if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setEditValue(subTask.title); setEditing(false) }
             }}
             style={{
               flex: 1,
@@ -138,13 +149,15 @@ export function SubTaskItem({ subTask, taskId, depth, compact }: SubTaskItemProp
           />
         ) : (
           <span
-            onClick={() => !compact && setEditing(true)}
+            onClick={() => { setEditValue(subTask.title); setEditing(true) }}
             style={{
               flex: 1,
               fontSize: 13,
               color: subTask.completed ? 'var(--color-text-dim)' : 'var(--color-text)',
               textDecoration: subTask.completed ? 'line-through' : 'none',
-              cursor: compact ? 'default' : 'pointer',
+              cursor: 'text',
+              overflowWrap: 'anywhere',
+              minWidth: 0,
               userSelect: 'none',
             }}
           >
@@ -154,7 +167,7 @@ export function SubTaskItem({ subTask, taskId, depth, compact }: SubTaskItemProp
 
         {/* hover 操作：删除（compact 模式隐藏） */}
         <AnimatePresence>
-          {!compact && hovered && !editing && (
+          {hovered && !editing && (
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -175,21 +188,21 @@ export function SubTaskItem({ subTask, taskId, depth, compact }: SubTaskItemProp
       </div>
 
       {/* 嵌套子项 */}
-      {childrenExpanded && subTask.subTasks.map((child) => (
-        <SubTaskItem key={child.id} subTask={child} taskId={taskId} depth={depth + 1} compact={compact} />
-      ))}
+      {childrenExpanded && <SubTaskList subTasks={subTask.subTasks} taskId={taskId}
+        parentId={subTask.id} depth={depth + 1} compact={compact} habit={habit} />}
 
       {/* 添加子项输入框 */}
       {addingChild && (
-        <div style={{ marginLeft: (depth + 1) * 18, marginTop: 2, display: 'flex', gap: 4, alignItems: 'center' }}>
+        <div style={{ marginLeft: 18, marginTop: 2, display: 'flex', gap: 4, alignItems: 'center' }}>
           <input
             ref={childInputRef}
             value={childInput}
             onChange={(e) => setChildInput(e.target.value)}
             placeholder={t.subtask_placeholder}
             onKeyDown={(e) => {
-              if (e.key === 'Enter') handleChildAdd()
-              if (e.key === 'Escape') { setChildInput(''); setAddingChild(false) }
+              if (e.nativeEvent.isComposing) return
+              if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); handleChildAdd() }
+              if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setChildInput(''); setAddingChild(false) }
             }}
             onBlur={() => { if (!childInput.trim()) setAddingChild(false) }}
             style={{
@@ -222,6 +235,50 @@ export function SubTaskItem({ subTask, taskId, depth, compact }: SubTaskItemProp
       )}
     </div>
   )
+}
+
+interface SubTaskListProps {
+  subTasks: SubTask[]
+  taskId: string
+  parentId?: string | null
+  depth?: number
+  compact?: boolean
+  habit?: boolean
+}
+
+export function SubTaskList({ subTasks, taskId, parentId = null, depth = 0, compact, habit = false }: SubTaskListProps) {
+  const reorderTasks = useTaskStore(s => s.reorderSubTasks)
+  const reorderHabits = useHabitStore(s => s.reorderSubHabits)
+  if (!subTasks.length) return null
+  return <Reorder.Group axis="y" values={subTasks.map(s => s.id)}
+    onReorder={ids => (habit ? reorderHabits : reorderTasks)(taskId, parentId, ids)}
+    onPointerDown={e => e.stopPropagation()} onClick={e => e.stopPropagation()}
+    style={{ listStyle: 'none', padding: 0, margin: 0, marginLeft: depth > 0 ? 18 : 0 }}>
+    {subTasks.map(subTask => <SortableSubTask key={subTask.id} subTask={subTask}
+      taskId={taskId} depth={depth} compact={compact} habit={habit} />)}
+  </Reorder.Group>
+}
+
+function SortableSubTask(props: SubTaskItemProps) {
+  const controls = useDragControls()
+  const t = useT()
+  return <Reorder.Item value={props.subTask.id} dragListener={false} dragControls={controls}
+    style={{ position: 'relative', listStyle: 'none' }}>
+    <SubTaskItem {...props} dragHandle={<button type="button" title={t.subtask_reorder}
+      aria-label={t.subtask_reorder} onPointerDown={e => { e.stopPropagation(); controls.start(e) }}
+      style={{ width: 18, height: 22, flexShrink: 0, border: 'none', background: 'transparent',
+        color: 'var(--color-text-dim)', cursor: 'grab', touchAction: 'none', padding: 0 }}>
+      ⠿
+    </button>} />
+  </Reorder.Item>
+}
+
+function asTask(sub: SubHabit): SubTask {
+  return { ...sub, subTasks: sub.subHabits.map(asTask) }
+}
+
+export function SubHabitList({ subHabits, habitId }: { subHabits: SubHabit[]; habitId: string }) {
+  return <SubTaskList subTasks={subHabits.map(asTask)} taskId={habitId} habit />
 }
 
 const iconBtnStyle: React.CSSProperties = {

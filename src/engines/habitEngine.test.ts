@@ -22,6 +22,7 @@ function makeHabit(overrides: Partial<Habit> = {}): Habit {
     isHidden: false,
     deletedAt: null,
     timerStartedAt: null,
+    timerAccumulated: 0,
     actualMinutes: 0,
     consecutiveCount: 0,
     totalCompletions: 0,

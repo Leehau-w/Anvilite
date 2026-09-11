@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
+import { itemMotion } from './itemMotion'
 import type { Task } from '@/types/task'
 import { PriorityDot } from '@/components/ui/PriorityBadge'
 import { formatRelativeDate, isOverdue } from '@/utils/time'
@@ -15,7 +16,9 @@ import { useT } from '@/i18n'
 import { categoryDisplay, getAreaDisplayName } from '@/utils/area'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useUIStore } from '@/stores/uiStore'
-import { SubTaskItem } from './SubTaskItem'
+import { SubTaskList } from './SubTaskItem'
+import { findCompletionEvent } from '@/utils/completionEvent'
+import { undoTaskCompletion } from '@/utils/taskCompletion'
 import { TimerBadge } from './TimerBadge'
 import { TagPill } from './TagPill'
 
@@ -101,12 +104,7 @@ export function TaskItem({ task, compact, onEdit }: TaskItemProps) {
     if (completing) return
 
     if (isDone) {
-      undoComplete(task.id)
-      revokeXP(task.xpReward)
-      const ev = useGrowthEventStore.getState().events.find(
-        (e) => e.type === 'task_complete' && e.title === t.task_eventTitle(task.title)
-      )
-      if (ev) removeEvent(ev.id)
+      undoTaskCompletion(task.id, task.completionId)
       showToast(t.task_toastUndoDone)
       setShowDurationInput(false)
       return
@@ -157,7 +155,7 @@ export function TaskItem({ task, compact, onEdit }: TaskItemProps) {
       addEvent({
         type: 'task_complete',
         title: t.task_eventTitle(task.title),
-        details: { xpGained: xp, oreGained: ore, actualMinutes: completed.actualMinutes, categoryName: task.category },
+        details: { entityId: task.id, completionId: completed.completionId, xpGained: xp, oreGained: ore, actualMinutes: completed.actualMinutes, categoryName: task.category },
         isMilestone: false,
       })
     } catch (err) {
@@ -178,12 +176,7 @@ export function TaskItem({ task, compact, onEdit }: TaskItemProps) {
     showToast(t.task_toastDone(xp), {
       label: t.task_toastUndo,
       onClick: () => {
-        undoComplete(task.id)
-        revokeXP(xp)
-        const ev = useGrowthEventStore.getState().events.find(
-          (e) => e.type === 'task_complete' && e.title === t.task_eventTitle(task.title)
-        )
-        if (ev) removeEvent(ev.id)
+        undoTaskCompletion(task.id, completed?.completionId)
       },
     })
 
@@ -191,6 +184,7 @@ export function TaskItem({ task, compact, onEdit }: TaskItemProps) {
       setDurationInput('')
       setShowDurationInput(true)
     }
+    setCompleting(false)
   }, [completing, isDone, task, confirmHigh, character.streakDays, completeTask, undoComplete, updateTask, gainXPAndOre, recordActivity, revokeXP, addEvent, removeEvent, showToast, triggerFeedback, t])
 
   function handleStatusToggle(e: React.MouseEvent) {
@@ -242,9 +236,7 @@ export function TaskItem({ task, compact, onEdit }: TaskItemProps) {
 
   function deleteTaskWithCleanup() {
     if (task.status === 'done' && task.xpReward > 0) revokeXP(task.xpReward)
-    const ev = useGrowthEventStore.getState().events.find(
-      (ev) => ev.type === 'task_complete' && ev.title === t.task_eventTitle(task.title)
-    )
+    const ev = findCompletionEvent(useGrowthEventStore.getState().events, task.id, task.completionId)
     if (ev) removeEvent(ev.id)
     deleteTask(task.id)
     showToast(t.task_toastDeleted)
@@ -286,19 +278,6 @@ export function TaskItem({ task, compact, onEdit }: TaskItemProps) {
     return area ? getAreaDisplayName(area, t) : categoryDisplay(category, t)
   }
 
-  const cardVariants = {
-    initial: { opacity: 0, y: -10 },
-    animate: {
-      opacity: 1,
-      y: 0,
-      scale: completing ? 1.02 : 1,
-      transition: { duration: 0.25 },
-    },
-    exit: compact
-      ? { opacity: 0, transition: { duration: 0.15 } }
-      : { x: '120%', rotate: 3, opacity: 0, transition: { duration: 0.4, ease: [0.4, 0, 1, 1] as [number, number, number, number], delay: 0.25 } },
-  }
-
   const bgColor = isDoing
     ? 'color-mix(in srgb, var(--color-accent) 5%, var(--color-surface))'
     : isOverdueDue
@@ -312,10 +291,7 @@ export function TaskItem({ task, compact, onEdit }: TaskItemProps) {
   return (
     <motion.div
       layout
-      variants={cardVariants}
-      initial="initial"
-      animate="animate"
-      exit="exit"
+      {...itemMotion}
       onMouseEnter={() => {
         if (hoverTimer.current) clearTimeout(hoverTimer.current)
         hoverTimer.current = setTimeout(() => setHovered(true), 300)
@@ -619,9 +595,7 @@ export function TaskItem({ task, compact, onEdit }: TaskItemProps) {
       {/* ── 子任务 checklist ────────────────────────────────── */}
       {subTasks.length > 0 && subTasksExpanded && (
         <div style={{ marginTop: 8, paddingLeft: compact ? 22 : 28, display: 'flex', flexDirection: 'column', gap: 1 }}>
-          {subTasks.map((sub) => (
-            <SubTaskItem key={sub.id} subTask={sub} taskId={task.id} depth={0} compact={compact} />
-          ))}
+          <SubTaskList subTasks={subTasks} taskId={task.id} compact={compact} />
         </div>
       )}
 

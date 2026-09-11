@@ -8,6 +8,8 @@ export interface SubHabit {
 }
 
 export interface Habit {
+  cycleKey?: string
+  lastAction?: HabitAction | null
   id: string
   title: string
   category: string
@@ -42,6 +44,16 @@ export interface Habit {
   sortOrder: number
   createdAt: string
   updatedAt: string
+}
+
+export interface HabitAction {
+  id: string
+  kind: 'complete' | 'skip'
+  at: string
+  xp: number
+  before: Pick<Habit, 'consecutiveCount' | 'totalCompletions' | 'toleranceCharges' |
+    'toleranceNextAt' | 'weeklyCompletionCount' | 'currentCycleCount' |
+    'lastCompletedAt' | 'lastDueAt' | 'subHabits' | 'actualMinutes'>
 }
 
 export type HabitRepeatType = Habit['repeatType']

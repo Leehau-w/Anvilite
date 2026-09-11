@@ -59,6 +59,13 @@ export const useDashboardStore = create<DashboardStore>()(
     {
       name: `${getStoragePrefix()}-dashboard`,
       version: 3,
+      migrate: (persisted) => {
+        const old = persisted as Partial<DashboardStore>
+        return {
+          layout: old.layout ?? DEFAULT_LAYOUT,
+          visibleCards: old.visibleCards ?? ALL_CARD_IDS,
+        }
+      },
       onRehydrateStorage: () => (state) => {
         if (!state) return
         const ids = new Set(state.layout.map((c) => c.id))
@@ -66,12 +73,6 @@ export const useDashboardStore = create<DashboardStore>()(
         if (missing.length) state.layout = [...state.layout, ...missing]
         if (!state.visibleCards) {
           state.visibleCards = ALL_CARD_IDS
-        } else {
-          for (const id of ['inspiration', 'flows'] as CardId[]) {
-            if (!state.visibleCards.includes(id)) {
-              state.visibleCards = [...state.visibleCards, id]
-            }
-          }
         }
       },
     }

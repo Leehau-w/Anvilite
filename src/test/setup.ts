@@ -9,3 +9,9 @@ vi.stubGlobal('localStorage', {
   removeItem: (key: string) => { delete store[key] },
   clear: () => { Object.keys(store).forEach((k) => delete store[k]) },
 })
+vi.stubGlobal('window', { localStorage: globalThis.localStorage })
+vi.stubGlobal('sessionStorage', {
+  getItem: () => null,
+  setItem: () => {},
+  removeItem: () => {},
+})

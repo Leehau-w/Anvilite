@@ -84,14 +84,7 @@ function mapStepToSubTask(step: import('@/types/sop').SOPStep, index: number): S
     title: step.title,
     completed: false,
     sortOrder: index,
-    subTasks: step.childSteps.map((child, ci) => ({
-      id: generateId(),
-      title: child.title,
-      completed: false,
-      sortOrder: ci,
-      subTasks: [],  // 第 3 层及更深层忽略
-      createdAt: now,
-    })),
+    subTasks: step.childSteps.map(mapStepToSubTask),
     createdAt: now,
   }
 }
@@ -189,13 +182,14 @@ export const useTaskStore = create<TaskStore>()(
           if (task.timerStartedAt) {
             totalSec += Math.max(0, Math.floor((Date.now() - new Date(task.timerStartedAt).getTime()) / 1000))
           }
-          taskActualMinutes = Math.round(totalSec / 60)
+          taskActualMinutes += Math.round(totalSec / 60)
         }
 
         const updatedTask: Task = {
           ...task,
           status: 'done',
           completedAt: now,
+          completionId: generateId(),
           updatedAt: now,
           actualMinutes: taskActualMinutes,
           timerStartedAt: null,
@@ -349,7 +343,7 @@ export const useTaskStore = create<TaskStore>()(
         set((s) => ({
           tasks: s.tasks.map((t) =>
             t.id === taskId
-              ? { ...t, actualMinutes: Math.round(totalSeconds / 60), timerAccumulated: 0, timerStartedAt: null }
+              ? { ...t, actualMinutes: t.actualMinutes + Math.round(totalSeconds / 60), timerAccumulated: 0, timerStartedAt: null }
               : t
           ),
         }))
@@ -516,7 +510,7 @@ export const useTaskStore = create<TaskStore>()(
 
           state.tasks = rootTasks.map((root) => ({
             ...root,
-            subTasks: buildSubTasksFromFlat(childrenMap, root.id),
+            subTasks: root.subTasks ?? buildSubTasksFromFlat(childrenMap, root.id),
           })) as Task[]
 
           localStorage.setItem(SUBTASK_MIGRATION_KEY, new Date().toISOString())

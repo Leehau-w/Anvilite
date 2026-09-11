@@ -24,7 +24,7 @@ export function SOPTree({ onNewSOP }: Props) {
   const lang = useSettingsStore((s) => s.settings.language)
   const {
     folders, sops, selectedSOPId, selectSOP,
-    addFolder, renameFolder, deleteFolder,
+    addFolder, renameFolder,
     collapsedFolderIds, toggleFolderCollapsed,
   } = useSOPStore()
   const [newFolderInput, setNewFolderInput] = useState(false)

@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react'
-import { AnimatePresence, motion } from 'framer-motion'
 import { Drawer } from '@/components/ui/Drawer'
 import { StarRating } from '@/components/ui/StarRating'
 import { CategorySelect } from '@/components/ui/CategorySelect'
 import type { Habit } from '@/types/habit'
 import { useHabitStore } from '@/stores/habitStore'
+import { SubHabitList } from '@/components/tasks/SubTaskItem'
 import { useAreaStore } from '@/stores/areaStore'
 import { useGrowthEventStore } from '@/stores/growthEventStore'
 import { useToast } from '@/components/feedback/Toast'
@@ -43,7 +43,7 @@ type FormData = {
 const REPEAT_OPTIONS: UIRepeatType[] = ['daily', 'weekdays', 'weekly', 'biweekly', 'monthly', 'custom']
 
 export function HabitDrawer({ open, onClose, editHabit, defaultCategory }: HabitDrawerProps) {
-  const { addHabit, updateHabit, addSubHabit, removeSubHabit } = useHabitStore()
+  const { addHabit, updateHabit, addSubHabit } = useHabitStore()
   const currentHabit = useHabitStore((s) => editHabit ? s.habits.find((h) => h.id === editHabit.id) : null)
   const { addEvent } = useGrowthEventStore()
   const { showToast } = useToast()
@@ -394,50 +394,13 @@ export function HabitDrawer({ open, onClose, editHabit, defaultCategory }: Habit
           return (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               <label style={{ fontSize: 12, color: 'var(--color-text-dim)' }}>{t.subtask_add}</label>
-              {subHabits.length > 0 && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  <AnimatePresence>
-                    {subHabits.map((sub) => (
-                      <motion.div
-                        key={sub.id}
-                        initial={{ opacity: 0, y: -8 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, x: 40 }}
-                        style={{
-                          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                          padding: '6px 10px', borderRadius: 'var(--radius-sm)',
-                          border: '1px solid var(--color-border)', background: 'var(--color-bg)', fontSize: 13,
-                        }}
-                      >
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <input
-                            type="checkbox"
-                            checked={sub.completed}
-                            onChange={() => undefined}
-                            style={{ accentColor: 'var(--color-accent)', cursor: 'pointer' }}
-                            readOnly
-                          />
-                          <span style={{ color: sub.completed ? 'var(--color-text-dim)' : 'var(--color-text)', textDecoration: sub.completed ? 'line-through' : 'none' }}>
-                            {sub.title}
-                          </span>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => removeSubHabit(editHabit.id, sub.id)}
-                          style={{ background: 'none', border: 'none', color: 'var(--color-text-dim)', cursor: 'pointer', fontSize: 12, padding: '0 4px' }}
-                        >
-                          ✕
-                        </button>
-                      </motion.div>
-                    ))}
-                  </AnimatePresence>
-                </div>
-              )}
+              <SubHabitList subHabits={subHabits} habitId={editHabit.id} />
               <div style={{ display: 'flex', gap: 6 }}>
                 <input
                   value={subHabitInput}
                   onChange={(e) => setSubHabitInput(e.target.value)}
                   onKeyDown={(e) => {
+                    if (e.nativeEvent.isComposing) return
                     if (e.key === 'Enter') {
                       e.preventDefault()
                       if (!subHabitInput.trim()) return

@@ -1,4 +1,3 @@
-import React from 'react'
 import { getTagColor } from '@/utils/tagColor'
 import { useT } from '@/i18n'
 

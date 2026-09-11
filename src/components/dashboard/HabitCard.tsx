@@ -1,23 +1,19 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { motion, AnimatePresence, Reorder } from 'framer-motion'
 import { useHabitStore } from '@/stores/habitStore'
+import { SubHabitList } from '@/components/tasks/SubTaskItem'
 import { useCharacterStore } from '@/stores/characterStore'
 import { useGrowthEventStore } from '@/stores/growthEventStore'
 import { useFeedback } from '@/components/feedback/FeedbackContext'
 import { useToast } from '@/components/feedback/Toast'
-import { UndoToast } from '@/components/feedback/UndoToast'
+import { itemMotion } from '@/components/tasks/itemMotion'
 import { CollapsibleGroup } from '@/components/ui/CollapsibleGroup'
 import { getNextRefreshInfo, type NextRefreshInfo } from '@/engines/habitEngine'
 import { TimerBadge } from '@/components/tasks/TimerBadge'
-import type { Habit, SubHabit } from '@/types/habit'
+import type { Habit } from '@/types/habit'
 import { useT } from '@/i18n'
 import { useUIStore } from '@/stores/uiStore'
 import { HabitContextMenu } from './HabitContextMenu'
-
-interface UndoEntry {
-  habitId: string
-  message: string
-}
 
 export function HabitCard({ onEdit }: { onEdit?: (habit: Habit) => void }) {
   const { getTodayHabits, completeHabit, skipHabit, habits, startHabitTimer, pauseHabitTimer, reorderHabits, undoComplete } = useHabitStore()
@@ -39,9 +35,6 @@ export function HabitCard({ onEdit }: { onEdit?: (habit: Habit) => void }) {
 
   const [localHabits, setLocalHabits] = useState<Habit[]>(todayHabits)
   const isDraggingRef = useRef(false)
-
-  // UndoToast state — only one at a time
-  const [undoEntry, setUndoEntry] = useState<UndoEntry | null>(null)
 
   // sync from store when not dragging
   useEffect(() => {
@@ -77,6 +70,8 @@ export function HabitCard({ onEdit }: { onEdit?: (habit: Habit) => void }) {
       type: 'habit_complete',
       title: t.habitCard_eventTitle(habit.title),
       details: {
+        entityId: habit.id,
+        completionId: useHabitStore.getState().habits.find(h => h.id === habit.id)?.lastAction?.id,
         xpGained: result.xp,
         oreGained: result.ore,
         consecutiveCount: result.newStreak,
@@ -87,10 +82,10 @@ export function HabitCard({ onEdit }: { onEdit?: (habit: Habit) => void }) {
 
     triggerFeedback({ xp: result.xp, ore: result.ore, leveledUp, oldLevel, newLevel, oldStreakDays: oldStreak, newStreakDays: newStreak, prestigeUnlocked })
 
-    // Show undo toast
-    setUndoEntry({
-      habitId: habit.id,
-      message: t.habit_completedToast(habit.title, result.xp),
+    const actionId = useHabitStore.getState().habits.find(h => h.id === habit.id)?.lastAction?.id
+    showToast(t.habit_completedToast(habit.title, result.xp), {
+      label: t.common_undo,
+      onClick: () => handleUndoComplete(habit, actionId),
     })
   }
 
@@ -101,16 +96,16 @@ export function HabitCard({ onEdit }: { onEdit?: (habit: Habit) => void }) {
     addEvent({
       type: 'habit_skip',
       title: t.habitCard_eventSkip(habit.title),
-      details: { consecutiveCount: result.newStreak, categoryName: habit.category },
+      details: { entityId: habit.id, completionId: useHabitStore.getState().habits.find(h => h.id === habit.id)?.lastAction?.id,
+        consecutiveCount: result.newStreak, categoryName: habit.category },
       isMilestone: false,
     })
 
     showToast(t.habitCard_toastSkip(habit.title))
   }
 
-  function handleUndoComplete(habit: Habit) {
-    undoComplete(habit.id)
-    showToast(t.habit_undoneToast(habit.title))
+  function handleUndoComplete(habit: Habit, actionId?: string) {
+    showToast(undoComplete(habit.id, actionId) ? t.habit_undoneToast(habit.title) : t.habit_undoUnavailable)
   }
 
   if (allActive.length === 0 && completedTodayHabits.length === 0) {
@@ -137,6 +132,7 @@ export function HabitCard({ onEdit }: { onEdit?: (habit: Habit) => void }) {
                 <Reorder.Item
                   key={habit.id}
                   value={habit}
+                  {...itemMotion}
                   onDragEnd={handleDragEnd}
                   style={{ listStyle: 'none' }}
                 >
@@ -191,23 +187,6 @@ export function HabitCard({ onEdit }: { onEdit?: (habit: Habit) => void }) {
         </div>
       )}
 
-      {/* Undo Toast */}
-      <AnimatePresence>
-        {undoEntry && (
-          <UndoToast
-            key={undoEntry.habitId}
-            message={undoEntry.message}
-            undoLabel={t.common_undo}
-            duration={5000}
-            onUndo={() => {
-              const habit = habits.find((h) => h.id === undoEntry.habitId)
-              if (habit) handleUndoComplete(habit)
-              setUndoEntry(null)
-            }}
-            onExpire={() => setUndoEntry(null)}
-          />
-        )}
-      </AnimatePresence>
     </>
   )
 }
@@ -237,9 +216,7 @@ function CompletedHabitItem({
   return (
     <motion.div
       layout
-      initial={{ opacity: 0, y: -4 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, height: 0, marginBottom: 0 }}
+      {...itemMotion}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       onContextMenu={handleContextMenu}
@@ -357,7 +334,6 @@ function HabitItem({
   const t = useT()
   const refreshInfo = getNextRefreshInfo(habit)
   const refreshText = formatRefreshInfo(refreshInfo, t)
-  const { toggleSubHabit } = useHabitStore()
   const { isTaskCollapsed, toggleTaskCollapse } = useUIStore()
   const isDoing = !!habit.timerStartedAt
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null)
@@ -377,9 +353,6 @@ function HabitItem({
   return (
     <motion.div
       layout
-      initial={{ opacity: 0, y: -8 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, height: 0, marginBottom: 0 }}
       onContextMenu={handleContextMenu}
       style={{
         padding: '8px 0',
@@ -521,9 +494,7 @@ function HabitItem({
       {/* 子项列表 */}
       {subHabits.length > 0 && subHabitsExpanded && (
         <div style={{ paddingLeft: 36, marginTop: 4, display: 'flex', flexDirection: 'column', gap: 1 }}>
-          {subHabits.map((sub) => (
-            <DashSubHabitItem key={sub.id} sub={sub} habitId={habit.id} depth={0} onToggle={toggleSubHabit} />
-          ))}
+          <SubHabitList subHabits={subHabits} habitId={habit.id} />
         </div>
       )}
       {contextMenu && (
@@ -538,57 +509,7 @@ function HabitItem({
   )
 }
 
-function DashSubHabitItem({
-  sub, habitId, depth, onToggle,
-}: {
-  sub: SubHabit; habitId: string; depth: number; onToggle: (habitId: string, subId: string) => void
-}) {
-  const { isTaskCollapsed, toggleTaskCollapse } = useUIStore()
-  const childrenExpanded = !isTaskCollapsed(sub.id)
-  const completedChildCount = sub.subHabits.filter((c) => c.completed).length
 
-  return (
-    <div style={{ marginLeft: depth * 18 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '2px 0' }}>
-        <input
-          type="checkbox"
-          checked={sub.completed}
-          onChange={() => onToggle(habitId, sub.id)}
-          style={{ width: 13, height: 13, flexShrink: 0, cursor: 'pointer', accentColor: 'var(--color-accent)' }}
-        />
-        {sub.subHabits.length > 0 && (
-          <button
-            onClick={() => toggleTaskCollapse(sub.id)}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 2,
-              padding: '0 5px', height: 16,
-              borderRadius: 'var(--radius-sm)',
-              border: `1px solid ${childrenExpanded ? 'color-mix(in srgb, var(--color-accent) 30%, var(--color-border))' : 'var(--color-border)'}`,
-              background: childrenExpanded ? 'color-mix(in srgb, var(--color-accent) 8%, transparent)' : 'transparent',
-              color: childrenExpanded ? 'var(--color-accent)' : 'var(--color-text-dim)',
-              cursor: 'pointer', fontSize: 10, fontFamily: 'var(--font-num)',
-              flexShrink: 0, transition: 'all 0.15s',
-            }}
-          >
-            <span style={{ fontSize: 8, lineHeight: 1 }}>{childrenExpanded ? '▾' : '▸'}</span>
-            <span>{completedChildCount}/{sub.subHabits.length}</span>
-          </button>
-        )}
-        <span style={{
-          flex: 1, fontSize: 13,
-          color: sub.completed ? 'var(--color-text-dim)' : 'var(--color-text)',
-          textDecoration: sub.completed ? 'line-through' : 'none',
-          userSelect: 'none',
-        }}>
-          {sub.title}
-        </span>
-      </div>
-      {sub.subHabits.length > 0 && childrenExpanded && sub.subHabits.map((child) => (
-        <DashSubHabitItem key={child.id} sub={child} habitId={habitId} depth={depth + 1} onToggle={onToggle} />
-      ))}
-    </div>
-  )
-}
 
 function ProgressButton({
   current,

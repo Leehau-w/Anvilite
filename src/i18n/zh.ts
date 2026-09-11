@@ -1,5 +1,6 @@
 // 中文翻译字典
 export const zh = {
+  subtask_reorder: '拖动排序子项',
   // ─── App ─────────────────────────────────────────────────────────────────────
   app_subtitle: '锻石',
   topbar_settings: '设置',
@@ -305,6 +306,7 @@ export const zh = {
   common_undo: '撤销',
   habit_undoComplete: '撤销完成',
   habit_undoneToast: (name: string) => `已撤销「${name}」的完成`,
+  habit_undoUnavailable: '无法撤销：记录已变化、已跨日或缺少旧版恢复记录。',
   habit_completedToast: (name: string, xp: number) => `${name} 完成！+${xp} XP`,
 
   // ─── Heatmap ─────────────────────────────────────────────────────────────

@@ -172,3 +172,13 @@ export function makeSubHabit(title: string, sortOrder: number): SubHabit {
     createdAt: new Date().toISOString(),
   }
 }
+
+export function reorderNestedHabits(subs: SubHabit[], parentId: string | null, ids: string[]): SubHabit[] {
+  if (parentId === null) {
+    const order = [...new Set(ids)]
+    const byId = new Map(subs.map(s => [s.id, s]))
+    return [...order.flatMap(id => byId.has(id) ? [byId.get(id)!] : []),
+      ...subs.filter(s => !order.includes(s.id))].map((s, sortOrder) => ({ ...s, sortOrder }))
+  }
+  return subs.map(s => ({ ...s, subHabits: reorderNestedHabits(s.subHabits, s.id === parentId ? null : parentId, ids) }))
+}

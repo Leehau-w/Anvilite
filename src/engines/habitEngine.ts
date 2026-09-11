@@ -33,7 +33,7 @@ export function isHabitDueToday(habit: Habit): boolean {
     case 'biweekly': {
       if (!habit.lastDueAt) return true
       const lastDue = new Date(habit.lastDueAt)
-      const diffDays = Math.floor((today.getTime() - lastDue.getTime()) / 86400000)
+      const diffDays = calendarDaysBetween(today, lastDue)
       return diffDays >= 14
     }
     case 'monthly': {
@@ -48,7 +48,7 @@ export function isHabitDueToday(habit: Habit): boolean {
       if (!habit.customIntervalDays) return false
       if (!habit.lastDueAt) return true
       const lastDue = new Date(habit.lastDueAt)
-      const diffDays = Math.floor((today.getTime() - lastDue.getTime()) / 86400000)
+      const diffDays = calendarDaysBetween(today, lastDue)
       return diffDays >= habit.customIntervalDays
     }
     case 'monthly_fixed': {
@@ -83,7 +83,7 @@ export function getNextRefreshInfo(habit: Habit): NextRefreshInfo | null {
   switch (habit.repeatType) {
     case 'weekly': {
       if (habit.weeklyMode === 'strict' && habit.weeklyDays && habit.weeklyDays.length > 0) {
-        const days = habit.weeklyDays.sort()
+        const days = [...habit.weeklyDays].sort()
         const next = days.find((d) => d > dayOfWeek) ?? days[0]
         return { type: 'weekday', day: next }
       }
@@ -106,6 +106,11 @@ export function getNextRefreshInfo(habit: Habit): NextRefreshInfo | null {
     default:
       return null
   }
+}
+
+function calendarDaysBetween(a: Date, b: Date) {
+  return (Date.UTC(a.getFullYear(), a.getMonth(), a.getDate()) -
+    Date.UTC(b.getFullYear(), b.getMonth(), b.getDate())) / 86400000
 }
 
 function getWeekCompletions(habit: Habit): number {

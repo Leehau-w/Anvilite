@@ -42,6 +42,9 @@ export function PriorityBadge({ priority, compact }: PriorityBadgeProps) {
 }
 
 export function PriorityDot({ priority }: { priority: TaskPriority }) {
+  const t = useT()
+  if (priority === 'urgent') return <span style={{ color: '#dc2626', fontSize: 11,
+    fontWeight: 700, whiteSpace: 'nowrap', flexShrink: 0 }}>! {t.priority_urgent}</span>
   const config = { color: PRIORITY_COLORS[priority] }
   return (
     <span

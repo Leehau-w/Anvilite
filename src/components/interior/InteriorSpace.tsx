@@ -6,6 +6,7 @@ import type { ProsperityInfo } from '@/engines/prosperityEngine'
 import type { Task } from '@/types/task'
 import type { Habit } from '@/types/habit'
 import { useTaskStore } from '@/stores/taskStore'
+import { undoTaskCompletion } from '@/utils/taskCompletion'
 import { useHabitStore } from '@/stores/habitStore'
 import { useCharacterStore } from '@/stores/characterStore'
 import { useGrowthEventStore } from '@/stores/growthEventStore'
@@ -93,7 +94,7 @@ export function InteriorSpace({ area, prosperity, onExit }: InteriorSpaceProps) 
     addEvent({
       type: 'task_complete',
       title: t.task_eventTitle(task.title),
-      details: { xpGained: xp, oreGained: ore, actualMinutes: completed.actualMinutes, categoryName: task.category },
+      details: { entityId: task.id, completionId: completed.completionId, xpGained: xp, oreGained: ore, actualMinutes: completed.actualMinutes, categoryName: task.category },
       isMilestone: false,
     })
 
@@ -102,12 +103,7 @@ export function InteriorSpace({ area, prosperity, onExit }: InteriorSpaceProps) 
     showToast(t.task_toastDone(xp), {
       label: t.task_toastUndo,
       onClick: () => {
-        undoComplete(task.id)
-        revokeXP(xp)
-        const ev = useGrowthEventStore.getState().events.find(
-          (e) => e.type === 'task_complete' && e.title === t.task_eventTitle(task.title)
-        )
-        if (ev) removeEvent(ev.id)
+        undoTaskCompletion(task.id, completed.completionId)
       },
     })
   }, [completeTask, updateTask, gainXPAndOre, recordActivity, addEvent, triggerFeedback, showToast, undoComplete, revokeXP, removeEvent, character.streakDays])
@@ -129,7 +125,8 @@ export function InteriorSpace({ area, prosperity, onExit }: InteriorSpaceProps) 
     addEvent({
       type: 'habit_complete',
       title: t.habitCard_eventTitle(habit.title),
-      details: { xpGained: result.xp, oreGained: result.ore, consecutiveCount: result.newStreak, categoryName: habit.category },
+      details: { entityId: habit.id, completionId: useHabitStore.getState().habits.find(h => h.id === habit.id)?.lastAction?.id,
+        xpGained: result.xp, oreGained: result.ore, consecutiveCount: result.newStreak, categoryName: habit.category },
       isMilestone: false,
     })
     triggerFeedback({ xp: result.xp, ore: result.ore, leveledUp, oldLevel, newLevel, oldStreakDays: oldStreak, newStreakDays: newStreak, prestigeUnlocked })
@@ -142,7 +139,8 @@ export function InteriorSpace({ area, prosperity, onExit }: InteriorSpaceProps) 
     addEvent({
       type: 'habit_skip',
       title: t.habitCard_eventSkip(habit.title),
-      details: { consecutiveCount: result.newStreak, categoryName: habit.category },
+      details: { entityId: habit.id, completionId: useHabitStore.getState().habits.find(h => h.id === habit.id)?.lastAction?.id,
+        consecutiveCount: result.newStreak, categoryName: habit.category },
       isMilestone: false,
     })
     showToast(t.habitCard_toastSkip(habit.title))

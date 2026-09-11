@@ -38,8 +38,7 @@ export function HabitManageModal({ open, onClose, onEdit }: HabitManageModalProp
   }
 
   function handleUndoHabit(habit: Habit) {
-    undoComplete(habit.id)
-    showToast(tr.habit_undoneToast(habit.title))
+    showToast(undoComplete(habit.id) ? tr.habit_undoneToast(habit.title) : tr.habit_undoUnavailable)
   }
 
   return (

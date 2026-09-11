@@ -9,6 +9,7 @@ import { useGrowthEventStore } from '@/stores/growthEventStore'
 import { useSOPStore } from '@/stores/sopStore'
 import { useInspirationStore } from '@/stores/inspirationStore'
 import { getCurrentAccountId, getStoragePrefix } from '@/stores/accountManager'
+import { validateBackupRecords } from './backupValidation'
 
 export const EXPORT_VERSION = 1
 declare const __APP_VERSION__: string
@@ -129,11 +130,12 @@ export function validateStoreSlices(data: Record<string, unknown>): string | nul
     return 'invalid_type:growthEvents.events_not_array'
   }
 
-  return null
+  return validateBackupRecords(data)
 }
 
 function validateImportPayload(data: ExportData): { success: boolean; error?: string } {
-  if (!data.exportVersion || !data.data) {
+  if (!data || typeof data !== 'object' || !Number.isInteger(data.exportVersion) || data.exportVersion < 1 ||
+      !data.data || typeof data.data !== 'object' || Array.isArray(data.data)) {
     return { success: false, error: 'invalid_format' }
   }
   if (data.exportVersion > EXPORT_VERSION) {
@@ -173,11 +175,29 @@ export function applyImportPayload(data: ExportData): { success: boolean; error?
     inspirations: 'inspirations',
   }
 
-  for (const [dataKey, storeSuffix] of Object.entries(storeKeyMap)) {
-    const value = data.data[dataKey as keyof typeof data.data]
-    if (value !== undefined) {
-      localStorage.setItem(`${prefix}-${storeSuffix}`, JSON.stringify({ state: value, version: 0 }))
+  // Serialize and snapshot everything before touching storage. Never import store actions.
+  const defaults = buildExportPayload().data
+  const writes = Object.entries(storeKeyMap).flatMap(([dataKey, suffix]) => {
+    const key = dataKey as keyof typeof data.data
+    const value = data.data[key]
+    if (value === undefined) return []
+    const shape = defaults[key] as unknown as Record<string, unknown>
+    const state = Object.fromEntries(Object.keys(shape).filter(k => typeof shape[k] !== 'function' &&
+      Object.prototype.hasOwnProperty.call(value, k)).map(k => [k, (value as unknown as Record<string, unknown>)[k]]))
+    return [{ key: `${prefix}-${suffix}`, value: JSON.stringify({ state, version: key === 'dashboard' ? 3 : 0 }) }]
+  })
+  const originals = writes.map(w => ({ key: w.key, value: localStorage.getItem(w.key) }))
+  try {
+    for (const write of writes) localStorage.setItem(write.key, write.value)
+  } catch {
+    let restored = true
+    for (const original of originals.reverse()) {
+      try {
+        if (original.value === null) localStorage.removeItem(original.key)
+        else localStorage.setItem(original.key, original.value)
+      } catch { restored = false }
     }
+    return { success: false, error: restored ? 'write_failed' : 'rollback_failed' }
   }
 
   return { success: true }

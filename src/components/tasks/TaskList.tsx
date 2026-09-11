@@ -3,8 +3,10 @@ import { AnimatePresence, motion, Reorder } from 'framer-motion'
 import { useTaskStore } from '@/stores/taskStore'
 import { useAreaStore } from '@/stores/areaStore'
 import { useHabitStore } from '@/stores/habitStore'
+import { SubHabitList } from '@/components/tasks/SubTaskItem'
 import { useGrowthEventStore } from '@/stores/growthEventStore'
 import { TaskItem } from './TaskItem'
+import { itemMotion } from './itemMotion'
 import { QuickInput } from './QuickInput'
 import { TaskDrawer } from './TaskDrawer'
 import { HabitDrawer } from '@/components/dashboard/HabitDrawer'
@@ -14,7 +16,7 @@ import { useToast } from '@/components/feedback/Toast'
 import { TagFilterBar } from './TagFilterBar'
 import { TimerBadge } from './TimerBadge'
 import type { Task, TaskGroup } from '@/types/task'
-import type { Habit, SubHabit, HabitGroup } from '@/types/habit'
+import type { Habit, HabitGroup } from '@/types/habit'
 import type { Area } from '@/types/area'
 import { useUIStore } from '@/stores/uiStore'
 import { useT } from '@/i18n'
@@ -1096,8 +1098,7 @@ function HabitsTab({
   }
 
   function handleUndoHabit(habit: Habit) {
-    undoComplete(habit.id)
-    showToast(tr.habit_undoneToast(habit.title))
+    showToast(undoComplete(habit.id) ? tr.habit_undoneToast(habit.title) : tr.habit_undoUnavailable)
   }
 
   function handleMaster(habit: Habit) {
@@ -1597,9 +1598,8 @@ function HabitRow({
     <div>
       <motion.div
         layout
-        initial={{ opacity: 0, y: -6 }}
+        {...itemMotion}
         animate={{ opacity: dim ? 0.6 : 1, y: 0 }}
-        exit={{ opacity: 0, height: 0 }}
         onMouseEnter={() => {
           if (hoverTimer.current) clearTimeout(hoverTimer.current)
           hoverTimer.current = setTimeout(() => setHovered(true), 300)
@@ -1736,9 +1736,7 @@ function HabitRow({
         {/* 子项列表（卡片内，可收起） */}
         {subHabits.length > 0 && subHabitsExpanded && (
           <div style={{ paddingLeft: 28, marginTop: 6, display: 'flex', flexDirection: 'column', gap: 1 }} onClick={(e) => e.stopPropagation()}>
-            {subHabits.map((sub) => (
-              <SubHabitItem key={sub.id} sub={sub} habitId={habit.id} depth={0} />
-            ))}
+{<SubHabitList subHabits={subHabits} habitId={habit.id} />}
           </div>
         )}
         {contextMenu && (
@@ -1755,54 +1753,7 @@ function HabitRow({
   )
 }
 
-function SubHabitItem({ sub, habitId, depth }: { sub: SubHabit; habitId: string; depth: number }) {
-  const { toggleSubHabit } = useHabitStore()
-  const { isTaskCollapsed, toggleTaskCollapse } = useUIStore()
-  const childrenExpanded = !isTaskCollapsed(sub.id)
-  const completedChildCount = sub.subHabits.filter((c) => c.completed).length
 
-  return (
-    <div style={{ marginLeft: depth * 18 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '2px 0' }}>
-        <input
-          type="checkbox"
-          checked={sub.completed}
-          onChange={() => toggleSubHabit(habitId, sub.id)}
-          style={{ width: 13, height: 13, flexShrink: 0, cursor: 'pointer', accentColor: 'var(--color-accent)' }}
-        />
-        {sub.subHabits.length > 0 && (
-          <button
-            onClick={() => toggleTaskCollapse(sub.id)}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 2,
-              padding: '0 5px', height: 16,
-              borderRadius: 'var(--radius-sm)',
-              border: `1px solid ${childrenExpanded ? 'color-mix(in srgb, var(--color-accent) 30%, var(--color-border))' : 'var(--color-border)'}`,
-              background: childrenExpanded ? 'color-mix(in srgb, var(--color-accent) 8%, transparent)' : 'transparent',
-              color: childrenExpanded ? 'var(--color-accent)' : 'var(--color-text-dim)',
-              cursor: 'pointer', fontSize: 10, fontFamily: 'var(--font-num)',
-              flexShrink: 0, transition: 'all 0.15s',
-            }}
-          >
-            <span style={{ fontSize: 8, lineHeight: 1 }}>{childrenExpanded ? '▾' : '▸'}</span>
-            <span>{completedChildCount}/{sub.subHabits.length}</span>
-          </button>
-        )}
-        <span style={{
-          flex: 1, fontSize: 13,
-          color: sub.completed ? 'var(--color-text-dim)' : 'var(--color-text)',
-          textDecoration: sub.completed ? 'line-through' : 'none',
-          userSelect: 'none',
-        }}>
-          {sub.title}
-        </span>
-      </div>
-      {sub.subHabits.length > 0 && childrenExpanded && sub.subHabits.map((child) => (
-        <SubHabitItem key={child.id} sub={child} habitId={habitId} depth={depth + 1} />
-      ))}
-    </div>
-  )
-}
 
 function HabitTextBtn({ children, onClick, color, borderColor }: { children: React.ReactNode; onClick: () => void; color?: string; borderColor?: string }) {
   return (

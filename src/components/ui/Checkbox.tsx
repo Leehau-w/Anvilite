@@ -1,4 +1,3 @@
-import React from 'react'
 
 interface CheckboxProps {
   checked: boolean
@@ -10,6 +9,9 @@ interface CheckboxProps {
 export function Checkbox({ checked, onChange, size = 13, disabled }: CheckboxProps) {
   return (
     <button
+      type="button"
+      role="checkbox"
+      aria-checked={checked}
       onClick={(e) => { e.stopPropagation(); onChange() }}
       disabled={disabled}
       style={{

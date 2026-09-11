@@ -9,8 +9,7 @@ import { useGrowthEventStore } from '@/stores/growthEventStore'
 import { getTomorrowString } from '@/utils/time'
 import { useT } from '@/i18n'
 import { useToast } from '@/components/feedback/Toast'
-import { AnimatePresence, motion } from 'framer-motion'
-import { SubTaskItem } from './SubTaskItem'
+import { SubTaskList } from './SubTaskItem'
 import { makeSubTask } from '@/utils/subTaskUtils'
 import { TagInput } from './TagInput'
 
@@ -34,7 +33,7 @@ type FormData = {
 }
 
 export function TaskDrawer({ open, onClose, editTask, initialCategory }: TaskDrawerProps) {
-  const { addTask, updateTask, addSubTask, addTag, removeTag, lastCategory, tasks } = useTaskStore()
+  const { addTask, updateTask, addSubTask, lastCategory, tasks } = useTaskStore()
   const currentTask = useTaskStore((s) => editTask ? s.tasks.find((t) => t.id === editTask.id) : null)
   const { addEvent } = useGrowthEventStore()
   const { showToast } = useToast()
@@ -268,45 +267,14 @@ export function TaskDrawer({ open, onClose, editTask, initialCategory }: TaskDra
           <label style={{ fontSize: 12, color: 'var(--color-text-dim)' }}>{t.subtask_add}</label>
 
           {/* 子项列表 */}
-          {subTasks.length > 0 && (
-            <div style={{
-              padding: '8px 10px',
-              borderRadius: 'var(--radius-md)',
-              border: '1px solid var(--color-border)',
-              background: 'var(--color-bg)',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 2,
-            }}>
-              <AnimatePresence>
-                {subTasks.map((sub) => (
-                  <motion.div
-                    key={sub.id}
-                    initial={{ opacity: 0, y: -4 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, x: 20 }}
-                  >
-                    {editTask ? (
-                      <SubTaskItem subTask={sub} taskId={editTask.id} depth={0} />
-                    ) : (
-                      /* 新建模式：只显示标题 + 删除按钮 */
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '2px 0' }}>
-                        <span style={{ fontSize: 12, color: 'var(--color-text-dim)', flexShrink: 0 }}>•</span>
-                        <span style={{ fontSize: 13, color: 'var(--color-text)', flex: 1 }}>{sub.title}</span>
-                        <button
-                          type="button"
-                          onClick={() => handleRemovePending(sub.id)}
-                          style={{ background: 'none', border: 'none', fontSize: 13, color: 'var(--color-text-dim)', cursor: 'pointer', padding: '0 2px', lineHeight: 1 }}
-                        >
-                          ×
-                        </button>
-                      </div>
-                    )}
-                  </motion.div>
-                ))}
-              </AnimatePresence>
+          {editTask ? (
+            <SubTaskList subTasks={subTasks} taskId={editTask.id} />
+          ) : pendingSubTasks.map(sub => (
+            <div key={sub.id} style={{ display: 'flex', gap: 6 }}>
+              <span style={{ flex: 1 }}>{sub.title}</span>
+              <button type="button" title={t.common_delete} onClick={() => handleRemovePending(sub.id)}>×</button>
             </div>
-          )}
+          ))}
 
           {/* 输入行 */}
           <div style={{ display: 'flex', gap: 6 }}>
@@ -315,6 +283,7 @@ export function TaskDrawer({ open, onClose, editTask, initialCategory }: TaskDra
               value={subtaskInput}
               onChange={(e) => setSubtaskInput(e.target.value)}
               onKeyDown={(e) => {
+                if (e.nativeEvent.isComposing) return
                 if (e.key === 'Enter') {
                   e.preventDefault()
                   handleAddSubTask()

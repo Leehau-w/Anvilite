@@ -13,6 +13,8 @@ export interface GrowthEvent {
     | 'prestige'
   title: string
   details: {
+    entityId?: string
+    completionId?: string
     xpGained?: number
     oreGained?: number
     actualMinutes?: number
