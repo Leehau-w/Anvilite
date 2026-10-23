@@ -63,6 +63,7 @@ export const zh = {
   task_colorGray: '暖石灰',
   dash_filterClose: '关闭分类选择',
   dash_restoreCard: '恢复显示',
+  dash_addWaitingCard: '新增待反馈卡片',
   dash_addTaskCard: '新增任务卡片',
   dash_taskCardCategories: '分类',
   dash_filterAll: '全部',
@@ -83,6 +84,7 @@ export const zh = {
   card_waiting: "待反馈",
   dashboard_waitingEmpty: "暂无等待外部结果的任务",
   dashboard_waitingDropHint: "拖入任务，暂时等待回信、反馈或外部进展。",
+  dashboard_waitingCategoryMismatch: "此任务不属于当前卡片分类，请更换卡片或调整筛选。",
   dashboard_waitingDropActive: "松开放入待反馈",
   subtask_reorder: '拖动排序子项',
   // ─── App ─────────────────────────────────────────────────────────────────────
@@ -411,6 +413,8 @@ export const zh = {
   heatmap_countSuffix: (n: number) => `· ${n}个`,
 
   // ─── Milestone Hall ───────────────────────────────────────────────────────
+  milestone_dateLabel: '日期',
+  milestone_dateUnknown: '日期未知',
   milestone_pageTitle: "里程碑",
   milestone_abilityChart: '能力图谱',
   milestone_sectionTitles: '称号',

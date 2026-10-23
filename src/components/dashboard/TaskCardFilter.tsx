@@ -11,7 +11,7 @@ import { categoryDisplay, getAreaDisplayName } from '@/utils/area'
 interface TaskCardFilterProps {
   cardId: CardId
   filter?: TaskCardFilter
-  kind?: 'tasks' | 'habits'
+  kind?: 'tasks' | 'habits' | 'waiting'
 }
 
 function categoryLabel(category: string, areas: Area[], t: ReturnType<typeof useT>) {
@@ -35,7 +35,8 @@ export function TaskCardFilterButton({ cardId, filter, kind = 'tasks' }: TaskCar
   const records = kind === 'habits' ? habits : tasks
   const setTaskFilter = useDashboardStore(s => s.setTaskCardFilter)
   const setHabitFilter = useDashboardStore(s => s.setHabitCardFilter)
-  const setFilter = kind === 'habits' ? setHabitFilter : setTaskFilter
+  const setWaitingFilter = useDashboardStore(s => s.setWaitingCardFilter)
+  const setFilter = kind === 'habits' ? setHabitFilter : kind === 'waiting' ? setWaitingFilter : setTaskFilter
   const [open, setOpen] = useState(false)
   const triggerRef = useRef<HTMLButtonElement>(null)
   const dialogRef = useRef<HTMLDivElement>(null)
@@ -105,7 +106,7 @@ export function TaskCardFilterButton({ cardId, filter, kind = 'tasks' }: TaskCar
     >{summary} ▾</button>
     {open && createPortal(
       <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 1100, background: 'rgba(0,0,0,0.35)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-        <div ref={dialogRef} role="dialog" aria-modal="true" aria-label={t.dash_taskCardCategories} data-task-card-filter={cardId} data-habit-card-filter={kind === 'habits' ? cardId : undefined} onClick={event => event.stopPropagation()} style={{ width: 380, maxWidth: '100%', maxHeight: 'calc(100vh - 40px)', overflowY: 'auto', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-lg)', padding: 18, color: 'var(--color-text)', boxShadow: '0 8px 32px rgba(0,0,0,0.15)' }}>
+        <div ref={dialogRef} role="dialog" aria-modal="true" aria-label={t.dash_taskCardCategories} data-task-card-filter={cardId} data-habit-card-filter={kind === 'habits' ? cardId : undefined} data-waiting-card-filter={kind === 'waiting' ? cardId : undefined} onClick={event => event.stopPropagation()} style={{ width: 380, maxWidth: '100%', maxHeight: 'calc(100vh - 40px)', overflowY: 'auto', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-lg)', padding: 18, color: 'var(--color-text)', boxShadow: '0 8px 32px rgba(0,0,0,0.15)' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 14 }}>
             <strong style={{ fontSize: 15 }}>{t.dash_taskCardCategories}</strong>
             <button type="button" aria-label={t.dash_filterClose} onClick={() => setOpen(false)} style={{ border: 0, background: 'transparent', color: 'var(--color-text-dim)', fontSize: 20, cursor: 'pointer', padding: '0 4px' }}>×</button>

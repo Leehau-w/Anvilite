@@ -5,23 +5,29 @@ import { sortTasksInGroup } from '@/utils/task'
 import { isTaskDrag, takeDraggedTask } from '@/utils/taskDrag'
 import { useT } from '@/i18n'
 import type { Task } from '@/types/task'
+import type { TaskCardFilter, WaitingCardId } from '@/stores/dashboardStore'
+import { matchesTaskCardFilter } from './TaskCard'
 
 interface WaitingTasksCardProps {
+  cardId?: WaitingCardId
+  filter?: TaskCardFilter
   onEdit?: (task: Task) => void
   layoutEditing?: boolean
 }
 
-export function WaitingTasksCard({ onEdit, layoutEditing = false }: WaitingTasksCardProps) {
+export function WaitingTasksCard({ cardId = 'waiting', filter, onEdit, layoutEditing = false }: WaitingTasksCardProps) {
   const tasks = useTaskStore(s => s.tasks)
   const waitTask = useTaskStore(s => s.waitTask)
   const waiting = useMemo(() => sortTasksInGroup(tasks.filter(task =>
-    task.status === 'waiting' && !task.deletedAt && !task.isHidden)), [tasks])
+    task.status === 'waiting' && matchesTaskCardFilter(task, filter))), [tasks, filter])
   const [dropActive, setDropActive] = useState(false)
+  const [dropMismatch, setDropMismatch] = useState(false)
   const t = useT()
 
   useEffect(() => {
+    setDropMismatch(false)
     if (layoutEditing) setDropActive(false)
-  }, [layoutEditing])
+  }, [layoutEditing, filter])
 
   useEffect(() => {
     const clear = () => setDropActive(false)
@@ -41,6 +47,7 @@ export function WaitingTasksCard({ onEdit, layoutEditing = false }: WaitingTasks
     event.preventDefault()
     event.stopPropagation()
     event.dataTransfer.dropEffect = 'move'
+    setDropMismatch(false)
     setDropActive(true)
   }
 
@@ -50,13 +57,23 @@ export function WaitingTasksCard({ onEdit, layoutEditing = false }: WaitingTasks
     event.preventDefault()
     event.stopPropagation()
     const id = takeDraggedTask(event)
-    if (id) waitTask(id)
+    if (!id) return
+    // Re-read the record at drop time; a different card may have edited it mid-gesture.
+    const task = useTaskStore.getState().tasks.find(item => item.id === id)
+    if (!task || (task.status !== 'todo' && task.status !== 'doing' && task.status !== 'waiting') || task.deletedAt || task.isHidden) return
+    if (!matchesTaskCardFilter(task, filter)) {
+      setDropMismatch(true)
+      return
+    }
+    setDropMismatch(false)
+    waitTask(id)
   }
 
   return (
     <div
       data-testid="waiting-tasks-card"
       data-task-drop-target="waiting"
+      data-waiting-card-id={cardId}
       data-drop-active={dropActive && !layoutEditing ? 'true' : 'false'}
       aria-label={t.card_waiting}
       onDragEnter={dragOver}
@@ -74,6 +91,11 @@ export function WaitingTasksCard({ onEdit, layoutEditing = false }: WaitingTasks
         <div role="status" style={{ flexShrink: 0, fontSize: 11, lineHeight: 1.5, marginBottom: 6,
           color: dropActive ? 'var(--color-accent)' : 'var(--color-text-dim)' }}>
           {t.dashboard_waitingDropActive}
+        </div>
+      )}
+      {dropMismatch && (
+        <div role="status" data-waiting-drop-mismatch style={{ flexShrink: 0, fontSize: 11, lineHeight: 1.5, marginBottom: 6, color: 'var(--color-danger)' }}>
+          {t.dashboard_waitingCategoryMismatch}
         </div>
       )}
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', scrollbarWidth: 'thin',

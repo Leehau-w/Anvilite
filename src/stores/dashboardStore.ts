@@ -5,7 +5,8 @@ import { getStoragePrefix } from './accountManager'
 export type BaseCardId = 'quickAdd' | 'stats' | 'tasks' | 'character' | 'habits' | 'growth' | 'inspiration' | 'flows' | 'waiting'
 export type TaskCardId = 'tasks' | `tasks:${string}`
 export type HabitCardId = 'habits' | `habits:${string}`
-export type CardId = BaseCardId | TaskCardId | HabitCardId
+export type WaitingCardId = 'waiting' | `waiting:${string}`
+export type CardId = BaseCardId | TaskCardId | HabitCardId | WaitingCardId
 
 export type TaskCardFilter = {
   mode: 'all' | 'single' | 'multiple'
@@ -18,6 +19,10 @@ export function isTaskCardId(id: string): id is TaskCardId {
 
 export function isHabitCardId(id: string): id is HabitCardId {
   return id === 'habits' || id.startsWith('habits:') && id.length > 7
+}
+
+export function isWaitingCardId(id: string): id is WaitingCardId {
+  return id === 'waiting' || id.startsWith('waiting:') && id.length > 8
 }
 
 function normalizeCategoryFilter(filter: TaskCardFilter): TaskCardFilter {
@@ -36,6 +41,7 @@ export interface CardLayout {
   rowSpan: number
   taskFilter?: TaskCardFilter
   habitFilter?: TaskCardFilter
+  waitingFilter?: TaskCardFilter
 }
 
 export const COLS = 24
@@ -62,8 +68,10 @@ interface DashboardStore {
   addCard: (id: CardId) => void
   addTaskCard: () => CardId
   addHabitCard: () => CardId
+  addWaitingCard: () => CardId
   setTaskCardFilter: (id: CardId, filter: TaskCardFilter) => void
   setHabitCardFilter: (id: CardId, filter: TaskCardFilter) => void
+  setWaitingCardFilter: (id: CardId, filter: TaskCardFilter) => void
   resetLayout: () => void
 }
 
@@ -104,6 +112,22 @@ export const useDashboardStore = create<DashboardStore>()(
           visibleCards: [...state.visibleCards, id],
         })
         return id
+      },
+      addWaitingCard: () => {
+        const state = get()
+        let id: WaitingCardId
+        do { id = `waiting:${crypto.randomUUID()}` } while (state.layout.some(card => card.id === id))
+        const row = Math.max(0, ...state.layout.map(card => card.row + card.rowSpan))
+        set({
+          layout: [...state.layout, { id, col: 0, row, colSpan: 8, rowSpan: 5 }],
+          visibleCards: [...state.visibleCards, id],
+        })
+        return id
+      },
+      setWaitingCardFilter: (id, filter) => {
+        if (!isWaitingCardId(id)) return
+        set(s => ({ layout: s.layout.map(card => card.id === id
+          ? { ...card, waitingFilter: normalizeCategoryFilter(filter) } : card) }))
       },
       setHabitCardFilter: (id, filter) => {
         if (!isHabitCardId(id)) return

@@ -26,6 +26,9 @@ export interface GrowthEvent {
     prosperityLevel?: number
     consecutiveCount?: number
     description?: string
+    // Personal display edits must not rewrite linked completion history.
+    milestoneTitle?: string
+    milestoneDate?: string  // local calendar day (YYYY-MM-DD)
     // Milestone inscription data
     sourceType?: 'task' | 'habit'
     difficulty?: number

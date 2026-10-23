@@ -101,7 +101,7 @@ describe('MCP reads and validated business operations', () => {
   })
   it('rejects protected fields, unknown categories, invalid dates and invalid schedules before writing intent', async () => {
     const version = await collectionVersion('tasks')
-    for (const record of [{ title: 'No', status: 'done' }, { title: 'No', id: 'forged' }, { title: 'No', category: 'missing-category' }, { title: 'No', dueDate: '2026-02-31' }, { title: 'No', actualMinutes: -1 }]) {
+    for (const record of [{ title: 'No', status: 'done' }, { title: 'No', completionReturnStatus: 'waiting' }, { title: 'No', id: 'forged' }, { title: 'No', category: 'missing-category' }, { title: 'No', dueDate: '2026-02-31' }, { title: 'No', actualMinutes: -1 }]) {
       failure(await call('tasks_create', { requestId: 'invalid-' + JSON.stringify(record), expectedVersion: version, record }), 'invalid_arguments')
     }
     failure(await call('habits_create', { requestId: 'invalid-week', expectedVersion: await collectionVersion('habits'), record: { title: 'No', repeatType: 'weekly', weeklyMode: 'strict', weeklyDays: [] } }), 'invalid_arguments')
@@ -127,6 +127,32 @@ describe('MCP reads and validated business operations', () => {
     expect(useTaskStore.getState().tasks[0].deletedAt).toBeTruthy()
     success(await action('tasks', task.id, 'restore', 'task-restore-1'))
     expect(useTaskStore.getState().tasks[0].deletedAt).toBeNull()
+    expect(useCharacterStore.getState().character).toMatchObject({ totalXP: 700, ore: 100 })
+  })
+  it('restores waiting after MCP completion undo, including reload and identical retry, without restarting timers', async () => {
+    const task = await createTask()
+    success(await action('tasks', task.id, 'start', 'waiting-start'))
+    vi.advanceTimersByTime(90000)
+    success(await action('tasks', task.id, 'wait', 'waiting-wait'))
+    vi.advanceTimersByTime(3 * 24 * 60 * 60 * 1000)
+    success(await action('tasks', task.id, 'complete', 'waiting-complete'))
+    const done = await get<Task>('tasks', task.id)
+    expect(done.record).toMatchObject({ status: 'done', completionReturnStatus: 'waiting', actualMinutes: 2, timerStartedAt: null, timerAccumulated: 0 })
+    const request = { method: 'tasks_action' as const, params: { requestId: 'waiting-undo', expectedVersion: done.version, id: task.id, action: 'undo' } }
+    success(await service.handle(request))
+    expect(useTaskStore.getState().tasks[0]).toMatchObject({ status: 'waiting', actualMinutes: 2, timerStartedAt: null, timerAccumulated: 0 })
+    expect(useTaskStore.getState().tasks[0].completionReturnStatus).toBeUndefined()
+    expect(useGrowthEventStore.getState().events).toEqual([])
+    await useTaskStore.persist.rehydrate()
+    await useGrowthEventStore.persist.rehydrate()
+    service = makeService()
+    const waiting = structuredClone(useTaskStore.getState().tasks[0])
+    success(await service.handle(request))
+    expect(useTaskStore.getState().tasks[0]).toEqual(waiting)
+    success(await action('tasks', task.id, 'resume', 'waiting-resume'))
+    expect(useTaskStore.getState().tasks[0]).toMatchObject({ status: 'todo', timerStartedAt: null })
+    success(await action('tasks', task.id, 'wait', 'waiting-wait-again'))
+    expect(useTaskStore.getState().tasks[0]).toMatchObject({ status: 'waiting', actualMinutes: 2, timerStartedAt: null })
     expect(useCharacterStore.getState().character).toMatchObject({ totalXP: 700, ore: 100 })
   })
   it('keeps habit partial counts, full completion, skip and undo through the actual cycle actions', async () => {

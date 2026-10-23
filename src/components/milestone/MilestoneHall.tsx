@@ -11,7 +11,8 @@ import './MilestoneHall.css'
 import { getAreaDisplayName, categoryDisplay } from '@/utils/area'
 import { useT, type Translations } from '@/i18n'
 import type { GrowthEvent } from '@/types/growthEvent'
-import { isManualActivityEvent, getActivityHistoryView } from '@/utils/activityHistory'
+import { isManualActivityEvent, getMilestoneHistoryView, getMilestoneDate, isValidMilestoneDate } from '@/utils/activityHistory'
+import { formatDateKey } from '@/utils/time'
 
 function eventLabel(event: GrowthEvent, t: Translations) {
   switch (event.type) {
@@ -19,7 +20,7 @@ function eventLabel(event: GrowthEvent, t: Translations) {
     case 'habit_complete': return t.activity_habitComplete
     case 'habit_skip': return t.activity_habitSkip
     case 'habit_miss': return t.activity_habitMiss
-    default: return t.activity_manual
+    default: return null
   }
 }
 
@@ -35,8 +36,8 @@ export function MilestoneHall() {
   const [metric, setMetric] = useState<'count' | 'time'>('count')
   const [editor, setEditor] = useState<{ event: GrowthEvent | null } | null>(null)
   const milestones = useMemo(() => events.filter(isManualActivityEvent)
-    .map(event => getActivityHistoryView(event, t.activity_legacyNote))
-    .sort((a, b) => (Date.parse(b.timestamp) || 0) - (Date.parse(a.timestamp) || 0)), [events, t.activity_legacyNote])
+    .map(event => getMilestoneHistoryView(event, t.activity_legacyNote))
+    .sort((a, b) => getMilestoneDate(b).localeCompare(getMilestoneDate(a)) || (Date.parse(b.timestamp) || 0) - (Date.parse(a.timestamp) || 0)), [events, t.activity_legacyNote])
   const activity = useMemo(() => getTaskActivity(tasks), [tasks])
   const habitStats = useMemo(() => habits.reduce((stats, habit) => {
     if (habit.deletedAt) return stats
@@ -122,14 +123,16 @@ export function MilestoneHall() {
             </div> : <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {milestones.map(event => {
                 const minutes = event.details.actualMinutes
-                const at = new Date(event.timestamp)
+                const date = getMilestoneDate(event)
+                const at = date ? new Date(date + 'T12:00:00') : null
+                const label = eventLabel(event, t)
                 return <button type="button" key={event.id} data-activity-id={event.id} onClick={() => setEditor({ event })}
                   aria-label={t.activity_edit + ': ' + event.title}
                   style={{ ...panelStyle, width: '100%', textAlign: 'left', cursor: 'pointer', overflowWrap: 'anywhere',
                     background: 'color-mix(in srgb, var(--color-accent) 5%, var(--color-surface))' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6, marginBottom: 8, color: 'var(--color-text-dim)', fontSize: 11 }}>
-                    <span>{eventLabel(event, t)}</span>
-                    <time dateTime={event.timestamp}>{Number.isFinite(at.getTime()) ? at.toLocaleString(language === 'zh' ? 'zh-CN' : 'en-US') : event.timestamp}</time>
+                    {label && <span>{label}</span>}
+                    <time dateTime={date || undefined} style={{ marginLeft: 'auto' }}>{at ? at.toLocaleDateString(language === 'zh' ? 'zh-CN' : 'en-US') : t.milestone_dateUnknown}</time>
                   </div>
                   <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-accent)' }}>{event.title}</div>
                   {(event.details.categoryName || typeof minutes === 'number' && Number.isFinite(minutes) && minutes >= 0) &&
@@ -166,7 +169,10 @@ const sectionHeading: CSSProperties = { fontSize: 14, fontWeight: 600, margin: 0
 
 function ActivityEditor({ event, onClose }: { event: GrowthEvent | null; onClose: () => void }) {
   const t = useT()
-  const [title, setTitle] = useState('')
+  const initialTitle = event?.title ?? ''
+  const [title, setTitle] = useState(initialTitle)
+  const [date, setDate] = useState(() => event ? getMilestoneDate(event) : formatDateKey())
+  const [error, setError] = useState(false)
   const [description, setDescription] = useState(event?.details.description ?? '')
   const [confirmDelete, setConfirmDelete] = useState(false)
   useEffect(() => {
@@ -177,12 +183,20 @@ function ActivityEditor({ event, onClose }: { event: GrowthEvent | null; onClose
 
   function save(e: FormEvent) {
     e.preventDefault()
+    if (!title.trim() || !isValidMilestoneDate(date)) return
     const store = useGrowthEventStore.getState()
-    if (event) store.updateEventDetails(event.id, { description: description.trim() })
-    else {
-      if (!title.trim()) return
-      store.addEvent({ type: 'custom_milestone', title: title.trim(), details: { description: description.trim() }, isMilestone: true })
-    }
+    try {
+      if (event) {
+        const saved = store.updateMilestone(event.id, {
+          ...(title.trim() !== initialTitle ? { title: title.trim() } : {}),
+          date, description: description.trim(),
+        })
+        if (!saved) { setError(true); return }
+      } else {
+        store.addEvent({ type: 'custom_milestone', title: title.trim(),
+          details: { description: description.trim(), milestoneDate: date }, isMilestone: true })
+      }
+    } catch { setError(true); return }
     onClose()
   }
 
@@ -199,22 +213,26 @@ function ActivityEditor({ event, onClose }: { event: GrowthEvent | null; onClose
       data-activity-editor style={{ width: 380, maxWidth: '100%', maxHeight: 'calc(100vh - 32px)', overflow: 'auto', boxSizing: 'border-box', padding: 20,
         background: 'var(--color-surface)', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-xl)', boxShadow: 'var(--shadow-lg)' }}>
       <h2 style={{ fontSize: 16, margin: '0 0 16px' }}>{event ? t.activity_edit : t.activity_add}</h2>
-      {event ? <p style={{ fontSize: 14, fontWeight: 600, overflowWrap: 'anywhere' }}>{event.title}</p>
-        : <label style={{ display: 'block', fontSize: 12 }}>{t.milestone_createLabel}
-          <input autoFocus data-activity-title value={title} onChange={e => setTitle(e.target.value)} required
-            onKeyDown={e => { if (e.key === 'Enter' && e.nativeEvent.isComposing) e.preventDefault() }}
-            style={{ ...fieldStyle, height: 36, margin: '6px 0 12px' }} />
-        </label>}
+      <label style={{ display: 'block', fontSize: 12 }}>{t.milestone_createLabel}
+        <input autoFocus data-activity-title value={title} onChange={e => { setTitle(e.target.value); setError(false) }} required
+          onKeyDown={e => { if (e.key === 'Enter' && e.nativeEvent.isComposing) e.preventDefault() }}
+          style={{ ...fieldStyle, height: 36, margin: '6px 0 12px' }} />
+      </label>
+      <label style={{ display: 'block', fontSize: 12 }}>{t.milestone_dateLabel}
+        <input type="date" data-milestone-date value={date} required min="0001-01-01" max="9999-12-31"
+          onChange={e => { setDate(e.target.value); setError(false) }} style={{ ...fieldStyle, height: 36, margin: '6px 0 12px' }} />
+      </label>
       <label style={{ display: 'block', fontSize: 12 }}>{t.milestone_createNotesLabel}
-        <textarea autoFocus={!!event} data-activity-notes value={description} onChange={e => setDescription(e.target.value)} rows={4}
+        <textarea data-activity-notes value={description} onChange={e => { setDescription(e.target.value); setError(false) }} rows={4}
           placeholder={t.milestone_createNotesPlaceholder} style={{ ...fieldStyle, marginTop: 6, resize: 'vertical' }} />
       </label>
+      {error && <p role="alert" style={{ fontSize: 12, color: 'var(--color-danger)', marginBottom: 0 }}>{t.activity_actionFailed}</p>}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 16 }}>
         {event && <button type="button" data-delete-activity onClick={remove} style={{ ...outlineButton, color: 'var(--color-danger)', borderColor: 'var(--color-danger)' }}>
           {confirmDelete ? t.activity_deleteConfirm : t.common_delete}
         </button>}
         <button type="button" onClick={onClose} style={{ ...outlineButton, marginLeft: 'auto' }}>{t.common_cancel}</button>
-        <button type="submit" disabled={!event && !title.trim()} style={{ ...primaryButton, opacity: !event && !title.trim() ? 0.5 : 1 }}>{t.common_save}</button>
+        <button type="submit" disabled={!title.trim() || !isValidMilestoneDate(date)} style={{ ...primaryButton, opacity: !title.trim() || !isValidMilestoneDate(date) ? 0.5 : 1 }}>{t.common_save}</button>
       </div>
     </form>
   </div>

@@ -25,6 +25,8 @@ export interface Task {
   xpReward: number
   completedAt: string | null
   completionId?: string
+  /** Return a waiting task to feedback after undoing this completion; old records default to todo. */
+  completionReturnStatus?: 'waiting'
   deletedAt: string | null
   isHidden: boolean
   sortOrder: number

@@ -19,6 +19,7 @@ import { useSettingsStore } from '@/stores/settingsStore'
 import { useAreaStore } from '@/stores/areaStore'
 import { zh } from '@/i18n/zh'
 import { en } from '@/i18n/en'
+import { formatDateKey } from '@/utils/time'
 
 let container: HTMLDivElement
 let root: Root
@@ -77,6 +78,15 @@ it.each(['zh', 'en'] as const)('shows marked milestones while preserving ordinar
   expect(container.textContent).toContain(t.activity_habitComplete)
   expect(container.textContent).toContain(t.activity_habitSkip)
   expect(container.textContent).toContain(t.heatmap_minutes(42))
+  for (const type of ['milestone', 'custom_milestone']) {
+    const card = container.querySelector('[data-activity-id="' + type + '"]')!
+    expect(card.textContent).not.toContain(t.activity_manual)
+    const date = card.querySelector('time')!
+    const localDay = formatDateKey(new Date(original[0].timestamp))
+    expect(date.getAttribute('datetime')).toBe(localDay)
+    expect(date.textContent).toBe(new Date(localDay + 'T12:00:00').toLocaleDateString(lang === 'zh' ? 'zh-CN' : 'en-US'))
+    expect(date.textContent).not.toContain(':')
+  }
   expect(container.textContent).not.toMatch(/Legacy reward|Ordinary completed task|\bXP\b|Lv\.|⛏/)
   expect(useGrowthEventStore.getState().events).toEqual(original)
   await act(async () => {
@@ -92,7 +102,11 @@ it.each(['zh', 'en'] as const)('shows marked milestones while preserving ordinar
 it.each(['zh', 'en'] as const)('creates notes only on save and preserves IME/cancel drafts (%s)', async lang => {
   const t = dictionaries[lang]
   useSettingsStore.getState().setLanguage(lang)
+  vi.useFakeTimers({ toFake: ['Date'] })
+  vi.setSystemTime(new Date(2026, 9, 23, 0, 5))
   await render(); await click(button(t.activity_add))
+  expect(container.querySelector<HTMLInputElement>('[data-milestone-date]')!.value).toBe('2026-10-23')
+  await input(container.querySelector('[data-milestone-date]')!, '2025-12-31')
   const title = container.querySelector<HTMLInputElement>('[data-activity-title]')!
   await input(title, '  Personal milestone  ')
   await input(container.querySelector('[data-activity-notes]')!, '  Important details  ')
@@ -107,13 +121,54 @@ it.each(['zh', 'en'] as const)('creates notes only on save and preserves IME/can
   expect(useGrowthEventStore.getState().events).toHaveLength(0)
   await click(button(t.activity_add))
   expect(container.querySelector<HTMLInputElement>('[data-activity-title]')!.value).toBe('')
+  expect(container.querySelector<HTMLInputElement>('[data-milestone-date]')!.value).toBe('2026-10-23')
+  await input(container.querySelector('[data-milestone-date]')!, '2026-01-09')
   await input(container.querySelector('[data-activity-title]')!, '  Saved memory  ')
   await input(container.querySelector('[data-activity-notes]')!, '  Saved details  ')
   await save()
   expect(useGrowthEventStore.getState().events).toHaveLength(1)
-  expect(useGrowthEventStore.getState().events[0]).toMatchObject({ type: 'custom_milestone', title: 'Saved memory', details: { description: 'Saved details' }, isMilestone: true })
+  expect(useGrowthEventStore.getState().events[0]).toMatchObject({ type: 'custom_milestone', title: 'Saved memory', details: { description: 'Saved details', milestoneDate: '2026-01-09' }, isMilestone: true })
   expect(container.querySelector('[data-activity-editor]')).toBeNull()
   expect(useCharacterStore.getState().character).toMatchObject({ totalXP: 12345, ore: 678, level: 35 })
+})
+
+it.each(['zh', 'en'] as const)('retains a failed new milestone draft and retries without duplicate records (%s)', async lang => {
+  const t = dictionaries[lang]
+  useSettingsStore.getState().setLanguage(lang)
+  const original = event('existing-memory', 'custom_milestone', 'Existing memory')
+  useGrowthEventStore.setState({ events: [original] })
+  const persisted = localStorage.getItem('anvilite-growth-events')
+  const business = JSON.stringify({ tasks: useTaskStore.getState().tasks, habits: useHabitStore.getState().habits,
+    character: useCharacterStore.getState().character })
+  await render(); await click(button(t.activity_add))
+  await input(container.querySelector('[data-activity-title]')!, '  Retry memory  ')
+  await input(container.querySelector('[data-milestone-date]')!, '2024-02-29')
+  await input(container.querySelector('[data-activity-notes]')!, '  Retained draft  ')
+  const realSet = localStorage.setItem.bind(localStorage)
+  let unavailable = true
+  vi.spyOn(localStorage, 'setItem').mockImplementation((key, value) => {
+    if (unavailable && key === 'anvilite-growth-events') throw new Error('Storage unavailable')
+    realSet(key, value)
+  })
+  await save()
+  expect(useGrowthEventStore.getState().events).toEqual([original])
+  expect(localStorage.getItem('anvilite-growth-events')).toBe(persisted)
+  expect(container.querySelector('[role="alert"]')!.textContent).toBe(t.activity_actionFailed)
+  expect(container.querySelector<HTMLInputElement>('[data-activity-title]')!.value).toBe('  Retry memory  ')
+  expect(container.querySelector<HTMLInputElement>('[data-milestone-date]')!.value).toBe('2024-02-29')
+  expect(container.querySelector<HTMLTextAreaElement>('[data-activity-notes]')!.value).toBe('  Retained draft  ')
+  unavailable = false
+  await save()
+  expect(container.querySelector('[data-activity-editor]')).toBeNull()
+  expect(useGrowthEventStore.getState().events).toHaveLength(2)
+  const saved = useGrowthEventStore.getState().events.filter(item => item.title === 'Retry memory')
+  expect(saved).toHaveLength(1)
+  expect(saved[0]).toMatchObject({ type: 'custom_milestone', isMilestone: true,
+    details: { milestoneDate: '2024-02-29', description: 'Retained draft' } })
+  expect(useGrowthEventStore.getState().events.find(item => item.id === original.id)).toEqual(original)
+  expect(JSON.parse(localStorage.getItem('anvilite-growth-events')!).state.events).toEqual(useGrowthEventStore.getState().events)
+  expect(JSON.stringify({ tasks: useTaskStore.getState().tasks, habits: useHabitStore.getState().habits,
+    character: useCharacterStore.getState().character })).toBe(business)
 })
 
 it.each(['zh', 'en'] as const)('edits milestone notes and confirms deletion without changing the task, habit or legacy rewards (%s)', async lang => {
@@ -135,7 +190,7 @@ it.each(['zh', 'en'] as const)('edits milestone notes and confirms deletion with
   await click(container.querySelector('[data-activity-id="actual-completion"]')!)
   expect(container.querySelector<HTMLTextAreaElement>('[data-activity-notes]')!.value).toBe('Original note')
   await input(container.querySelector('[data-activity-notes]')!, '  Revised note  '); await save()
-  expect(useGrowthEventStore.getState().events[0]).toEqual({ ...originalEvent, details: { ...originalEvent.details, description: 'Revised note' } })
+  expect(useGrowthEventStore.getState().events[0]).toEqual({ ...originalEvent, details: { ...originalEvent.details, description: 'Revised note', milestoneDate: formatDateKey(new Date(originalEvent.timestamp)) } })
   await click(container.querySelector('[data-activity-id="actual-completion"]')!)
   await click(button(t.common_delete))
   expect(useGrowthEventStore.getState().events).toHaveLength(2)
@@ -169,11 +224,11 @@ it.each(['zh', 'en'] as const)('keeps earlier personal inscriptions visible with
   expect(container.querySelector('[data-activity-id="habit-note"]')).not.toBeNull()
   expect(container.querySelector('[data-activity-id="plain-task"]')).toBeNull()
   await click(container.querySelector('[data-activity-id="personal-level_up"]')!)
-  expect(container.querySelector('[data-activity-editor]')!.textContent).toContain(t.activity_legacyNote)
+  expect(container.querySelector<HTMLInputElement>('[data-activity-title]')!.value).toBe(t.activity_legacyNote)
   expect(container.querySelector('[data-activity-editor]')!.textContent).not.toContain('Old game headline')
   await input(container.querySelector('[data-activity-notes]')!, '  Updated personal memory  '); await save()
   const updated = useGrowthEventStore.getState().events.find(item => item.id === notes[0].id)!
-  expect(updated).toEqual({ ...notes[0], details: { ...notes[0].details, description: 'Updated personal memory' } })
+  expect(updated).toEqual({ ...notes[0], details: { ...notes[0].details, description: 'Updated personal memory', milestoneDate: formatDateKey(new Date(notes[0].timestamp)) } })
   await act(async () => {
     useGrowthEventStore.setState({ events: [] })
     localStorage.setItem('anvilite-growth-events', persisted)
@@ -185,6 +240,101 @@ it.each(['zh', 'en'] as const)('keeps earlier personal inscriptions visible with
   expect(container.textContent).not.toContain('Old game headline')
 })
 
+
+it.each(['zh', 'en'] as const)('edits milestone titles and calendar days without rewriting linked completions, including after reload (%s)', async lang => {
+  const t = dictionaries[lang]
+  useSettingsStore.getState().setLanguage(lang)
+  const task = syntheticTask('linked-task', { completedAt: '2026-10-22T23:35:47.123Z', completionId: 'task-completion' })
+  const habit = syntheticHabit('linked-habit', { lastCompletedAt: '2026-10-21T22:25:32.456Z', totalCompletions: 7 })
+  useTaskStore.setState({ tasks: [task] })
+  useHabitStore.setState({ habits: [habit] })
+  const originals = [
+    { ...event('task-memory', 'task_complete', 'Original task title'), timestamp: task.completedAt!,
+      details: { entityId: task.id, completionId: 'task-completion', actualMinutes: 20.5, description: 'Task notes', categoryName: 'home' } },
+    { ...event('habit-memory', 'habit_complete', 'Original habit title'), timestamp: habit.lastCompletedAt!,
+      details: { entityId: habit.id, completionId: 'habit-completion', actualMinutes: 17, description: 'Habit notes', categoryName: 'home' } },
+  ]
+  useGrowthEventStore.setState({ events: originals })
+  const business = JSON.stringify({ tasks: useTaskStore.getState().tasks, habits: useHabitStore.getState().habits,
+    character: useCharacterStore.getState().character })
+  await render()
+  for (const [index, original] of originals.entries()) {
+    await click(container.querySelector('[data-activity-id="' + original.id + '"]')!)
+    const date = container.querySelector<HTMLInputElement>('[data-milestone-date]')!
+    expect(date.type).toBe('date')
+    expect(date.value).toBe(formatDateKey(new Date(original.timestamp)))
+    expect(container.querySelector<HTMLInputElement>('[data-activity-title]')!.value).toBe(original.title)
+    const nextDay = index === 0 ? '2024-02-29' : '2025-12-31'
+    await input(container.querySelector('[data-activity-title]')!, '  Revised personal title ' + index + '  ')
+    await input(date, nextDay)
+    await input(container.querySelector('[data-activity-notes]')!, '  Revised personal note ' + index + '  ')
+    expect(useGrowthEventStore.getState().events.find(item => item.id === original.id)).toEqual(original)
+    await save()
+    expect(useGrowthEventStore.getState().events.find(item => item.id === original.id)).toEqual({ ...original,
+      details: { ...original.details, milestoneTitle: 'Revised personal title ' + index, milestoneDate: nextDay,
+        description: 'Revised personal note ' + index } })
+    const card = container.querySelector('[data-activity-id="' + original.id + '"]')!
+    expect(card.textContent).toContain('Revised personal title ' + index)
+    expect(card.textContent).not.toContain(original.title)
+    expect(card.querySelector('time')!.getAttribute('datetime')).toBe(nextDay)
+    expect(card.querySelector('time')!.textContent).not.toContain(':')
+    expect(JSON.stringify({ tasks: useTaskStore.getState().tasks, habits: useHabitStore.getState().habits,
+      character: useCharacterStore.getState().character })).toBe(business)
+  }
+  // Presentation order follows the edited day, while persisted completion records keep their original timestamps.
+  expect([...container.querySelectorAll<HTMLElement>('[data-activity-id]')].map(item => item.dataset.activityId)).toEqual(['habit-memory', 'task-memory'])
+  const edited = useGrowthEventStore.getState().events
+  const persisted = localStorage.getItem('anvilite-growth-events')!
+  await act(async () => {
+    useGrowthEventStore.setState({ events: [] })
+    localStorage.setItem('anvilite-growth-events', persisted)
+    await useGrowthEventStore.persist.rehydrate()
+  })
+  expect(useGrowthEventStore.getState().events).toEqual(edited)
+  await click(container.querySelector('[data-activity-id="task-memory"]')!)
+  expect(container.querySelector<HTMLInputElement>('[data-activity-title]')!.value).toBe('Revised personal title 0')
+  expect(container.querySelector<HTMLInputElement>('[data-milestone-date]')!.value).toBe('2024-02-29')
+  await click(button(t.common_cancel))
+  expect(useGrowthEventStore.getState().events).toEqual(edited)
+})
+
+it.each(['zh', 'en'] as const)('keeps title/date edits as drafts and rejects empty or invalid calendar fields (%s)', async lang => {
+  const t = dictionaries[lang]
+  useSettingsStore.getState().setLanguage(lang)
+  const original = event('manual-memory', 'custom_milestone', 'Saved title')
+  useGrowthEventStore.setState({ events: [original] })
+  await render()
+  const card = container.querySelector('[data-activity-id="manual-memory"]')!
+  expect(card.textContent).not.toContain(t.activity_manual)
+  await click(card)
+  const title = container.querySelector<HTMLInputElement>('[data-activity-title]')!
+  const date = container.querySelector<HTMLInputElement>('[data-milestone-date]')!
+  await input(title, 'Unsaved title')
+  await input(date, '2020-06-15')
+  await click(button(t.common_cancel))
+  expect(useGrowthEventStore.getState().events).toEqual([original])
+  await click(container.querySelector('[data-activity-id="manual-memory"]')!)
+  expect(container.querySelector<HTMLInputElement>('[data-activity-title]')!.value).toBe('Saved title')
+  expect(container.querySelector<HTMLInputElement>('[data-milestone-date]')!.value).toBe(formatDateKey(new Date(original.timestamp)))
+  await input(container.querySelector('[data-activity-title]')!, '  ')
+  expect(button(t.common_save).disabled).toBe(true)
+  await save()
+  expect(container.querySelector('[data-activity-editor]')).not.toBeNull()
+  expect(useGrowthEventStore.getState().events).toEqual([original])
+  await input(container.querySelector('[data-activity-title]')!, 'Valid title')
+  await input(container.querySelector('[data-milestone-date]')!, '')
+  expect(button(t.common_save).disabled).toBe(true)
+  await save()
+  expect(useGrowthEventStore.getState().events).toEqual([original])
+  await input(container.querySelector('[data-milestone-date]')!, '2026-02-30')
+  expect(button(t.common_save).disabled).toBe(true)
+  await save()
+  expect(useGrowthEventStore.getState().events).toEqual([original])
+  await input(container.querySelector('[data-milestone-date]')!, '2026-02-28')
+  expect(button(t.common_save).disabled).toBe(false)
+  await click(button(t.common_cancel))
+  expect(useGrowthEventStore.getState().events).toEqual([original])
+})
 
 function syntheticTask(id: string, patch: Partial<Task> = {}): Task {
   const at = new Date(2026, 9, 23, 0, 5).toISOString()

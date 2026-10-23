@@ -1,4 +1,5 @@
 import { getSystemSOPs, SYSTEM_FOLDER_ID } from '@/data/systemSOPs'
+import { isValidMilestoneDate } from './activityHistory'
 
 type Obj = Record<string, unknown>
 const object = (v: unknown): v is Obj => !!v && typeof v === 'object' && !Array.isArray(v)
@@ -89,6 +90,7 @@ export function validateBackupRecords(data: Obj): string | null {
   if (!records('tasks', 'tasks', t => has(t, ['title', 'category', 'createdAt', 'updatedAt'], string) &&
     ['todo', 'doing', 'waiting', 'done'].includes(t.status as string) && [1, 2, 3, 4, 5].includes(t.difficulty as number) &&
     ['urgent', 'high', 'medium', 'low'].includes(t.priority as string) &&
+    optional(t, ['completionReturnStatus'], value => value === 'waiting') &&
     optional(t, ['backgroundColor'], value => value === null || typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value)) &&
     optional(t, ['actualMinutes', 'xpReward', 'timerAccumulated', 'sortOrder'], number) &&
     (t.status !== 'waiting' || (t.timerStartedAt == null &&
@@ -110,7 +112,9 @@ export function validateBackupRecords(data: Obj): string | null {
       (h.lastAction.before.toleranceCharges === 0 || h.lastAction.before.toleranceCharges === 1) &&
       nonnegative(h.lastAction.before.actualMinutes))))) return 'invalid_habits'
   if (!records('areas', 'areas', a => has(a, ['name', 'category'], string))) return 'invalid_areas'
-  if (!records('growthEvents', 'events', e => has(e, ['type', 'title', 'timestamp'], string) && object(e.details))) return 'invalid_events'
+  if (!records('growthEvents', 'events', e => has(e, ['type', 'title', 'timestamp'], string) && object(e.details) &&
+    optional(e.details, ['milestoneTitle'], value => string(value) && !!(value as string).trim()) &&
+    optional(e.details, ['milestoneDate'], isValidMilestoneDate))) return 'invalid_events'
   const c = (data.character as Obj).character
   if (!object(c) || !has(c, ['name'], string) || !has(c, ['level', 'totalXP', 'currentXP', 'ore'], number)) return 'invalid_character'
   const s = (data.settings as Obj).settings
@@ -121,7 +125,8 @@ export function validateBackupRecords(data: Obj): string | null {
   if (d.visibleCards !== undefined && !strings(d.visibleCards)) return 'invalid_dashboard'
   if (d.layout !== undefined && (!Array.isArray(d.layout) || !d.layout.every(c => object(c) && string(c.id) &&
     has(c, ['col', 'row', 'colSpan', 'rowSpan'], number) && (c.colSpan as number) > 0 && (c.rowSpan as number) > 0 &&
-    optional(c, ['taskFilter', 'habitFilter'], taskCardFilter)) ||
+    optional(c, ['taskFilter', 'habitFilter', 'waitingFilter'], taskCardFilter) &&
+    (c.waitingFilter === undefined || c.id === 'waiting' || (c.id as string).startsWith('waiting:') && (c.id as string).length > 8)) ||
     new Set(d.layout.map(c => (c as Obj).id)).size !== d.layout.length)) return 'invalid_dashboard'
   if (data.sops !== undefined) {
     if (!object(data.sops)) return 'invalid_sops'

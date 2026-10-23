@@ -223,6 +223,7 @@ export const useTaskStore = create<TaskStore>()(
           status: 'done',
           completedAt: now,
           completionId: generateId(),
+          completionReturnStatus: task.status === 'waiting' ? 'waiting' : undefined,
           xpReward: 0,
           updatedAt: now,
           actualMinutes: taskActualMinutes,
@@ -264,11 +265,12 @@ export const useTaskStore = create<TaskStore>()(
         if (!task || task.deletedAt || task.status !== 'done') return
         const previousEvents = useGrowthEventStore.getState().events
         const event = findCompletionEvent(previousEvents.filter(e => e.type === 'task_complete'), id, task.completionId)
+        const returnStatus = task.completionReturnStatus === 'waiting' ? 'waiting' : 'todo'
         try {
           set((s) => ({
             tasks: s.tasks.map((t) =>
               t.id === id
-                ? { ...t, status: 'todo', completedAt: null, completionId: undefined, updatedAt: new Date().toISOString() }
+                ? { ...t, status: returnStatus, completedAt: null, completionId: undefined, completionReturnStatus: undefined, timerStartedAt: null, updatedAt: new Date().toISOString() }
                 : t
             ),
           }))
@@ -276,7 +278,7 @@ export const useTaskStore = create<TaskStore>()(
         } catch (error) {
           // The entity and its event are one operation; retain the receipt for a clean retry.
           try { set(state => ({ tasks: state.tasks.map(current =>
-            current.id === id && current.status === 'todo' && current.completedAt === null && current.completionId === undefined ? task : current) })) } catch { /* best-effort storage rollback */ }
+            current.id === id && current.status === returnStatus && current.completedAt === null && current.completionId === undefined && current.completionReturnStatus === undefined ? task : current) })) } catch { /* best-effort storage rollback */ }
           if (event) {
             const current = useGrowthEventStore.getState().events
             const restored = restoreRemovedCompletionEvent(current, previousEvents, event)

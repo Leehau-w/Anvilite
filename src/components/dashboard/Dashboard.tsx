@@ -15,9 +15,11 @@ import {
   COLS,
   isTaskCardId,
   isHabitCardId,
+  isWaitingCardId,
   type BaseCardId,
   type CardId,
   type CardLayout,
+  type WaitingCardId,
 } from '@/stores/dashboardStore'
 import { getGreetingKey, getTodayString } from '@/utils/time'
 import { getTaskActivity } from '@/utils/activityStats'
@@ -50,7 +52,7 @@ export function Dashboard({ onNavigate, onOpenInspiration }: DashboardProps) {
   const areas = useAreaStore(s => s.areas)
   const { getTodayStats: getHabitStats } = useHabitStore()
   const t = useT()
-  const { layout, visibleCards, updateCard, removeCard, addCard, addTaskCard, addHabitCard, resetLayout } = useDashboardStore()
+  const { layout, visibleCards, updateCard, removeCard, addCard, addTaskCard, addHabitCard, addWaitingCard, resetLayout } = useDashboardStore()
   const [editMode, setEditMode] = useState(false)
   const [cardPickerOpen, setCardPickerOpen] = useState(false)
 
@@ -94,6 +96,7 @@ export function Dashboard({ onNavigate, onOpenInspiration }: DashboardProps) {
     const card = layout.find(item => item.id === id)
     if (isTaskCardId(id)) return t.dash_tasks + ' · ' + getCardFilterSummary(card?.taskFilter, areas, t)
     if (isHabitCardId(id)) return t.dash_habits + ' · ' + getCardFilterSummary(card?.habitFilter, areas, t)
+    if (isWaitingCardId(id)) return t.card_waiting + ' · ' + getCardFilterSummary(card?.waitingFilter, areas, t)
     return undefined
   }
 
@@ -192,11 +195,13 @@ export function Dashboard({ onNavigate, onOpenInspiration }: DashboardProps) {
             </GridCard>
           ))}
 
-          {visibleCards.includes('waiting') && (
-            <GridCard card={getCard('waiting')} cw={cw} containerRef={containerRef} onUpdate={(p) => updateCard('waiting', p)} locked={!editMode} onRemove={editMode ? () => removeCard('waiting') : undefined} resizable title={t.card_waiting}>
-              <WaitingTasksCard onEdit={openEditTask} layoutEditing={editMode} />
+          {visibleLayout.filter(card => isWaitingCardId(card.id)).map(card => (
+            <GridCard key={card.id} card={card} cw={cw} containerRef={containerRef} onUpdate={patch => updateCard(card.id, patch)} locked={!editMode} onRemove={editMode ? () => removeCard(card.id) : undefined} resizable title={t.card_waiting}
+              titleExtra={<TaskCardFilterButton kind="waiting" cardId={card.id} filter={card.waitingFilter} />}
+            >
+              <WaitingTasksCard cardId={card.id as WaitingCardId} filter={card.waitingFilter} onEdit={openEditTask} layoutEditing={editMode} />
             </GridCard>
-          )}
+          ))}
 
           {visibleCards.includes('character') && (
             <GridCard card={getCard('character')} cw={cw} containerRef={containerRef} onUpdate={(p) => updateCard('character', p)} locked={!editMode} onRemove={editMode ? () => removeCard('character') : undefined} noShell>
@@ -250,7 +255,7 @@ export function Dashboard({ onNavigate, onOpenInspiration }: DashboardProps) {
       <TaskDrawer initialCategory={drawerCategory} open={drawerOpen} onClose={() => { setDrawerOpen(false); setEditTask(null) }} editTask={editTask} />
       <HabitDrawer defaultCategory={habitDrawerCategory} open={habitDrawerOpen} onClose={() => { setHabitDrawerOpen(false); setEditHabit(null) }} editHabit={editHabit} />
       <HabitManageModal open={habitManageOpen} onClose={() => setHabitManageOpen(false)} onEdit={(h) => { setEditHabit(h); setHabitDrawerOpen(true) }} />
-      <CardPickerModal open={cardPickerOpen} onClose={() => setCardPickerOpen(false)} hiddenCards={hiddenCards} restoreCardLabel={restoreCardLabel} onAddHabit={() => { addHabitCard(); setCardPickerOpen(false) }} onAddTask={() => { addTaskCard(); setCardPickerOpen(false) }} onAdd={(id) => { addCard(id); setCardPickerOpen(false) }} />
+      <CardPickerModal open={cardPickerOpen} onClose={() => setCardPickerOpen(false)} hiddenCards={hiddenCards} restoreCardLabel={restoreCardLabel} onAddWaiting={() => { addWaitingCard(); setCardPickerOpen(false) }} onAddHabit={() => { addHabitCard(); setCardPickerOpen(false) }} onAddTask={() => { addTaskCard(); setCardPickerOpen(false) }} onAdd={(id) => { addCard(id); setCardPickerOpen(false) }} />
     </div>
   )
 }
@@ -518,13 +523,14 @@ function BigStat({ label, value, emoji }: { label: string; value: number | strin
 
 // ─── CardPickerModal ──────────────────────────────────────────────────────────
 
-function CardPickerModal({ open, onClose, hiddenCards, onAdd, onAddTask, onAddHabit, restoreCardLabel }: {
+function CardPickerModal({ open, onClose, hiddenCards, onAdd, onAddTask, onAddHabit, onAddWaiting, restoreCardLabel }: {
   open: boolean
   onClose: () => void
   hiddenCards: CardId[]
   onAdd: (id: CardId) => void
   onAddTask: () => void
   onAddHabit: () => void
+  onAddWaiting: () => void
   restoreCardLabel: (id: CardId) => string | undefined
 }) {
   const t = useT()
@@ -576,6 +582,7 @@ function CardPickerModal({ open, onClose, hiddenCards, onAdd, onAddTask, onAddHa
 
         <button type="button" data-add-task-card onClick={onAddTask} style={{ width: '100%', padding: '10px 14px', marginBottom: 12, borderRadius: 'var(--radius-md)', border: '1px solid var(--color-accent)', background: 'color-mix(in srgb, var(--color-accent) 8%, var(--color-bg))', color: 'var(--color-accent)', fontWeight: 600, cursor: 'pointer', textAlign: 'left' }}>＋ {t.dash_addTaskCard}</button>
         <button type="button" data-add-habit-card onClick={onAddHabit} style={{ width: '100%', padding: '10px 14px', marginBottom: 12, borderRadius: 'var(--radius-md)', border: '1px solid var(--color-accent)', background: 'color-mix(in srgb, var(--color-accent) 8%, var(--color-bg))', color: 'var(--color-accent)', fontWeight: 600, cursor: 'pointer', textAlign: 'left' }}>＋ {t.dash_addHabitCard}</button>
+        <button type="button" data-add-waiting-card onClick={onAddWaiting} style={{ width: '100%', padding: '10px 14px', marginBottom: 12, borderRadius: 'var(--radius-md)', border: '1px solid var(--color-accent)', background: 'color-mix(in srgb, var(--color-accent) 8%, var(--color-bg))', color: 'var(--color-accent)', fontWeight: 600, cursor: 'pointer', textAlign: 'left' }}>＋ {t.dash_addWaitingCard}</button>
         {hiddenCards.length === 0 ? (
           <p style={{ fontSize: 13, color: 'var(--color-text-dim)', textAlign: 'center', padding: '12px 0' }}>
             {t.dash_cardPickerEmpty}

@@ -65,6 +65,7 @@ export const en: Translations = {
   task_colorGray: 'Warm stone',
   dash_filterClose: 'Close category selection',
   dash_restoreCard: 'Show card',
+  dash_addWaitingCard: 'Add Awaiting Feedback Card',
   dash_addTaskCard: 'Add Task Card',
   dash_taskCardCategories: 'Categories',
   dash_filterAll: 'All',
@@ -85,6 +86,7 @@ export const en: Translations = {
   card_waiting: "Awaiting Feedback",
   dashboard_waitingEmpty: "No tasks waiting for an external response",
   dashboard_waitingDropHint: "Drop tasks here while you wait for a reply, feedback, or an external update.",
+  dashboard_waitingCategoryMismatch: "This task does not match this card’s categories. Use another card or change its filter.",
   dashboard_waitingDropActive: "Release to move to Awaiting Feedback",
   subtask_reorder: 'Drag to reorder sub-items',
   // ─── App ─────────────────────────────────────────────────────────────────────
@@ -413,6 +415,8 @@ export const en: Translations = {
   heatmap_countSuffix: (n: number) => `· ${n}`,
 
   // ─── Milestone Hall ───────────────────────────────────────────────────────
+  milestone_dateLabel: 'Date',
+  milestone_dateUnknown: 'Unknown date',
   milestone_pageTitle: "Milestones",
   milestone_abilityChart: 'Ability Chart',
   milestone_sectionTitles: 'Titles',

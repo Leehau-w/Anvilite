@@ -110,7 +110,7 @@ it('ordinary start and pause actions cannot bypass explicit waiting resumption',
   expect(current(created.id).timerStartedAt).toBe(new Date().toISOString())
 })
 
-it('manual completion from waiting settles only actual work and undo returns to todo', () => {
+it('manual completion from waiting settles only actual work and undo returns to waiting', () => {
   const created = task()
   useTaskStore.getState().updateTask(created.id, { actualMinutes: 30 })
   useTaskStore.getState().startTask(created.id)
@@ -119,11 +119,13 @@ it('manual completion from waiting settles only actual work and undo returns to 
   vi.advanceTimersByTime(3 * 24 * 60 * 60 * 1000)
   const done = useTaskStore.getState().completeTask(created.id)!
   expect(done.status).toBe('done')
+  expect(done.completionReturnStatus).toBe('waiting')
   expect(done.actualMinutes).toBe(40)
   expect(done.subTasks[0].completed).toBe(true)
   expect(done.xpReward).toBe(0)
   expect(undoTaskCompletion(created.id, done.completionId)).toBe(true)
-  expect(current(created.id).status).toBe('todo')
+  expect(current(created.id).status).toBe('waiting')
+  expect(current(created.id).completionReturnStatus).toBeUndefined()
   expect(current(created.id).timerStartedAt).toBeNull()
   expect(current(created.id).actualMinutes).toBe(40)
   expect(useCharacterStore.getState().character.totalXP).toBe(0)
@@ -228,4 +230,123 @@ it('fills missing waiting timer and tag fields after real backup restore even wh
   expect(done.actualMinutes).toBe(31)
   expect(done.timerStartedAt).toBeNull()
   expect(done.timerAccumulated).toBe(0)
+})
+
+
+it('keeps waiting completion origin through backup restore and a persisted reload before undo', async () => {
+  const created = task()
+  useTaskStore.getState().updateTask(created.id, { actualMinutes: 30, timerAccumulated: 120 })
+  useTaskStore.getState().waitTask(created.id)
+  const done = useTaskStore.getState().completeTask(created.id)!
+  const incoming = payload()
+  expect(incoming.data.tasks.tasks[0].completionReturnStatus).toBe('waiting')
+  const parsed = parseImportText(JSON.stringify(incoming))
+  expect(parsed.success).toBe(true)
+  useTaskStore.setState({ tasks: [] })
+  expect(applyImportPayload(parsed.data!)).toEqual({ success: true })
+  await useTaskStore.persist.rehydrate()
+  expect(current(created.id)).toEqual(done)
+  expect(undoTaskCompletion(created.id, done.completionId)).toBe(true)
+  expect(current(created.id)).toMatchObject({ status: 'waiting', actualMinutes: 32, timerStartedAt: null, timerAccumulated: 0 })
+  expect(current(created.id).completionReturnStatus).toBeUndefined()
+  await useTaskStore.persist.rehydrate()
+  expect(current(created.id).status).toBe('waiting')
+  expect(useGrowthEventStore.getState().events).toEqual([])
+})
+
+it('supports repeated waiting completion, undo and explicit resume without stale origins or duplicate time', () => {
+  const created = task()
+  useTaskStore.getState().updateTask(created.id, { actualMinutes: 30, timerAccumulated: 120 })
+  useTaskStore.getState().waitTask(created.id)
+  const first = useTaskStore.getState().completeTask(created.id)!
+  expect(useTaskStore.getState().completeTask(created.id)).toBeNull()
+  expect(undoTaskCompletion(created.id, first.completionId)).toBe(true)
+  vi.advanceTimersByTime(2 * 24 * 60 * 60 * 1000)
+  const second = useTaskStore.getState().completeTask(created.id)!
+  expect(second.completionId).not.toBe(first.completionId)
+  expect(second.actualMinutes).toBe(32)
+  expect(undoTaskCompletion(created.id, first.completionId)).toBe(false)
+  expect(current(created.id)).toEqual(second)
+  expect(undoTaskCompletion(created.id, second.completionId)).toBe(true)
+  expect(current(created.id).status).toBe('waiting')
+  expect(useTaskStore.getState().resumeWaitingTask(created.id)).toBe(true)
+  const resumedCompletion = useTaskStore.getState().completeTask(created.id)!
+  expect(resumedCompletion.completionReturnStatus).toBeUndefined()
+  expect(undoTaskCompletion(created.id, resumedCompletion.completionId)).toBe(true)
+  expect(current(created.id)).toMatchObject({ status: 'todo', actualMinutes: 32, timerStartedAt: null, timerAccumulated: 0 })
+  expect(useTaskStore.getState().waitTask(created.id)).toBe(true)
+  expect(useTaskStore.getState().resumeWaitingTask(created.id)).toBe(true)
+  expect(current(created.id).subTasks).toEqual(resumedCompletion.subTasks)
+  expect(useGrowthEventStore.getState().events).toEqual([])
+  expect(useCharacterStore.getState().character).toMatchObject({ totalXP: 0, ore: 0 })
+})
+
+it.each(['todo', 'doing', 'legacy'] as const)('retains the established return-to-todo behavior for %s completions', origin => {
+  const created = task()
+  if (origin === 'doing') {
+    useTaskStore.getState().startTask(created.id)
+    vi.advanceTimersByTime(60 * 1000)
+  }
+  const done = useTaskStore.getState().completeTask(created.id)!
+  if (origin === 'legacy') {
+    const { completionReturnStatus: _oldAbsentField, ...legacy } = done
+    useTaskStore.setState({ tasks: [legacy] })
+  }
+  expect(current(created.id).completionReturnStatus).toBeUndefined()
+  expect(undoTaskCompletion(created.id, done.completionId)).toBe(true)
+  expect(current(created.id).status).toBe('todo')
+  expect(current(created.id).timerStartedAt).toBeNull()
+  expect(current(created.id).actualMinutes).toBe(origin === 'doing' ? 1 : 0)
+})
+
+it.each(['entity', 'history'] as const)('rolls back a failed waiting completion %s write and permits a clean retry', phase => {
+  const created = task()
+  useTaskStore.getState().updateTask(created.id, { actualMinutes: 30, timerAccumulated: 120 })
+  useTaskStore.getState().waitTask(created.id)
+  const waiting = current(created.id)
+  const setItem = localStorage.setItem.bind(localStorage)
+  const failedKey = phase === 'entity' ? 'anvilite-tasks' : 'anvilite-growth-events'
+  let failOnce = true
+  const write = vi.spyOn(localStorage, 'setItem').mockImplementation((key, value) => {
+    if (key === failedKey && failOnce) { failOnce = false; throw new Error('synthetic waiting completion quota') }
+    setItem(key, value)
+  })
+  try {
+    expect(() => useTaskStore.getState().completeTask(created.id)).toThrow('synthetic waiting completion quota')
+    expect(current(created.id)).toEqual(waiting)
+    expect(useGrowthEventStore.getState().events).toEqual([])
+  } finally { write.mockRestore() }
+  const done = useTaskStore.getState().completeTask(created.id)!
+  expect(done).toMatchObject({ status: 'done', completionReturnStatus: 'waiting', actualMinutes: 32 })
+  expect(undoTaskCompletion(created.id, done.completionId)).toBe(true)
+  expect(current(created.id).status).toBe('waiting')
+})
+
+it.each(['entity', 'history'] as const)('rolls back a failed waiting undo %s write, preserving its receipt for retry', phase => {
+  const created = task()
+  useTaskStore.getState().updateTask(created.id, { actualMinutes: 30, timerAccumulated: 120 })
+  useTaskStore.getState().waitTask(created.id)
+  const done = useTaskStore.getState().completeTask(created.id)!
+  useGrowthEventStore.getState().addEvent({ type: 'custom_milestone', title: 'Unrelated note', details: { description: 'Keep me' }, isMilestone: true })
+  const beforeEvents = [...useGrowthEventStore.getState().events]
+  const setItem = localStorage.setItem.bind(localStorage)
+  const failedKey = phase === 'entity' ? 'anvilite-tasks' : 'anvilite-growth-events'
+  let failOnce = true
+  const write = vi.spyOn(localStorage, 'setItem').mockImplementation((key, value) => {
+    if (key === failedKey && failOnce) { failOnce = false; throw new Error('synthetic waiting undo quota') }
+    setItem(key, value)
+  })
+  try {
+    expect(() => undoTaskCompletion(created.id, done.completionId)).toThrow('synthetic waiting undo quota')
+    expect(current(created.id)).toEqual(done)
+    expect(useGrowthEventStore.getState().events).toEqual(beforeEvents)
+    expect(JSON.parse(localStorage.getItem('anvilite-tasks')!).state.tasks[0]).toEqual(done)
+    expect(JSON.parse(localStorage.getItem('anvilite-growth-events')!).state.events).toEqual(beforeEvents)
+  } finally { write.mockRestore() }
+  expect(undoTaskCompletion(created.id, done.completionId)).toBe(true)
+  expect(current(created.id)).toMatchObject({ status: 'waiting', actualMinutes: 32, timerStartedAt: null, timerAccumulated: 0 })
+  expect(current(created.id).completionReturnStatus).toBeUndefined()
+  expect(useGrowthEventStore.getState().events).toHaveLength(1)
+  expect(useGrowthEventStore.getState().events[0].title).toBe('Unrelated note')
+  expect(undoTaskCompletion(created.id, done.completionId)).toBe(false)
 })
