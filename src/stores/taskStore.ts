@@ -99,6 +99,7 @@ function makeDefaultTask(partial: Partial<Task> & { title: string }): Task {
   return {
     id: partial.id ?? generateId(),
     title: partial.title,
+    ...(partial.mindMapSource ? { mindMapSource: { ...partial.mindMapSource } } : {}),
     category: partial.category ?? 'other',
     difficulty: partial.difficulty ?? 3,
     priority: partial.priority ?? 'medium',

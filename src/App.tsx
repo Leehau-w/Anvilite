@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { lazy, Suspense, useState, useEffect, useCallback } from 'react'
 import { TopBar } from '@/components/layout/TopBar'
 import { Sidebar, type NavTab } from '@/components/layout/Sidebar'
 import { StatusBar } from '@/components/layout/StatusBar'
@@ -15,7 +15,10 @@ import { startDateWatcher } from '@/utils/dateWatcher'
 import { useHabitStore } from '@/stores/habitStore'
 import { useT } from '@/i18n'
 
+const MindMapPage = lazy(() => import('@/components/mindmap/MindMapPage').then(module => ({ default: module.MindMapPage })))
+
 function App() {
+  const t = useT()
   const [activeTab, setActiveTab] = useState<NavTab>('dashboard')
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [inspirationOpen, setInspirationOpen] = useState(false)
@@ -69,6 +72,7 @@ function App() {
                   {activeTab === 'worldmap' && <WorldMap />}
                   {activeTab === 'milestone' && <MilestoneHall />}
                   {activeTab === 'sop' && <SOPPage />}
+                  {activeTab === 'mindmap' && <Suspense fallback={<div role="status" style={{ padding: 24 }}>{t.mindmap_loading}</div>}><MindMapPage /></Suspense>}
                 </ErrorBoundary>
               </main>
             </div>

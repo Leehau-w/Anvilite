@@ -27,6 +27,7 @@ export function TagPill({ tag, size = 'sm', onRemove }: TagPillProps) {
       {tag}
       {onRemove && (
         <button
+          type="button"
           onClick={(e) => { e.stopPropagation(); onRemove() }}
           style={{
             background: 'none',

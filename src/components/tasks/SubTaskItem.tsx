@@ -7,6 +7,7 @@ import { useTaskStore } from '@/stores/taskStore'
 import { useUIStore } from '@/stores/uiStore'
 import { Checkbox } from '@/components/ui/Checkbox'
 import { useT } from '@/i18n'
+import { useToast } from '@/components/feedback/Toast'
 
 const MAX_DEPTH = 2 // depth 0/1/2 → 最多 3 层
 
@@ -17,9 +18,10 @@ interface SubTaskItemProps {
   compact?: boolean
   habit?: boolean
   dragHandle?: React.ReactNode
+  onAddDraftSubTask?: (title: string, parentId: string) => boolean
 }
 
-export function SubTaskItem({ subTask, taskId, depth, compact, habit = false, dragHandle }: SubTaskItemProps) {
+export function SubTaskItem({ subTask, taskId, depth, compact, habit = false, dragHandle, onAddDraftSubTask }: SubTaskItemProps) {
   const tasks = useTaskStore()
   const habits = useHabitStore()
   const toggleSubTask = habit ? habits.toggleSubHabit : tasks.toggleSubTask
@@ -28,6 +30,7 @@ export function SubTaskItem({ subTask, taskId, depth, compact, habit = false, dr
   const addSubTask = habit ? habits.addSubHabit : tasks.addSubTask
   const { isTaskCollapsed, toggleTaskCollapse } = useUIStore()
   const t = useT()
+  const { showToast } = useToast()
   const childrenExpanded = !isTaskCollapsed(subTask.id)
   const [editing, setEditing] = useState(false)
   const [editValue, setEditValue] = useState(subTask.title)
@@ -35,6 +38,8 @@ export function SubTaskItem({ subTask, taskId, depth, compact, habit = false, dr
   const [addingChild, setAddingChild] = useState(false)
   const [childInput, setChildInput] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
+  const editCommitted = useRef(false)
+  const editSaveFailed = useRef(false)
   const childInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -46,16 +51,32 @@ export function SubTaskItem({ subTask, taskId, depth, compact, habit = false, dr
   }, [addingChild])
 
   function handleEditCommit() {
+    if (editCommitted.current) return true
+    editCommitted.current = true
     const v = editValue.trim()
-    if (v && v !== subTask.title) editSubTask(taskId, subTask.id, v)
-    setEditing(false)
+    try {
+      if (v && (v !== subTask.title || editSaveFailed.current)) editSubTask(taskId, subTask.id, v)
+      editSaveFailed.current = false
+      setEditing(false)
+      return true
+    } catch {
+      editCommitted.current = false
+      editSaveFailed.current = true
+      showToast(t.activity_actionFailed)
+      return false
+    }
   }
 
   function handleChildAdd() {
     const v = childInput.trim()
-    if (v) addSubTask(taskId, v, subTask.id)
+    if (v) {
+      if (onAddDraftSubTask) {
+        if (!onAddDraftSubTask(v, subTask.id)) return false
+      } else addSubTask(taskId, v, subTask.id)
+    }
     setChildInput('')
     setAddingChild(false)
+    return true
   }
 
   return (
@@ -132,8 +153,12 @@ export function SubTaskItem({ subTask, taskId, depth, compact, habit = false, dr
             onChange={(e) => setEditValue(e.target.value)}
             onBlur={handleEditCommit}
             onKeyDown={(e) => {
-              if (e.nativeEvent.isComposing) return
-              if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); handleEditCommit() }
+              if (e.nativeEvent.isComposing || e.keyCode === 229) return
+              if (e.key === 'Enter' && editValue.trim()) {
+                e.preventDefault(); e.stopPropagation()
+                const form = e.currentTarget.form
+                if (handleEditCommit() && form?.hasAttribute('data-task-drawer')) form.focus()
+              }
               if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setEditValue(subTask.title); setEditing(false) }
             }}
             style={{
@@ -149,7 +174,7 @@ export function SubTaskItem({ subTask, taskId, depth, compact, habit = false, dr
           />
         ) : (
           <span
-            onClick={() => { setEditValue(subTask.title); setEditing(true) }}
+            onClick={() => { editCommitted.current = false; editSaveFailed.current = false; setEditValue(subTask.title); setEditing(true) }}
             style={{
               flex: 1,
               fontSize: 13,
@@ -189,19 +214,24 @@ export function SubTaskItem({ subTask, taskId, depth, compact, habit = false, dr
 
       {/* 嵌套子项 */}
       {childrenExpanded && <SubTaskList subTasks={subTask.subTasks} taskId={taskId}
-        parentId={subTask.id} depth={depth + 1} compact={compact} habit={habit} />}
+        parentId={subTask.id} depth={depth + 1} compact={compact} habit={habit} onAddDraftSubTask={onAddDraftSubTask} />}
 
       {/* 添加子项输入框 */}
       {addingChild && (
         <div style={{ marginLeft: 18, marginTop: 2, display: 'flex', gap: 4, alignItems: 'center' }}>
           <input
             ref={childInputRef}
+            data-task-child-draft={subTask.id}
             value={childInput}
             onChange={(e) => setChildInput(e.target.value)}
             placeholder={t.subtask_placeholder}
             onKeyDown={(e) => {
-              if (e.nativeEvent.isComposing) return
-              if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); handleChildAdd() }
+              if (e.nativeEvent.isComposing || e.keyCode === 229) return
+              if (e.key === 'Enter' && childInput.trim()) {
+                e.preventDefault(); e.stopPropagation()
+                const form = e.currentTarget.form
+                if (handleChildAdd() && form?.hasAttribute('data-task-drawer')) form.focus()
+              }
               if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setChildInput(''); setAddingChild(false) }
             }}
             onBlur={() => { if (!childInput.trim()) setAddingChild(false) }}
@@ -244,9 +274,10 @@ interface SubTaskListProps {
   depth?: number
   compact?: boolean
   habit?: boolean
+  onAddDraftSubTask?: (title: string, parentId: string) => boolean
 }
 
-export function SubTaskList({ subTasks, taskId, parentId = null, depth = 0, compact, habit = false }: SubTaskListProps) {
+export function SubTaskList({ subTasks, taskId, parentId = null, depth = 0, compact, habit = false, onAddDraftSubTask }: SubTaskListProps) {
   const reorderTasks = useTaskStore(s => s.reorderSubTasks)
   const reorderHabits = useHabitStore(s => s.reorderSubHabits)
   if (!subTasks.length) return null
@@ -255,7 +286,7 @@ export function SubTaskList({ subTasks, taskId, parentId = null, depth = 0, comp
     onPointerDown={e => e.stopPropagation()} onClick={e => e.stopPropagation()}
     style={{ listStyle: 'none', padding: 0, margin: 0, marginLeft: depth > 0 ? 18 : 0 }}>
     {subTasks.map(subTask => <SortableSubTask key={subTask.id} subTask={subTask}
-      taskId={taskId} depth={depth} compact={compact} habit={habit} />)}
+      taskId={taskId} depth={depth} compact={compact} habit={habit} onAddDraftSubTask={onAddDraftSubTask} />)}
   </Reorder.Group>
 }
 

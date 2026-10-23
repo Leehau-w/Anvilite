@@ -8,6 +8,7 @@ import { useSettingsStore } from '@/stores/settingsStore'
 import { useGrowthEventStore } from '@/stores/growthEventStore'
 import { useSOPStore } from '@/stores/sopStore'
 import { useInspirationStore } from '@/stores/inspirationStore'
+import { useMindMapStore } from '@/stores/mindMapStore'
 import { assertAccountBindingCurrent, getBoundAccountId, getStoragePrefix, isAccountBindingCurrent } from '@/stores/accountManager'
 import { validateBackupRecords } from './backupValidation'
 
@@ -32,6 +33,8 @@ export interface ExportData {
     // v0.3 新增（旧备份中可能不存在，导入时做兼容）
     sops?: ReturnType<typeof useSOPStore.getState>
     inspirations?: ReturnType<typeof useInspirationStore.getState>
+    // First mind-map backups add this optional slice; older restores replace it with an empty state.
+    mindMaps?: ReturnType<typeof useMindMapStore.getState>
   }
 }
 
@@ -53,6 +56,7 @@ export function buildExportPayload(): ExportData {
       growthEvents: useGrowthEventStore.getState(),
       sops: useSOPStore.getState(),
       inspirations: useInspirationStore.getState(),
+      mindMaps: useMindMapStore.getState(),
     },
   }
 }
@@ -188,6 +192,7 @@ export function applyImportPayload(data: ExportData): { success: boolean; error?
     growthEvents: 'growth-events',
     sops: 'sops',
     inspirations: 'inspirations',
+    mindMaps: 'mind-maps',
   }
 
   // Serialize and snapshot everything before touching storage. Never import store actions.
@@ -197,7 +202,8 @@ export function applyImportPayload(data: ExportData): { success: boolean; error?
     // Old backups predate these slices: a restore must replace, not merge, them.
     const value = data.data[key] ?? (key === 'sops'
       ? { folders: [], sops: [], selectedSOPId: null, collapsedFolderIds: [], deletedSystemFolderIds: [], deletedSystemSOPIds: [] }
-      : key === 'inspirations' ? { inspirations: [] } : undefined)
+      : key === 'inspirations' ? { inspirations: [] }
+      : key === 'mindMaps' ? { maps: [], selectedMapId: null } : undefined)
     if (value === undefined) return []
     const shape = defaults[key] as unknown as Record<string, unknown>
     // Older backups can omit either dashboard field. Keep the current field in
@@ -217,7 +223,8 @@ export function applyImportPayload(data: ExportData): { success: boolean; error?
     } : value
     const state = Object.fromEntries(Object.keys(shape).filter(k => typeof shape[k] !== 'function' &&
       Object.prototype.hasOwnProperty.call(restored, k)).map(k => [k, (restored as unknown as Record<string, unknown>)[k]]))
-    const version = key === 'dashboard' ? (useDashboardStore.persist.getOptions().version ?? 0) : 0
+    const version = key === 'dashboard' ? (useDashboardStore.persist.getOptions().version ?? 0)
+      : key === 'mindMaps' ? (useMindMapStore.persist.getOptions().version ?? 0) : 0
     return [{ key: `${prefix}-${suffix}`, value: JSON.stringify({ state, version }) }]
   })
   const originals = writes.map(w => ({ key: w.key, value: localStorage.getItem(w.key) }))

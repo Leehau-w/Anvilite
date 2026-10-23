@@ -7,9 +7,10 @@ interface TagInputProps {
   allTags: string[]
   onChange: (tags: string[]) => void
   maxTags?: number
+  onDraftChange?: (value: string) => void
 }
 
-export function TagInput({ tags, allTags, onChange, maxTags = 5 }: TagInputProps) {
+export function TagInput({ tags, allTags, onChange, maxTags = 5, onDraftChange }: TagInputProps) {
   const t = useT()
   const [adding, setAdding] = useState(false)
   const [input, setInput] = useState('')
@@ -29,6 +30,7 @@ export function TagInput({ tags, allTags, onChange, maxTags = 5 }: TagInputProps
     if (tags.length >= maxTags) return
     onChange([...tags, trimmed])
     setInput('')
+    onDraftChange?.('')
     setAdding(false)
   }
 
@@ -69,10 +71,16 @@ export function TagInput({ tags, allTags, onChange, maxTags = 5 }: TagInputProps
           <input
             ref={inputRef}
             value={input}
-            onChange={(e) => setInput(e.target.value)}
+            onChange={(e) => { setInput(e.target.value); onDraftChange?.(e.target.value) }}
             onKeyDown={(e) => {
-              if (e.key === 'Enter') { e.preventDefault(); addTag(input) }
-              if (e.key === 'Escape') { setInput(''); setAdding(false) }
+              if (e.nativeEvent.isComposing || e.keyCode === 229) return
+              if (e.key === 'Enter' && input.trim()) {
+                e.preventDefault()
+                addTag(input)
+                const form = e.currentTarget.form
+                if (form?.hasAttribute('data-task-drawer')) form.focus()
+              }
+              if (e.key === 'Escape') { setInput(''); onDraftChange?.(''); setAdding(false) }
             }}
             onBlur={() => { if (!input.trim()) setTimeout(() => setAdding(false), 150) }}
             placeholder={t.tag_placeholder}
@@ -107,6 +115,7 @@ export function TagInput({ tags, allTags, onChange, maxTags = 5 }: TagInputProps
               {suggestions.map((s) => (
                 <button
                   key={s}
+                  type="button"
                   onMouseDown={(e) => { e.preventDefault(); addTag(s) }}
                   style={{
                     display: 'block',

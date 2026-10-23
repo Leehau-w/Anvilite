@@ -7,12 +7,17 @@ import { useTaskStore } from '@/stores/taskStore'
 import { useAreaStore } from '@/stores/areaStore'
 import { useGrowthEventStore } from '@/stores/growthEventStore'
 import { getTomorrowString } from '@/utils/time'
+import { generateId } from '@/utils/id'
 import { useT } from '@/i18n'
 import { useToast } from '@/components/feedback/Toast'
 import { SubTaskList } from './SubTaskItem'
-import { makeSubTask } from '@/utils/subTaskUtils'
+import { addNestedSubTask, makeSubTask } from '@/utils/subTaskUtils'
 import { TagInput } from './TagInput'
 import { TASK_PRIORITY_COLORS, TASK_COLOR_PRESETS, getTaskColorPreset } from '@/utils/taskPriority'
+
+function hasSubTask(items: SubTask[], id: string): boolean {
+  return items.some(item => item.id === id || hasSubTask(item.subTasks, id))
+}
 
 interface TaskDrawerProps {
   open: boolean
@@ -35,7 +40,7 @@ type FormData = {
 }
 
 export function TaskDrawer({ open, onClose, editTask, initialCategory }: TaskDrawerProps) {
-  const { addTask, updateTask, addSubTask, resumeWaitingTask, lastCategory, tasks } = useTaskStore()
+  const { addTask, updateTask, resumeWaitingTask, lastCategory, tasks } = useTaskStore()
   const currentTask = useTaskStore((s) => editTask ? s.tasks.find((t) => t.id === editTask.id) : null)
   const { addEvent } = useGrowthEventStore()
   const { showToast } = useToast()
@@ -45,6 +50,12 @@ export function TaskDrawer({ open, onClose, editTask, initialCategory }: TaskDra
   const subtaskInputRef = useRef<HTMLInputElement>(null)
   // 新建任务时暂存子项，submit 后批量写入
   const [pendingSubTasks, setPendingSubTasks] = useState<SubTask[]>([])
+  const saving = useRef(false)
+  const composing = useRef(false)
+  // Reuse the identity if persistence failed after adding the task to memory.
+  const createdTaskId = useRef<string | null>(null)
+  const pendingTag = useRef('')
+  const draftSubTasks = useRef(new Map<string, SubTask>())
 
   const defaultForm: FormData = {
     title: editTask?.title ?? '',
@@ -63,6 +74,11 @@ export function TaskDrawer({ open, onClose, editTask, initialCategory }: TaskDra
 
   useEffect(() => {
     if (open) {
+      saving.current = false
+      composing.current = false
+      createdTaskId.current = null
+      pendingTag.current = ''
+      draftSubTasks.current.clear()
       setForm({
         title: editTask?.title ?? '',
         category: editTask?.category ?? initialCategory ?? lastCategory,
@@ -78,18 +94,43 @@ export function TaskDrawer({ open, onClose, editTask, initialCategory }: TaskDra
       setSubtaskInput('')
       setPendingSubTasks([])
     }
-  }, [open, editTask?.id, initialCategory, lastCategory])
+  }, [open, editTask?.id, initialCategory])
 
   function handleClose() {
     setForm(defaultForm)
     onClose()
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    if (saving.current || composing.current || !form.title.trim()) return
+    saving.current = true
     try {
-      e.preventDefault()
-      if (!form.title.trim()) return
+      const latestTask = editTask ? useTaskStore.getState().tasks.find(task => task.id === editTask.id) : null
+      if (editTask && (!latestTask || latestTask.deletedAt)) throw new Error('Task is unavailable')
 
+      const tag = pendingTag.current.trim().slice(0, 20)
+      const tags = tag && form.tags.length < 5 && !form.tags.includes(tag) ? [...form.tags, tag] : form.tags
+      const recoveredCreation = !editTask && createdTaskId.current
+        ? useTaskStore.getState().tasks.find(task => task.id === createdTaskId.current) : null
+      const children = latestTask?.subTasks ?? recoveredCreation?.subTasks ?? pendingSubTasks
+      const stagedChildren = recoveredCreation ? pendingSubTasks.filter(sub => !children.some(child => child.id === sub.id)) : []
+      let nextChildren = stagedChildren.length ? [...children, ...stagedChildren] : children
+      const drafts = [
+        { parentId: '', title: subtaskInput },
+        ...Array.from(e.currentTarget.querySelectorAll<HTMLInputElement>('[data-task-child-draft]'), input => ({
+          parentId: input.dataset.taskChildDraft!, title: input.value,
+        })),
+      ]
+      for (const draft of drafts) {
+        const title = draft.title.trim()
+        if (!title) continue
+        const key = `${draft.parentId}\0${title}`
+        const sub = draftSubTasks.current.get(key) ?? makeSubTask(title, nextChildren.length)
+        draftSubTasks.current.set(key, sub)
+        if (!hasSubTask(nextChildren, sub.id)) nextChildren = draft.parentId
+          ? addNestedSubTask(nextChildren, draft.parentId, sub) : [...nextChildren, sub]
+      }
       const data = {
         title: form.title.trim(),
         category: form.category,
@@ -98,8 +139,10 @@ export function TaskDrawer({ open, onClose, editTask, initialCategory }: TaskDra
         backgroundColor: form.backgroundColor,
         dueDate: form.hasDueDate ? form.dueDate : null,
         description: form.description,
-        tags: form.tags,
-        ...(editTask?.status === 'done' && form.actualMinutes !== ''
+        tags,
+        ...(nextChildren !== children ? { subTasks: nextChildren } : {}),
+        ...(latestTask?.status === 'done' && form.actualMinutes !== ''
+          && form.actualMinutes !== (editTask?.actualMinutes ? String(editTask.actualMinutes) : '')
           ? { actualMinutes: Number(form.actualMinutes) }
           : {}),
       }
@@ -107,26 +150,77 @@ export function TaskDrawer({ open, onClose, editTask, initialCategory }: TaskDra
       if (editTask) {
         updateTask(editTask.id, data)
       } else {
-        const newTask = addTask(data)
-        // 将新建前暂存的子项批量写入
-        pendingSubTasks.forEach((sub) => addSubTask(newTask.id, sub.title))
+        const id = createdTaskId.current ?? generateId()
+        createdTaskId.current = id
+        if (useTaskStore.getState().tasks.some(task => task.id === id)) {
+          updateTask(id, data)
+        } else {
+          const previousCategory = useTaskStore.getState().lastCategory
+          try {
+            addTask({ ...data, id, subTasks: nextChildren })
+          } catch (error) {
+            const added = useTaskStore.getState().tasks.find(task => task.id === id)
+            // Persist may throw after updating memory. Remove only this unchanged creation.
+            if (added && added.status === 'todo' && added.subTasks === nextChildren
+              && Object.entries(data).every(([key, value]) => added[key as keyof Task] === value)) {
+              try { useTaskStore.setState(state => ({
+                tasks: state.tasks.filter(task => task !== added),
+                lastCategory: state.lastCategory === data.category ? previousCategory : state.lastCategory,
+              })) } catch { /* memory rollback still runs when storage remains unavailable */ }
+            }
+            throw error
+          }
+        }
       }
       handleClose()
     } catch {
+      saving.current = false
       showToast(t.activity_actionFailed)
     }
   }
 
-  function handleAddSubTask() {
-    if (!subtaskInput.trim()) return
-    if (editTask) {
-      addSubTask(editTask.id, subtaskInput.trim())
-    } else {
-      // 新建模式：先放入本地暂存列表
-      setPendingSubTasks((prev) => [...prev, makeSubTask(subtaskInput.trim(), prev.length)])
+  function handleFormKeyDown(e: React.KeyboardEvent<HTMLFormElement>) {
+    // Category creation uses a portal with its own form and Enter behavior.
+    if (!(e.target as HTMLElement).closest('form')?.hasAttribute('data-task-drawer') || e.key !== 'Enter' || e.defaultPrevented) return
+    if (e.shiftKey && e.target instanceof HTMLTextAreaElement) return
+    e.preventDefault()
+    e.stopPropagation()
+    if (!e.repeat) e.currentTarget.requestSubmit()
+  }
+
+  function saveDraftSubTask(title: string, parentId = ''): boolean {
+    const trimmed = title.trim()
+    if (!trimmed) return false
+    const key = `${parentId}\0${trimmed}`
+    const sub = draftSubTasks.current.get(key) ?? makeSubTask(trimmed, 0)
+    draftSubTasks.current.set(key, sub)
+    try {
+      if (editTask) {
+        const latest = useTaskStore.getState().tasks.find(task => task.id === editTask.id)
+        if (!latest || latest.deletedAt || (parentId && !hasSubTask(latest.subTasks, parentId))) {
+          throw new Error('Task or parent is unavailable')
+        }
+        // Retry the same draft identity against current children after a failed write.
+        const children = hasSubTask(latest.subTasks, sub.id) ? latest.subTasks : parentId
+          ? addNestedSubTask(latest.subTasks, parentId, sub)
+          : [...latest.subTasks, { ...sub, sortOrder: latest.subTasks.length }]
+        updateTask(latest.id, { subTasks: children })
+      } else {
+        setPendingSubTasks(previous => hasSubTask(previous, sub.id) ? previous
+          : [...previous, { ...sub, sortOrder: previous.length }])
+      }
+      draftSubTasks.current.delete(key)
+      return true
+    } catch {
+      showToast(t.activity_actionFailed)
+      return false
     }
+  }
+
+  function handleAddSubTask() {
+    if (!saveDraftSubTask(subtaskInput)) return
     setSubtaskInput('')
-    if (subtaskInputRef.current) subtaskInputRef.current.focus()
+    subtaskInputRef.current?.focus()
   }
 
   function handleRemovePending(id: string) {
@@ -155,7 +249,20 @@ export function TaskDrawer({ open, onClose, editTask, initialCategory }: TaskDra
 
   return (
     <Drawer open={open} onClose={handleClose} title={editTask ? t.taskDrawer_editTitle : t.taskDrawer_createTitle}>
-      <form onSubmit={handleSubmit} className="flex flex-col gap-5 p-4">
+      <form data-task-drawer tabIndex={-1} onSubmit={handleSubmit} onKeyDown={handleFormKeyDown}
+        onCompositionStartCapture={event => {
+          if ((event.target as HTMLElement).closest('form')?.hasAttribute('data-task-drawer')) composing.current = true
+        }}
+        onCompositionEndCapture={event => {
+          if ((event.target as HTMLElement).closest('form')?.hasAttribute('data-task-drawer')) composing.current = false
+        }}
+        onKeyDownCapture={event => {
+          if ((event.target as HTMLElement).closest('form')?.hasAttribute('data-task-drawer') && event.key === 'Enter'
+            && (composing.current || event.nativeEvent.isComposing || event.keyCode === 229)) {
+            event.preventDefault()
+            event.stopPropagation()
+          }
+        }} className="flex flex-col gap-5 p-4">
         {currentTask && !currentTask.deletedAt && currentTask.status === 'waiting' && (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
             {currentTask.status === 'waiting' && (
@@ -214,6 +321,7 @@ export function TaskDrawer({ open, onClose, editTask, initialCategory }: TaskDra
             tags={form.tags}
             allTags={allTags}
             onChange={(tags) => setForm((f) => ({ ...f, tags }))}
+            onDraftChange={value => { pendingTag.current = value }}
           />
         </div>
 
@@ -328,7 +436,7 @@ export function TaskDrawer({ open, onClose, editTask, initialCategory }: TaskDra
 
           {/* 子项列表 */}
           {editTask ? (
-            <SubTaskList subTasks={subTasks} taskId={editTask.id} />
+            <SubTaskList subTasks={subTasks} taskId={editTask.id} onAddDraftSubTask={saveDraftSubTask} />
           ) : pendingSubTasks.map(sub => (
             <div key={sub.id} style={{ display: 'flex', gap: 6 }}>
               <span style={{ flex: 1 }}>{sub.title}</span>
@@ -343,8 +451,8 @@ export function TaskDrawer({ open, onClose, editTask, initialCategory }: TaskDra
               value={subtaskInput}
               onChange={(e) => setSubtaskInput(e.target.value)}
               onKeyDown={(e) => {
-                if (e.nativeEvent.isComposing) return
-                if (e.key === 'Enter') {
+                if (e.nativeEvent.isComposing || e.keyCode === 229) return
+                if (e.key === 'Enter' && subtaskInput.trim()) {
                   e.preventDefault()
                   handleAddSubTask()
                 }

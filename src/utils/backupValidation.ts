@@ -1,3 +1,4 @@
+import { isValidMindMapState, isValidMindMapTaskSource } from '@/types/mindMap'
 import { getSystemSOPs, SYSTEM_FOLDER_ID } from '@/data/systemSOPs'
 import { isValidMilestoneDate } from './activityHistory'
 
@@ -57,6 +58,7 @@ const snapshotKeys = ['consecutiveCount', 'totalCompletions', 'toleranceCharges'
 function tree(v: unknown, childKey: string, depth = 0): boolean {
   return depth <= 3 && Array.isArray(v) && v.every(n => object(n) && has(n, ['id', 'title'], string) &&
     (childKey === 'childSteps' || typeof n.completed === 'boolean') &&
+    (childKey !== 'subTasks' || optional(n, ['mindMapSource'], isValidMindMapTaskSource)) &&
     number(n.sortOrder) && tree(n[childKey], childKey, depth + 1))
 }
 
@@ -91,6 +93,7 @@ export function validateBackupRecords(data: Obj): string | null {
     ['todo', 'doing', 'waiting', 'done'].includes(t.status as string) && [1, 2, 3, 4, 5].includes(t.difficulty as number) &&
     ['urgent', 'high', 'medium', 'low'].includes(t.priority as string) &&
     optional(t, ['completionReturnStatus'], value => value === 'waiting') &&
+    optional(t, ['mindMapSource'], isValidMindMapTaskSource) &&
     optional(t, ['backgroundColor'], value => value === null || typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value)) &&
     optional(t, ['actualMinutes', 'xpReward', 'timerAccumulated', 'sortOrder'], number) &&
     (t.status !== 'waiting' || (t.timerStartedAt == null &&
@@ -143,6 +146,7 @@ export function validateBackupRecords(data: Obj): string | null {
       !optional(slice, ['collapsedFolderIds'], strings) ||
       !optional(slice, ['selectedSOPId'], value => value === null || string(value))) return 'invalid_sops'
   }
+  if (data.mindMaps !== undefined && !isValidMindMapState(data.mindMaps)) return 'invalid_mindMaps'
   if (data.inspirations !== undefined && !records('inspirations', 'inspirations', i => string(i.content) && string(i.createdAt))) return 'invalid_inspirations'
   return null
 }

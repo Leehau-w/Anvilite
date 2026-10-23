@@ -1,4 +1,8 @@
+import type { MindMapTaskSource } from './mindMap'
+
 export interface SubTask {
+  /** Durable node identity prevents duplicate children on a failed association retry. */
+  mindMapSource?: MindMapTaskSource
   id: string
   title: string
   completed: boolean
@@ -10,6 +14,8 @@ export interface SubTask {
 export interface Task {
   id: string
   title: string
+  /** Durable conversion identity lets a failed cross-store save recover the same task. */
+  mindMapSource?: MindMapTaskSource
   category: string
   difficulty: 1 | 2 | 3 | 4 | 5
   priority: 'urgent' | 'high' | 'medium' | 'low'
