@@ -2,18 +2,14 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { Character } from '@/types/character'
 import { getStoragePrefix } from './accountManager'
-import { applyXP, getTitle } from '@/engines/levelEngine'
-import { calculateTaskXP } from '@/engines/xpEngine'
 import { formatDateKey, getTodayString } from '@/utils/time'
-import { useGrowthEventStore } from './growthEventStore'
-import { useTaskStore } from './taskStore'
 
 interface CharacterStore {
   character: Character
   setName: (name: string) => void
   gainXPAndOre: (xp: number, ore: number) => { leveledUp: boolean; oldLevel: number; newLevel: number; prestigeUnlocked: boolean }
   revokeXP: (xp: number) => void
-  spendOre: (amount: number) => boolean   // 返回 true=成功, false=矿石不足
+  spendOre: (amount: number) => boolean   // Legacy purchase API is disabled and returns false.
   setGlobalStatus: (status: Character['globalStatus']) => void
   setTitlePreset: (preset: Character['titlePreset']) => void
   setCustomTitles: (titles: string[]) => void
@@ -47,70 +43,19 @@ export const useCharacterStore = create<CharacterStore>()(
       setName: (name) =>
         set((s) => ({ character: { ...s.character, name } })),
 
-      gainXPAndOre: (xp, ore) => {
-        const { character } = get()
-        const oldLevel = character.level
-        const { newLevel, newCurrentXP, leveledUp } = applyXP(
-          character.level,
-          character.currentXP,
-          xp
-        )
-        // 首次达到 Lv.51 且尚未转生
-        const prestigeUnlocked = oldLevel < 51 && newLevel >= 51 && (character.prestigeLevel ?? 0) === 0
-        set((s) => ({
-          character: {
-            ...s.character,
-            level: newLevel,
-            currentXP: newCurrentXP,
-            totalXP: s.character.totalXP + xp,
-            ore: s.character.ore + ore,
-            totalOreEarned: s.character.totalOreEarned + ore,
-          },
-        }))
-        if (leveledUp) {
-          useGrowthEventStore.getState().addEvent({
-            type: 'level_up',
-            title: `升至 Lv.${newLevel}`,
-            details: { oldLevel, newLevel },
-            isMilestone: newLevel % 10 === 0,
-          })
-        }
-        return { leveledUp, oldLevel, newLevel, prestigeUnlocked }
+      // Kept for legacy callers and backups; rewards no longer change stored balances.
+      gainXPAndOre: () => {
+        const level = get().character.level
+        return { leveledUp: false, oldLevel: level, newLevel: level, prestigeUnlocked: false }
       },
-
-      spendOre: (amount) => {
-        const { character } = get()
-        if (character.ore < amount) return false
-        set((s) => ({ character: { ...s.character, ore: s.character.ore - amount } }))
-        return true
-      },
-
-      revokeXP: (xp) => {
-        const { character } = get()
-        const { newLevel, newCurrentXP } = applyXP(
-          character.level,
-          character.currentXP,
-          -xp
-        )
-        set((s) => ({
-          character: {
-            ...s.character,
-            level: newLevel,
-            currentXP: newCurrentXP,
-            totalXP: Math.max(0, s.character.totalXP - xp),
-            // 矿石不收回
-          },
-        }))
-      },
+      spendOre: () => false,
+      revokeXP: () => {},
 
       setGlobalStatus: (status) =>
         set((s) => ({ character: { ...s.character, globalStatus: status } })),
 
-      setTitlePreset: (preset) =>
-        set((s) => ({ character: { ...s.character, titlePreset: preset } })),
-
-      setCustomTitles: (titles) =>
-        set((s) => ({ character: { ...s.character, customTitles: titles } })),
+      setTitlePreset: () => {},
+      setCustomTitles: () => {},
 
       recordActivity: () => {
         const { character } = get()
@@ -134,62 +79,12 @@ export const useCharacterStore = create<CharacterStore>()(
         return { oldStreak, newStreak }
       },
 
-      prestige: () => {
-        const newPrestigeLevel = (get().character.prestigeLevel ?? 0) + 1
-        set((s) => ({
-          character: {
-            ...s.character,
-            level: 1,
-            currentXP: 0,
-            prestigeLevel: newPrestigeLevel,
-          },
-        }))
-        useGrowthEventStore.getState().addEvent({
-          type: 'prestige',
-          title: `淬火重铸 ×${newPrestigeLevel}`,
-          details: {},
-          isMilestone: true,
-        })
-      },
-
-      getTitle: () => {
-        const { character } = get()
-        return getTitle(character.level, character.titlePreset, character.customTitles)
-      },
+      prestige: () => {},
+      getTitle: () => '',
     }),
     {
       name: `${getStoragePrefix()}-character`,
-      onRehydrateStorage: () => (state) => {
-        if (!state) return
-        // 填充新字段默认值
-        if (state.character.xpFormulaVersion === undefined) {
-          state.character.xpFormulaVersion = 0
-        }
-        // 追溯重算：v2 乘法公式上线，重算所有已完成任务的 XP
-        if ((state.character.xpFormulaVersion ?? 0) < 2) {
-          const tasks = useTaskStore.getState().tasks
-          const doneTasks = tasks.filter((t) => t.status === 'done' && !t.deletedAt)
-          let totalXP = 0
-          doneTasks.forEach((task) => {
-            const { xp } = calculateTaskXP(task, 0) // 历史记录无 streakDays，用 0
-            totalXP += xp
-          })
-          // 用重算后的 XP 重置等级
-          // MED-10: safety guard — break if lvl exceeds 500 or totalXP is invalid
-          let lvl = 1, curXP = totalXP
-          if (!Number.isFinite(curXP) || curXP < 0) curXP = 0
-          while (lvl <= 500) {
-            const needed = Math.round(5 * Math.log(lvl + 1) * lvl)
-            if (curXP < needed) break
-            curXP -= needed
-            lvl++
-          }
-          state.character.level = lvl
-          state.character.currentXP = curXP
-          state.character.totalXP = totalXP
-          state.character.xpFormulaVersion = 2
-        }
-      },
+      // Historical reward values are compatibility data, never recalculated on hydration.
     }
   )
 )

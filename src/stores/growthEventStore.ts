@@ -14,12 +14,18 @@ interface GrowthEventStore {
 
 export const useGrowthEventStore = create<GrowthEventStore>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       events: [],
 
       addEvent: (event) => {
+        // Preserve imported history while preventing any new game-only activity.
+        if (['level_up', 'badge_earned', 'area_level_up', 'prestige'].includes(event.type)) return
+        const { xpGained: _xp, oreGained: _ore, ...details } = event.details
+        if (['task_complete', 'habit_complete', 'habit_skip'].includes(event.type) && details.entityId && details.completionId &&
+          get().events.some(existing => existing.type === event.type && existing.details.entityId === details.entityId &&
+            existing.details.completionId === details.completionId)) return
         const newEvent: GrowthEvent = {
-          ...event,
+          ...event, details,
           id: generateId(),
           timestamp: new Date().toISOString(),
         }

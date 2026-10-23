@@ -30,3 +30,8 @@ release
 *.njsproj
 *.sln
 *.sw?
+
+dist-mcp
+
+# Generated isolated audit profiles, screenshots and reports (scripts stay tracked)
+.dev/audit/*/

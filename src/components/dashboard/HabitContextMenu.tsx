@@ -80,7 +80,7 @@ export function HabitContextMenu({ habit, position, onClose, onEdit, onUndo }: H
   }
 
   function closeAfter(action: () => void) {
-    action()
+    try { action() } catch { showToast(t.activity_actionFailed) }
     onClose()
   }
 

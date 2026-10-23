@@ -32,17 +32,39 @@ export function getCurrentAccountId(): string {
   return localStorage.getItem(CURRENT_KEY) ?? DEFAULT_ID
 }
 
+// Stores in this window stay bound to this account until a full reload.
+const boundAccountId = getCurrentAccountId()
+let accountBindingInvalidated = false
+
+export function getBoundAccountId(): string {
+  return boundAccountId
+}
+
+export function isAccountBindingCurrent(): boolean {
+  if (getCurrentAccountId() !== boundAccountId) accountBindingInvalidated = true
+  return !accountBindingInvalidated
+}
+
+export function assertAccountBindingCurrent(): void {
+  if (!isAccountBindingCurrent()) throw new Error('account_changed')
+}
+
+// A different instance can change the shared key while an async operation waits.
+// Once invalidated, this window must reload even if the account later changes back.
+window.addEventListener?.('storage', (event) => {
+  if (event.key === CURRENT_KEY && event.oldValue !== event.newValue || event.key === null) {
+    accountBindingInvalidated = true
+  }
+})
+
 /**
  * 获取当前账号的 localStorage key 前缀。
  *
- * LOW-19: This value is evaluated at module load time. Changing accounts at runtime
- * requires a full page reload (handled by `switchAccount()` calling `window.location.reload()`).
- * All Zustand stores use this prefix in their `persist` config, so they are bound to
- * the account that was active when the module was first imported.
+ * The account is captured once when this module loads. Changing accounts requires
+ * a full page reload; delayed imports must not bind stores to another account.
  */
 export function getStoragePrefix(): string {
-  const id = getCurrentAccountId()
-  return id === DEFAULT_ID ? 'anvilite' : `anvilite-${id}`
+  return boundAccountId === DEFAULT_ID ? 'anvilite' : `anvilite-${boundAccountId}`
 }
 
 // ── 写入 ─────────────────────────────────────────────────────────────────────

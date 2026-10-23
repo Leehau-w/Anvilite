@@ -1,0 +1,12 @@
+.milestone-page {
+  height: 100%; overflow: auto; background: var(--color-bg); color: var(--color-text);
+  padding: 24px; box-sizing: border-box; container-type: inline-size;
+}
+.milestone-content { max-width: 1400px; margin: 0 auto; }
+.milestone-columns { display: grid; grid-template-columns: 272px minmax(0, 1fr); gap: 20px; align-items: start; }
+.milestone-profile { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.milestone-records { min-width: 0; }
+@container (max-width: 620px) {
+  .milestone-columns { grid-template-columns: minmax(0, 1fr); }
+  .milestone-records { grid-column: 1; grid-row: auto; }
+}

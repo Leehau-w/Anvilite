@@ -7,7 +7,6 @@ import type { Area } from '@/types/area'
 import { AreaCard } from './AreaCard'
 import { AddAreaModal } from './AddAreaModal'
 import { InteriorSpace } from '@/components/interior/InteriorSpace'
-import { getProsperityInfo, getAreaSkillXP } from '@/engines/prosperityEngine'
 import { useT } from '@/i18n'
 import { getAreaDisplayName } from '@/utils/area'
 import { computeOptimalCols } from '@/utils/grid'
@@ -123,11 +122,7 @@ export function WorldMap() {
     <div style={{ height: '100%', position: 'relative' }}>
       {/* 区域内部（始终挂载，用 display 切换） */}
       <div style={{ display: showInterior ? 'block' : 'none', height: '100%' }}>
-        {interiorArea && (() => {
-          const skillXP = getAreaSkillXP(tasks, interiorArea.category)
-          const prosperity = getProsperityInfo(skillXP)
-          return <InteriorSpace area={interiorArea} prosperity={prosperity} onExit={handleBack} />
-        })()}
+        {interiorArea && <InteriorSpace area={interiorArea} onExit={handleBack} />}
       </div>
 
       {/* 地图主视图（始终挂载，containerRef 不丢失） */}
@@ -139,7 +134,7 @@ export function WorldMap() {
       }}>
         <div>
           <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: 'var(--color-text)' }}>
-            {t.worldmap_title ?? '世界地图'}
+            {t.worldmap_title}
           </h2>
           <span style={{ fontSize: 12, color: 'var(--color-text-dim)' }}>
             {t.worldmap_areaCount(areas.length)}

@@ -2,31 +2,27 @@ import React, { useState, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import type { Area } from '@/types/area'
 import { AREA_TEMPLATES } from '@/types/area'
-import type { ProsperityInfo } from '@/engines/prosperityEngine'
 import type { Task } from '@/types/task'
 import type { Habit } from '@/types/habit'
 import { useTaskStore } from '@/stores/taskStore'
 import { undoTaskCompletion } from '@/utils/taskCompletion'
 import { useHabitStore } from '@/stores/habitStore'
-import { useCharacterStore } from '@/stores/characterStore'
-import { useGrowthEventStore } from '@/stores/growthEventStore'
 import { useDecorationStore } from '@/stores/decorationStore'
-import { calculateTaskXP } from '@/engines/xpEngine'
-import { useFeedback } from '@/components/feedback/FeedbackContext'
 import { useToast } from '@/components/feedback/Toast'
 import { TaskDrawer } from '@/components/tasks/TaskDrawer'
+import { TaskDragHandle } from '@/components/tasks/TaskDragHandle'
+import { taskPriorityBackground } from '@/utils/taskPriority'
 import { HabitDrawer } from '@/components/dashboard/HabitDrawer'
 import { HabitManageModal } from '@/components/dashboard/HabitManageModal'
-import { DecoShop } from './DecoShop'
 import { ArchiveSpace } from './ArchiveSpace'
 import { ALL_DECORATIONS } from '@/types/decoration'
 import { isOverdue, formatRelativeDate } from '@/utils/time'
 import { getAreaDisplayName } from '@/utils/area'
 import { useT } from '@/i18n'
+import { getAreaActivityStats } from '@/utils/areaStats'
 
 interface InteriorSpaceProps {
   area: Area
-  prosperity: ProsperityInfo
   onExit: () => void
 }
 
@@ -34,32 +30,29 @@ function delay(ms: number) {
   return new Promise<void>((resolve) => setTimeout(resolve, ms))
 }
 
-export function InteriorSpace({ area, prosperity, onExit }: InteriorSpaceProps) {
+export function InteriorSpace({ area, onExit }: InteriorSpaceProps) {
   const t = useT()
   const isMilestone = area.category === '_milestone'
   const areaDisplayName = getAreaDisplayName(area, t)
 
   if (isMilestone) {
-    return <ArchiveSpace area={area} prosperity={prosperity} onExit={onExit} />
+    return <ArchiveSpace area={area} onExit={onExit} />
   }
   const emoji = area.templateId
-    ? AREA_TEMPLATES[area.templateId].prosperityEmojis[prosperity.prosperityLevel - 1]
+    ? AREA_TEMPLATES[area.templateId].prosperityEmojis[0]
     : '🏗️'
 
   const [taskDrawerOpen, setTaskDrawerOpen] = useState(false)
+  const [editTask, setEditTask] = useState<Task | null>(null)
   const [habitDrawerOpen, setHabitDrawerOpen] = useState(false)
   const [habitManageOpen, setHabitManageOpen] = useState(false)
-  const [decoShopOpen, setDecoShopOpen] = useState(false)
   const [editHabit, setEditHabit] = useState<Habit | null>(null)
   const [showAllTasks, setShowAllTasks] = useState(false)
   const [showAllHabits, setShowAllHabits] = useState(false)
 
-  const { tasks, completeTask, undoComplete, updateTask, startTask } = useTaskStore()
-  const { habits, completeHabit, skipHabit } = useHabitStore()
-  const { character, gainXPAndOre, recordActivity, revokeXP } = useCharacterStore()
-  const { addEvent, removeEvent } = useGrowthEventStore()
+  const { tasks, completeTask, startTask, waitTask, resumeWaitingTask } = useTaskStore()
+  const { habits, completeHabit, skipHabit, undoComplete: undoHabitComplete } = useHabitStore()
   const { getOwned } = useDecorationStore()
-  const { triggerFeedback } = useFeedback()
   const { showToast } = useToast()
 
   // ── 区域数据 ──────────────────────────────────────────────────────
@@ -67,11 +60,12 @@ export function InteriorSpace({ area, prosperity, onExit }: InteriorSpaceProps) 
 
   const activeTasks = areaTasks.filter((t) => t.status === 'doing')
   const todoTasks = areaTasks.filter((t) => t.status === 'todo')
+  const waitingTasks = areaTasks.filter((t) => t.status === 'waiting')
   const doneTasks = areaTasks.filter((t) => t.status === 'done')
 
   const visibleTasks = showAllTasks
-    ? [...activeTasks, ...todoTasks, ...doneTasks]
-    : [...activeTasks, ...todoTasks].slice(0, 6)
+    ? [...activeTasks, ...todoTasks, ...waitingTasks, ...doneTasks]
+    : [...activeTasks, ...todoTasks, ...waitingTasks].slice(0, 6)
 
   const areaHabits = habits.filter((h) => h.status !== 'archived' && h.category === area.category)
 
@@ -82,68 +76,57 @@ export function InteriorSpace({ area, prosperity, onExit }: InteriorSpaceProps) 
 
   // ── 任务完成 ──────────────────────────────────────────────────────
   const handleCompleteTask = useCallback(async (task: Task) => {
-    if (task.status === 'done') return
-    const completed = completeTask(task.id)
-    if (!completed) return
-
-    const { xp, ore } = calculateTaskXP(completed, character.streakDays)
-    updateTask(task.id, { xpReward: xp })
-    const { leveledUp, oldLevel, newLevel, prestigeUnlocked } = gainXPAndOre(xp, ore)
-    const { oldStreak, newStreak } = recordActivity()
-
-    addEvent({
-      type: 'task_complete',
-      title: t.task_eventTitle(task.title),
-      details: { entityId: task.id, completionId: completed.completionId, xpGained: xp, oreGained: ore, actualMinutes: completed.actualMinutes, categoryName: task.category },
-      isMilestone: false,
-    })
-
-    triggerFeedback({ xp, ore, leveledUp, oldLevel, newLevel, oldStreakDays: oldStreak, newStreakDays: newStreak, prestigeUnlocked })
-    await delay(50)
-    showToast(t.task_toastDone(xp), {
-      label: t.task_toastUndo,
-      onClick: () => {
-        undoTaskCompletion(task.id, completed.completionId)
-      },
-    })
-  }, [completeTask, updateTask, gainXPAndOre, recordActivity, addEvent, triggerFeedback, showToast, undoComplete, revokeXP, removeEvent, character.streakDays])
+    try {
+      if (task.status === 'done') {
+        if (undoTaskCompletion(task.id, task.completionId)) showToast(t.task_toastUndoDone)
+        return
+      }
+      const completed = completeTask(task.id)
+      if (!completed) return
+      await delay(50)
+      showToast(t.task_toastDone(0), {
+        label: t.task_toastUndo,
+        onClick: () => {
+          try { undoTaskCompletion(task.id, completed.completionId) }
+          catch { showToast(t.activity_actionFailed) }
+        },
+      })
+    } catch {
+      showToast(t.activity_actionFailed)
+    }
+  }, [completeTask, showToast, t])
 
   // ── 习惯完成 ──────────────────────────────────────────────────────
   function handleCompleteHabit(habit: Habit) {
-    const result = completeHabit(habit.id)
-    if (!result) return
+    try {
+      if (habit.status === 'completed_today') {
+        showToast(undoHabitComplete(habit.id, habit.lastAction?.id) ? t.habit_undoneToast(habit.title) : t.habit_undoUnavailable)
+        return
+      }
+      const result = completeHabit(habit.id)
+      if (!result) return
 
-    if (result.partial) {
-      const current = (habit.currentCycleCount ?? 0) + 1
-      const target = habit.targetCount ?? 1
-      showToast(t.interior_habitPartial(habit.title, current, target))
-      return
+      if (result.partial) {
+        const current = (habit.currentCycleCount ?? 0) + 1
+        const target = habit.targetCount ?? 1
+        showToast(t.interior_habitPartial(habit.title, current, target))
+        return
+      }
+
+      showToast(t.habitCard_toastComplete(habit.title, result.newStreak))
+    } catch {
+      showToast(t.activity_actionFailed)
     }
-
-    const { leveledUp, oldLevel, newLevel, prestigeUnlocked } = gainXPAndOre(result.xp, result.ore)
-    const { oldStreak, newStreak } = recordActivity()
-    addEvent({
-      type: 'habit_complete',
-      title: t.habitCard_eventTitle(habit.title),
-      details: { entityId: habit.id, completionId: useHabitStore.getState().habits.find(h => h.id === habit.id)?.lastAction?.id,
-        xpGained: result.xp, oreGained: result.ore, consecutiveCount: result.newStreak, categoryName: habit.category },
-      isMilestone: false,
-    })
-    triggerFeedback({ xp: result.xp, ore: result.ore, leveledUp, oldLevel, newLevel, oldStreakDays: oldStreak, newStreakDays: newStreak, prestigeUnlocked })
-    showToast(t.habitCard_toastComplete(habit.title, result.newStreak))
   }
 
   function handleSkipHabit(habit: Habit) {
-    const result = skipHabit(habit.id)
-    if (!result) return
-    addEvent({
-      type: 'habit_skip',
-      title: t.habitCard_eventSkip(habit.title),
-      details: { entityId: habit.id, completionId: useHabitStore.getState().habits.find(h => h.id === habit.id)?.lastAction?.id,
-        consecutiveCount: result.newStreak, categoryName: habit.category },
-      isMilestone: false,
-    })
-    showToast(t.habitCard_toastSkip(habit.title))
+    try {
+      const result = skipHabit(habit.id)
+      if (!result) return
+      showToast(t.habitCard_toastSkip(habit.title))
+    } catch {
+      showToast(t.activity_actionFailed)
+    }
   }
 
   // ── 已拥有装饰 ───────────────────────────────────────────────────
@@ -153,13 +136,9 @@ export function InteriorSpace({ area, prosperity, onExit }: InteriorSpaceProps) 
   )
 
   // ── 右面板统计 ────────────────────────────────────────────────────
-  const totalXP = prosperity.totalSkillXP
-  const completedCount = doneTasks.length
-  const totalMinutes = areaTasks.filter((t) => t.status === 'done').reduce((s, t) => s + (t.actualMinutes ?? 0), 0)
+  const { completedTaskCount: completedCount, totalMinutes } = getAreaActivityStats(tasks, area.category)
   const hours = Math.floor(totalMinutes / 60)
   const mins = totalMinutes % 60
-
-  const progressPercent = Math.round(prosperity.subLevelFraction * 100)
 
   return (
     <div
@@ -218,18 +197,6 @@ export function InteriorSpace({ area, prosperity, onExit }: InteriorSpaceProps) 
         {/* 区域标题 */}
         <span style={{ fontSize: 22 }}>{emoji}</span>
         <span style={{ fontSize: 16, fontWeight: 700, color: 'var(--color-text)' }}>{areaDisplayName}</span>
-        <span
-          style={{
-            fontSize: 11,
-            color: 'var(--color-accent)',
-            fontWeight: 500,
-            background: 'color-mix(in srgb, var(--color-accent) 12%, transparent)',
-            padding: '2px 8px',
-            borderRadius: 'var(--radius-full)',
-          }}
-        >
-          {prosperity.prosperityName}
-        </span>
 
         <div style={{ flex: 1 }} />
       </div>
@@ -253,9 +220,9 @@ export function InteriorSpace({ area, prosperity, onExit }: InteriorSpaceProps) 
                 {/* ─ 任务区 ─ */}
                 <PanelSection
                   title={t.interior_panelTasks}
-                  count={activeTasks.length + todoTasks.length}
+                  count={activeTasks.length + todoTasks.length + waitingTasks.length}
                   action={
-                    <button onClick={() => setTaskDrawerOpen(true)} style={addBtnStyle}>
+                    <button onClick={() => { setEditTask(null); setTaskDrawerOpen(true) }} style={addBtnStyle}>
                       {t.interior_newTask}
                     </button>
                   }
@@ -271,13 +238,15 @@ export function InteriorSpace({ area, prosperity, onExit }: InteriorSpaceProps) 
                             task={task}
                             onComplete={() => handleCompleteTask(task)}
                             onStart={() => startTask(task.id)}
+                            onWaitingToggle={() => task.status === 'waiting' ? resumeWaitingTask(task.id) : waitTask(task.id)}
+                            onEdit={() => { setEditTask(task); setTaskDrawerOpen(true) }}
                           />
                         ))}
                       </AnimatePresence>
                     </div>
                   )}
                   {/* 展开/收起 */}
-                  {(activeTasks.length + todoTasks.length > 6 || doneTasks.length > 0) && (
+                  {(activeTasks.length + todoTasks.length + waitingTasks.length > 6 || doneTasks.length > 0) && (
                     <button
                       onClick={() => setShowAllTasks((v) => !v)}
                       style={toggleBtnStyle}
@@ -419,43 +388,9 @@ export function InteriorSpace({ area, prosperity, onExit }: InteriorSpaceProps) 
         >
           <div style={{ flex: 1, overflowY: 'auto', padding: '16px 14px', display: 'flex', flexDirection: 'column', gap: 20 }}>
 
-            {/* ─ 技能进度 ─ */}
-            <PanelSection title={t.interior_panelSkills}>
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 8 }}>
-                <span style={{ fontSize: 22, fontWeight: 700, color: 'var(--color-text)', fontFamily: 'var(--font-num)' }}>
-                  Lv.{prosperity.skillLevel}
-                </span>
-                <span style={{ fontSize: 12, color: 'var(--color-text-dim)' }}>
-                  {prosperity.subLevelCurrent} / {prosperity.subLevelTotal} XP
-                </span>
-              </div>
-              <div style={{ position: 'relative', height: 6, borderRadius: 9999, background: 'var(--color-border)', overflow: 'hidden' }}>
-                <motion.div
-                  initial={{ width: 0 }}
-                  animate={{ width: `${progressPercent}%` }}
-                  transition={{ duration: 0.8, ease: 'easeOut', delay: 0.2 }}
-                  style={{
-                    position: 'absolute',
-                    inset: '0 auto 0 0',
-                    borderRadius: 9999,
-                    background: 'var(--color-accent)',
-                  }}
-                />
-              </div>
-              <div style={{ marginTop: 4, display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ fontSize: 10, color: 'var(--color-text-dim)' }}>
-                  {t.interior_prosperityLabel}{prosperity.prosperityName}
-                </span>
-                <span style={{ fontSize: 10, color: 'var(--color-text-dim)', fontFamily: 'var(--font-num)' }}>
-                  {progressPercent}%
-                </span>
-              </div>
-            </PanelSection>
-
-            {/* ─ 统计四格 ─ */}
+            {/* ─ 实际完成统计 ─ */}
             <PanelSection title={t.interior_panelStats}>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                <StatCell label={t.interior_statXP} value={totalXP} unit="" accent />
                 <StatCell label={t.interior_statTasks} value={completedCount} unit={t.milestone_unitTasks} />
                 <StatCell
                   label={t.interior_statTime}
@@ -463,58 +398,11 @@ export function InteriorSpace({ area, prosperity, onExit }: InteriorSpaceProps) 
                   unit=""
                   raw
                 />
-                <StatCell label={t.interior_statProsperity} value={prosperity.prosperityLevel} unit="/6" />
               </div>
             </PanelSection>
 
-            {/* ─ 矿石收藏 ─ */}
+            {/* ─ 已拥有装饰 ─ */}
             <PanelSection title={t.interior_panelFavorites}>
-              {/* 矿石 + 商店按钮 */}
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  padding: '10px 12px',
-                  background: 'var(--color-surface)',
-                  borderRadius: 'var(--radius-md)',
-                  border: '1px solid var(--color-border)',
-                }}
-              >
-                <span style={{ fontSize: 18 }}>⛏️</span>
-                <div>
-                  <div style={{ fontSize: 11, color: 'var(--color-text-dim)' }}>{t.interior_oreBalance}</div>
-                  <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--color-text)', fontFamily: 'var(--font-num)' }}>
-                    {character.ore.toLocaleString()}
-                  </div>
-                </div>
-                <div style={{ flex: 1 }} />
-                {area.templateId && (
-                  <button
-                    onClick={() => setDecoShopOpen(true)}
-                    style={{
-                      padding: '5px 12px',
-                      borderRadius: 'var(--radius-md)',
-                      border: '1px solid var(--color-secondary)',
-                      background: 'color-mix(in srgb, var(--color-secondary) 10%, transparent)',
-                      color: 'var(--color-secondary)',
-                      fontSize: 12,
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                      transition: 'all 0.15s',
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.background = 'color-mix(in srgb, var(--color-secondary) 18%, transparent)'
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.background = 'color-mix(in srgb, var(--color-secondary) 10%, transparent)'
-                    }}
-                  >
-                    {t.interior_decoShopBtn}
-                  </button>
-                )}
-              </div>
-
               {/* 已拥有装饰网格 */}
               {ownedDecos.length > 0 && (
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 4 }}>
@@ -554,7 +442,8 @@ export function InteriorSpace({ area, prosperity, onExit }: InteriorSpaceProps) 
       {/* ── 抽屉：新建任务（预填分类） ────────────────────────── */}
       <TaskDrawer
         open={taskDrawerOpen}
-        onClose={() => setTaskDrawerOpen(false)}
+        onClose={() => { setTaskDrawerOpen(false); setEditTask(null) }}
+        editTask={editTask}
         initialCategory={area.category}
       />
 
@@ -573,16 +462,6 @@ export function InteriorSpace({ area, prosperity, onExit }: InteriorSpaceProps) 
         onEdit={(habit) => { setEditHabit(habit); setHabitManageOpen(false); setHabitDrawerOpen(true) }}
       />
 
-      {/* ── 装饰商店 ────────────────────────────────────────────── */}
-      <AnimatePresence>
-        {decoShopOpen && (
-          <DecoShop
-            area={area}
-            prosperity={prosperity}
-            onClose={() => setDecoShopOpen(false)}
-          />
-        )}
-      </AnimatePresence>
     </div>
   )
 }
@@ -592,18 +471,24 @@ function InteriorTaskRow({
   task,
   onComplete,
   onStart,
+  onWaitingToggle,
+  onEdit,
 }: {
   task: Task
   onComplete: () => void
   onStart: () => void
+  onWaitingToggle: () => void
+  onEdit: () => void
 }) {
   const t = useT()
   const isDone = task.status === 'done'
   const isDoing = task.status === 'doing'
+  const isWaiting = task.status === 'waiting'
   const isOv = isOverdue(task.dueDate) && !isDone
 
   return (
     <motion.div
+      data-interior-task-id={task.id}
       layout
       initial={{ opacity: 0, y: -4 }}
       animate={{ opacity: isDone ? 0.5 : 1, y: 0 }}
@@ -613,18 +498,16 @@ function InteriorTaskRow({
         alignItems: 'center',
         gap: 8,
         padding: '7px 10px',
-        background: isDoing
-          ? 'color-mix(in srgb, var(--color-accent) 6%, var(--color-surface))'
-          : 'var(--color-surface)',
+        background: taskPriorityBackground(task.priority, isDone, task.backgroundColor),
         borderRadius: 'var(--radius-md)',
         border: `1px solid ${isDoing ? 'color-mix(in srgb, var(--color-accent) 25%, transparent)' : 'var(--color-border)'}`,
       }}
     >
+      <TaskDragHandle task={task} compact />
       {/* 完成按钮 */}
       <button
         onClick={onComplete}
-        disabled={isDone}
-        title={isDone ? t.interior_done : t.interior_markDone}
+        title={isDone ? t.task_toastUndo : t.interior_markDone}
         style={{
           width: 22,
           height: 22,
@@ -634,7 +517,7 @@ function InteriorTaskRow({
             ? 'color-mix(in srgb, var(--color-success) 20%, transparent)'
             : 'color-mix(in srgb, var(--color-accent) 10%, transparent)',
           color: isDone ? 'var(--color-success)' : 'var(--color-accent)',
-          cursor: isDone ? 'default' : 'pointer',
+          cursor: 'pointer',
           fontSize: 11,
           fontWeight: 700,
           display: 'flex',
@@ -648,7 +531,7 @@ function InteriorTaskRow({
       </button>
 
       {/* 标题 */}
-      <div style={{ flex: 1, minWidth: 0 }}>
+      <div style={{ flex: 1, minWidth: 0, cursor: 'pointer' }} onClick={onEdit}>
         <div
           style={{
             fontSize: 13,
@@ -668,8 +551,17 @@ function InteriorTaskRow({
         )}
       </div>
 
-      {/* 进行中状态 / 开始按钮 */}
       {!isDone && (
+        <button type="button" onClick={onWaitingToggle}
+          title={isWaiting ? t.task_resumeWaiting : t.task_waitingAction}
+          aria-label={isWaiting ? t.task_resumeWaiting : t.task_waitingAction}
+          style={{ flexShrink: 0, fontSize: 11, border: '1px solid var(--color-border)',
+            borderRadius: 'var(--radius-sm)', color: 'var(--color-secondary)', background: 'transparent', cursor: 'pointer', padding: '2px 5px' }}>
+          {isWaiting ? '↩' : '⏳'}
+        </button>
+      )}
+      {/* 进行中状态 / 开始按钮 */}
+      {!isDone && !isWaiting && (
         isDoing ? (
           <span
             style={{
@@ -728,6 +620,7 @@ function InteriorHabitRow({
 
   return (
     <motion.div
+      data-interior-habit-id={habit.id}
       layout
       initial={{ opacity: 0, y: -4 }}
       animate={{ opacity: isDone ? 0.5 : 1, y: 0 }}
@@ -743,7 +636,7 @@ function InteriorHabitRow({
       {/* 完成按钮 */}
       <button
         onClick={onComplete}
-        disabled={isDone}
+        title={isDone ? t.common_undo : t.interior_markDone}
         style={{
           width: 24,
           height: 24,
@@ -784,7 +677,7 @@ function InteriorHabitRow({
       {/* 连续 */}
       {habit.consecutiveCount > 0 && (
         <span style={{ fontSize: 11, color: 'var(--color-xp)', fontFamily: 'var(--font-num)', fontWeight: 600, flexShrink: 0 }}>
-          🔥{habit.consecutiveCount}
+          {t.archive_streak(habit.consecutiveCount)}
         </span>
       )}
 

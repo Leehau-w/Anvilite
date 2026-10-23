@@ -79,39 +79,43 @@ export function HabitDrawer({ open, onClose, editHabit, defaultCategory }: Habit
   }, [open, editHabit])
 
   function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    if (!form.title.trim()) return
+    try {
+      e.preventDefault()
+      if (!form.title.trim()) return
 
-    const isWeekly = form.repeatType === 'weekly'
-    const isMonthly = form.repeatType === 'monthly'
-    const isMonthlyFixed = isMonthly && form.monthlyMode === 'fixed'
-    // targetCount适用的类型
-    const usesTargetCount = form.repeatType === 'daily' || form.repeatType === 'biweekly' || form.repeatType === 'custom'
-      || (isMonthly && form.monthlyMode === 'flexible')
-    const data = {
-      title: form.title.trim(),
-      category: form.category,
-      difficulty: form.difficulty,
-      repeatType: isMonthlyFixed ? ('monthly_fixed' as const) : form.repeatType,
-      customIntervalDays: form.repeatType === 'custom' ? form.customIntervalDays : null,
-      weeklyDays: isWeekly && form.weeklyMode === 'strict' ? form.weeklyDays : null,
-      weeklyMode: isWeekly ? form.weeklyMode : null,
-      weeklyFlexibleCount: isWeekly && form.weeklyMode === 'flexible' ? form.weeklyFlexibleCount : null,
-      monthlyDays: isMonthlyFixed ? form.monthlyDays : null,
-      targetCount: usesTargetCount ? Math.max(1, form.targetCount) : 1,
-      startDate: form.startDate,
-      endDate: null as string | null,
-      reminderTime: null as string | null,
-      estimatedMinutes: form.estimatedMinutes ? Number(form.estimatedMinutes) : 15,
-      description: form.description,
-    }
+      const isWeekly = form.repeatType === 'weekly'
+      const isMonthly = form.repeatType === 'monthly'
+      const isMonthlyFixed = isMonthly && form.monthlyMode === 'fixed'
+      // targetCount适用的类型
+      const usesTargetCount = form.repeatType === 'daily' || form.repeatType === 'biweekly' || form.repeatType === 'custom'
+        || (isMonthly && form.monthlyMode === 'flexible')
+      const data = {
+        title: form.title.trim(),
+        category: form.category,
+        difficulty: form.difficulty,
+        repeatType: isMonthlyFixed ? ('monthly_fixed' as const) : form.repeatType,
+        customIntervalDays: form.repeatType === 'custom' ? form.customIntervalDays : null,
+        weeklyDays: isWeekly && form.weeklyMode === 'strict' ? form.weeklyDays : null,
+        weeklyMode: isWeekly ? form.weeklyMode : null,
+        weeklyFlexibleCount: isWeekly && form.weeklyMode === 'flexible' ? form.weeklyFlexibleCount : null,
+        monthlyDays: isMonthlyFixed ? form.monthlyDays : null,
+        targetCount: usesTargetCount ? Math.max(1, form.targetCount) : 1,
+        startDate: form.startDate,
+        endDate: null as string | null,
+        reminderTime: null as string | null,
+        estimatedMinutes: form.estimatedMinutes ? Number(form.estimatedMinutes) : 15,
+        description: form.description,
+      }
 
-    if (editHabit) {
-      updateHabit(editHabit.id, data)
-    } else {
-      addHabit(data)
+      if (editHabit) {
+        updateHabit(editHabit.id, data)
+      } else {
+        addHabit(data)
+      }
+      onClose()
+    } catch {
+      showToast(t.activity_actionFailed)
     }
-    onClose()
   }
 
   function toggleWeekday(day: number) {

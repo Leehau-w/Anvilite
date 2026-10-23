@@ -9,6 +9,8 @@ export interface SubHabit {
 
 export interface Habit {
   cycleKey?: string
+  /** Last closed local date checked for missed occurrences. */
+  lastMissCheckDate?: string
   lastAction?: HabitAction | null
   id: string
   title: string
@@ -50,6 +52,7 @@ export interface HabitAction {
   id: string
   kind: 'complete' | 'skip'
   at: string
+  /** Legacy reward receipt; new actions record zero and undo never changes balances. */
   xp: number
   before: Pick<Habit, 'consecutiveCount' | 'totalCompletions' | 'toleranceCharges' |
     'toleranceNextAt' | 'weeklyCompletionCount' | 'currentCycleCount' |

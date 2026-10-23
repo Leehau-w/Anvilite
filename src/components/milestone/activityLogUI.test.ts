@@ -1,0 +1,295 @@
+// @vitest-environment happy-dom
+import React, { act } from 'react'
+import { createRoot, type Root } from 'react-dom/client'
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import type { GrowthEvent } from '@/types/growthEvent'
+import type { Task } from '@/types/task'
+import type { Habit } from '@/types/habit'
+
+vi.hoisted(() => {
+  vi.stubGlobal('window', document.defaultView)
+  vi.stubGlobal('localStorage', document.defaultView!.localStorage)
+})
+import { MilestoneHall } from './MilestoneHall'
+import { useGrowthEventStore } from '@/stores/growthEventStore'
+import { useCharacterStore } from '@/stores/characterStore'
+import { useTaskStore } from '@/stores/taskStore'
+import { useHabitStore } from '@/stores/habitStore'
+import { useSettingsStore } from '@/stores/settingsStore'
+import { useAreaStore } from '@/stores/areaStore'
+import { zh } from '@/i18n/zh'
+import { en } from '@/i18n/en'
+
+let container: HTMLDivElement
+let root: Root
+const dictionaries = { zh, en }
+function event(id: string, type: GrowthEvent['type'], title = id): GrowthEvent {
+  return { id, type, title, details: { description: 'Original note', actualMinutes: 42, xpGained: 500, oreGained: 200 },
+    isMilestone: true, timestamp: '2026-10-23T10:00:00Z' }
+}
+beforeEach(() => {
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true)
+  localStorage.clear()
+  useGrowthEventStore.setState({ events: [] })
+  useTaskStore.setState({ tasks: [], customTaskGroups: [] })
+  useHabitStore.setState({ habits: [], customHabitGroups: [] })
+  useAreaStore.setState({ areas: useAreaStore.getInitialState().areas })
+  useCharacterStore.setState({ character: { ...useCharacterStore.getInitialState().character, totalXP: 12345, ore: 678, level: 35 } })
+  useSettingsStore.getState().setLanguage('zh')
+  container = document.createElement('div'); document.body.append(container); root = createRoot(container)
+})
+afterEach(async () => {
+  await act(async () => root.unmount())
+  container.remove(); vi.useRealTimers(); vi.restoreAllMocks()
+})
+async function render() { await act(async () => root.render(React.createElement(MilestoneHall))) }
+async function click(node: Element) { await act(async () => { node.dispatchEvent(new MouseEvent('click', { bubbles: true })) }) }
+function button(text: string) {
+  const node = [...container.querySelectorAll('button')].find(item => item.textContent?.trim() === text)
+  expect(node, text).toBeDefined(); return node!
+}
+async function input(node: HTMLInputElement | HTMLTextAreaElement, value: string) {
+  await act(async () => {
+    const prototype = node.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype
+    Object.getOwnPropertyDescriptor(prototype, 'value')!.set!.call(node, value)
+    node.dispatchEvent(new Event('input', { bubbles: true }))
+  })
+}
+async function save() { await act(async () => { container.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })) }) }
+
+it.each(['zh', 'en'] as const)('shows marked milestones while preserving ordinary activity and reward-only history in storage (%s)', async lang => {
+  const t = dictionaries[lang]
+  useSettingsStore.getState().setLanguage(lang)
+  const realTypes: GrowthEvent['type'][] = ['task_complete', 'habit_complete', 'habit_skip', 'habit_miss', 'milestone', 'custom_milestone']
+  const rewardTypes: GrowthEvent['type'][] = ['badge_earned', 'level_up', 'area_level_up', 'prestige']
+  const unmarked = { ...event('ordinary-task', 'task_complete', 'Ordinary completed task'), isMilestone: false }
+  const original = [...realTypes.map(type => event(type, type)), unmarked,
+    ...rewardTypes.map(type => ({ ...event(type, type, 'Legacy reward ' + type), details: {} }))]
+  useGrowthEventStore.setState({ events: original })
+  const persisted = localStorage.getItem('anvilite-growth-events')!
+  await render()
+  expect(container.textContent).toContain(t.milestone_pageTitle)
+  expect(container.querySelectorAll('[data-activity-id]')).toHaveLength(6)
+  for (const type of realTypes) expect(container.querySelector('[data-activity-id="' + type + '"]')).not.toBeNull()
+  for (const type of rewardTypes) expect(container.querySelector('[data-activity-id="' + type + '"]')).toBeNull()
+  expect(container.querySelector('[data-activity-id="ordinary-task"]')).toBeNull()
+  expect(container.textContent).toContain(t.activity_taskComplete)
+  expect(container.textContent).toContain(t.activity_habitComplete)
+  expect(container.textContent).toContain(t.activity_habitSkip)
+  expect(container.textContent).toContain(t.heatmap_minutes(42))
+  expect(container.textContent).not.toMatch(/Legacy reward|Ordinary completed task|\bXP\b|Lv\.|⛏/)
+  expect(useGrowthEventStore.getState().events).toEqual(original)
+  await act(async () => {
+    useGrowthEventStore.setState({ events: [] })
+    localStorage.setItem('anvilite-growth-events', persisted)
+    await useGrowthEventStore.persist.rehydrate()
+  })
+  expect(useGrowthEventStore.getState().events).toEqual(original)
+  expect(container.querySelectorAll('[data-activity-id]')).toHaveLength(6)
+  expect(container.querySelector('[data-activity-id="ordinary-task"]')).toBeNull()
+})
+
+it.each(['zh', 'en'] as const)('creates notes only on save and preserves IME/cancel drafts (%s)', async lang => {
+  const t = dictionaries[lang]
+  useSettingsStore.getState().setLanguage(lang)
+  await render(); await click(button(t.activity_add))
+  const title = container.querySelector<HTMLInputElement>('[data-activity-title]')!
+  await input(title, '  Personal milestone  ')
+  await input(container.querySelector('[data-activity-notes]')!, '  Important details  ')
+  let composed!: KeyboardEvent
+  await act(async () => {
+    composed = new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'Enter', isComposing: true })
+    title.dispatchEvent(composed)
+  })
+  expect(composed.defaultPrevented).toBe(true)
+  expect(useGrowthEventStore.getState().events).toHaveLength(0)
+  await click(button(t.common_cancel))
+  expect(useGrowthEventStore.getState().events).toHaveLength(0)
+  await click(button(t.activity_add))
+  expect(container.querySelector<HTMLInputElement>('[data-activity-title]')!.value).toBe('')
+  await input(container.querySelector('[data-activity-title]')!, '  Saved memory  ')
+  await input(container.querySelector('[data-activity-notes]')!, '  Saved details  ')
+  await save()
+  expect(useGrowthEventStore.getState().events).toHaveLength(1)
+  expect(useGrowthEventStore.getState().events[0]).toMatchObject({ type: 'custom_milestone', title: 'Saved memory', details: { description: 'Saved details' }, isMilestone: true })
+  expect(container.querySelector('[data-activity-editor]')).toBeNull()
+  expect(useCharacterStore.getState().character).toMatchObject({ totalXP: 12345, ore: 678, level: 35 })
+})
+
+it.each(['zh', 'en'] as const)('edits milestone notes and confirms deletion without changing the task, habit or legacy rewards (%s)', async lang => {
+  const t = dictionaries[lang]
+  useSettingsStore.getState().setLanguage(lang)
+  const task = useTaskStore.getState().addTask({ title: 'Original completed work' })
+  useTaskStore.getState().updateTask(task.id, { status: 'done', completedAt: new Date().toISOString(), completionId: 'original-completion', actualMinutes: 42, xpReward: 500 })
+  const originalEvent = event('actual-completion', 'task_complete', 'Original completed work')
+  originalEvent.details.entityId = task.id
+  originalEvent.details.completionId = 'original-completion'
+  const legacyReward = { ...event('old-reward', 'level_up'), details: {} }
+  useGrowthEventStore.setState({ events: [originalEvent, legacyReward] })
+  const business = JSON.stringify({ tasks: useTaskStore.getState().tasks, habits: useHabitStore.getState().habits, character: useCharacterStore.getState().character })
+  await render()
+  await click(container.querySelector('[data-activity-id="actual-completion"]')!)
+  await input(container.querySelector('[data-activity-notes]')!, 'Draft note')
+  expect(useGrowthEventStore.getState().events[0].details.description).toBe('Original note')
+  await click(button(t.common_cancel))
+  await click(container.querySelector('[data-activity-id="actual-completion"]')!)
+  expect(container.querySelector<HTMLTextAreaElement>('[data-activity-notes]')!.value).toBe('Original note')
+  await input(container.querySelector('[data-activity-notes]')!, '  Revised note  '); await save()
+  expect(useGrowthEventStore.getState().events[0]).toEqual({ ...originalEvent, details: { ...originalEvent.details, description: 'Revised note' } })
+  await click(container.querySelector('[data-activity-id="actual-completion"]')!)
+  await click(button(t.common_delete))
+  expect(useGrowthEventStore.getState().events).toHaveLength(2)
+  await click(button(t.activity_deleteConfirm))
+  expect(useGrowthEventStore.getState().events).toEqual([legacyReward])
+  expect(container.textContent).toContain(t.milestone_empty1)
+  expect(JSON.stringify({ tasks: useTaskStore.getState().tasks, habits: useHabitStore.getState().habits, character: useCharacterStore.getState().character })).toBe(business)
+})
+
+it.each(['zh', 'en'] as const)('keeps earlier personal inscriptions visible without exposing their reward titles or metadata (%s)', async lang => {
+  const t = dictionaries[lang]
+  useSettingsStore.getState().setLanguage(lang)
+  const oldTypes: GrowthEvent['type'][] = ['level_up', 'badge_earned', 'area_level_up', 'prestige']
+  const notes = oldTypes.map(type => ({ ...event('personal-' + type, type, 'Old game headline ' + type),
+    details: { description: 'Personal memory for ' + type, actualMinutes: 99999, xpGained: 88888, oreGained: 77777,
+      newLevel: 98, categoryName: 'Old game category', badgeId: 'old-badge', prosperityLevel: 6 } }))
+  const taskNote = { ...event('task-note', 'task_complete', 'Marked task'), isMilestone: true }
+  const habitNote = { ...event('habit-note', 'habit_complete', 'Marked habit'), isMilestone: true }
+  const plainTask = { ...event('plain-task', 'task_complete', 'Plain completed task'), isMilestone: false }
+  const emptyReward = { ...event('blank-reward', 'level_up', 'Empty game headline'), details: { description: '  ' } }
+  const unmarkedReward = { ...event('unmarked-reward', 'badge_earned', 'Unmarked game headline'), isMilestone: false }
+  const original = [...notes, taskNote, habitNote, plainTask, emptyReward, unmarkedReward]
+  useGrowthEventStore.setState({ events: original })
+  const persisted = localStorage.getItem('anvilite-growth-events')!
+  await render()
+  expect(container.querySelectorAll('[data-activity-id]')).toHaveLength(6)
+  expect(container.textContent?.split(t.activity_legacyNote)).toHaveLength(5)
+  expect(container.textContent).not.toMatch(/game headline|Old game category|99999|88888|77777|old-badge/)
+  expect(useGrowthEventStore.getState().events).toEqual(original)
+  expect(container.querySelector('[data-activity-id="task-note"]')).not.toBeNull()
+  expect(container.querySelector('[data-activity-id="habit-note"]')).not.toBeNull()
+  expect(container.querySelector('[data-activity-id="plain-task"]')).toBeNull()
+  await click(container.querySelector('[data-activity-id="personal-level_up"]')!)
+  expect(container.querySelector('[data-activity-editor]')!.textContent).toContain(t.activity_legacyNote)
+  expect(container.querySelector('[data-activity-editor]')!.textContent).not.toContain('Old game headline')
+  await input(container.querySelector('[data-activity-notes]')!, '  Updated personal memory  '); await save()
+  const updated = useGrowthEventStore.getState().events.find(item => item.id === notes[0].id)!
+  expect(updated).toEqual({ ...notes[0], details: { ...notes[0].details, description: 'Updated personal memory' } })
+  await act(async () => {
+    useGrowthEventStore.setState({ events: [] })
+    localStorage.setItem('anvilite-growth-events', persisted)
+    await useGrowthEventStore.persist.rehydrate()
+  })
+  expect(useGrowthEventStore.getState().events).toEqual(original)
+  expect(container.querySelectorAll('[data-activity-id]')).toHaveLength(6)
+  expect(container.textContent).toContain('Personal memory for level_up')
+  expect(container.textContent).not.toContain('Old game headline')
+})
+
+
+function syntheticTask(id: string, patch: Partial<Task> = {}): Task {
+  const at = new Date(2026, 9, 23, 0, 5).toISOString()
+  return { id, title: id, category: 'home', difficulty: 1, priority: 'medium', dueDate: null,
+    description: '', actualMinutes: 20.5, status: 'done', xpReward: 999, completedAt: at,
+    deletedAt: null, isHidden: false, sortOrder: 0, timerStartedAt: null, timerAccumulated: 900000,
+    tags: [], subTasks: [], createdAt: at, updatedAt: at, ...patch }
+}
+function syntheticHabit(id: string, patch: Partial<Habit> = {}): Habit {
+  const at = new Date(2026, 9, 23, 0, 5).toISOString()
+  return { id, title: id, category: 'home', difficulty: 1, estimatedMinutes: 999, repeatType: 'daily',
+    customIntervalDays: null, weeklyDays: null, weeklyMode: null, weeklyFlexibleCount: null, monthlyDays: null,
+    targetCount: 1, currentCycleCount: 0, startDate: '2026-10-01', endDate: null, reminderTime: null,
+    description: '', subHabits: [], status: 'active', isHidden: false, deletedAt: null,
+    timerStartedAt: null, timerAccumulated: 900000, actualMinutes: 600, consecutiveCount: 3,
+    totalCompletions: 5, toleranceCharges: 0, toleranceNextAt: 7, weeklyCompletionCount: 0,
+    lastCompletedAt: null, lastDueAt: null, sortOrder: 0, createdAt: at, updatedAt: at, ...patch }
+}
+function personalStat(name: string): string {
+  const node = container.querySelector('[data-personal-stat="' + name + '"]')
+  expect(node, 'Personal statistic: ' + name).not.toBeNull()
+  return node!.textContent!
+}
+function dimensionValue(category: string): number {
+  const node = [...container.querySelectorAll<HTMLElement>('[data-capability-category]')]
+    .find(item => item.dataset.capabilityCategory === category)
+  expect(node, 'Capability category: ' + category).toBeDefined()
+  return Number(node!.dataset.capabilityValue)
+}
+function businessSnapshot(): string {
+  return JSON.stringify({ tasks: useTaskStore.getState().tasks, habits: useHabitStore.getState().habits,
+    character: useCharacterStore.getState().character, events: useGrowthEventStore.getState().events,
+    areas: useAreaStore.getState().areas })
+}
+
+it.each(['zh', 'en'] as const)('restores actual personal statistics and a reactive count/time capability chart without reward writes (%s)', async lang => {
+  const t = dictionaries[lang]
+  vi.useFakeTimers({ toFake: ['Date'] })
+  vi.setSystemTime(new Date(2026, 9, 23, 0, 5))
+  useSettingsStore.getState().setLanguage(lang)
+  useAreaStore.getState().addArea(null, 'Research')
+  const tasks = [
+    syntheticTask('home-one', { subTasks: [{ id: 'nested', title: 'Nested finished step', completed: true,
+      sortOrder: 0, subTasks: [], createdAt: new Date().toISOString() }] }),
+    syntheticTask('hidden-home', { isHidden: true, actualMinutes: 19.5 }),
+    syntheticTask('custom-category', { category: 'Research', actualMinutes: 40.25 }),
+    syntheticTask('missing-category', { category: 'Former category', actualMinutes: 9.75 }),
+    syntheticTask('deleted', { deletedAt: new Date().toISOString(), actualMinutes: 700 }),
+    syntheticTask('invalid-date', { completedAt: 'not-a-date', actualMinutes: 800 }),
+    syntheticTask('missing-date', { completedAt: null, actualMinutes: 900 }),
+    syntheticTask('open', { status: 'todo', completedAt: null }),
+    syntheticTask('doing', { status: 'doing', completedAt: null }),
+    syntheticTask('waiting', { status: 'waiting', completedAt: null }),
+  ]
+  const habits = [syntheticHabit('active'),
+    syntheticHabit('archived', { status: 'archived', isHidden: true, totalCompletions: 7, consecutiveCount: 9 }),
+    syntheticHabit('deleted', { deletedAt: new Date().toISOString(), totalCompletions: 100, consecutiveCount: 99 }),
+    syntheticHabit('invalid-import', { totalCompletions: Infinity, consecutiveCount: NaN }),
+    syntheticHabit('negative-import', { totalCompletions: -6, consecutiveCount: -2 })]
+  useTaskStore.setState({ tasks })
+  useHabitStore.setState({ habits })
+  useCharacterStore.setState({ character: { ...useCharacterStore.getState().character,
+    name: 'Personal profile', createdAt: new Date(2026, 9, 8, 23, 55).toISOString() } })
+  const original = businessSnapshot()
+  await render()
+  expect(container.textContent).toContain(t.milestone_pageTitle)
+  expect(container.querySelector('[data-personal-overview]')).toBeNull()
+  expect(container.textContent).not.toContain('Personal profile')
+  expect(container.textContent).toContain(t.milestone_abilityChart)
+  expect(container.querySelector('[data-personal-stats]')).not.toBeNull()
+  expect(personalStat('tasks')).toBe('4' + t.milestone_statTasksDone)
+  expect(personalStat('minutes')).toContain(lang === 'zh' ? '1时30分' : '1h30m')
+  expect(personalStat('habitCompletions')).toMatch(/(^|\D)12(\D|$)/)
+  expect(personalStat('habitStreak')).toMatch(/(^|\D)9(\D|$)/)
+  expect(personalStat('days')).toMatch(/(^|\D)16(\D|$)/)
+  expect(personalStat('pending')).toBe('3' + t.overview_pending)
+  const chart = container.querySelector<HTMLElement>('[data-capability-chart]')!
+  expect(chart.dataset.capabilityMetric).toBe('count')
+  expect(dimensionValue('home')).toBe(2)
+  expect(dimensionValue('Research')).toBe(1)
+  expect(dimensionValue('Former category')).toBe(1)
+  expect(button(t.heatmap_countMetric).getAttribute('aria-pressed')).toBe('true')
+  expect(container.textContent).not.toMatch(/\bXP\b|\bEXP\b|Lv\.|⛏|12345|678/)
+  await click(button(t.heatmap_timeMetric))
+  expect(chart.dataset.capabilityMetric).toBe('time')
+  expect(button(t.heatmap_timeMetric).getAttribute('aria-pressed')).toBe('true')
+  expect(dimensionValue('home')).toBe(40)
+  expect(dimensionValue('Research')).toBe(40.25)
+  expect(dimensionValue('Former category')).toBe(9.75)
+  expect(businessSnapshot()).toBe(original)
+
+  await act(async () => {
+    useTaskStore.getState().updateTask('hidden-home', { status: 'todo', completedAt: null })
+    useHabitStore.getState().updateHabit('archived', { totalCompletions: 8, consecutiveCount: 10 })
+  })
+  expect(personalStat('tasks')).toBe('3' + t.milestone_statTasksDone)
+  expect(personalStat('minutes')).toContain(lang === 'zh' ? '1时10.5分' : '1h10.5m')
+  expect(personalStat('pending')).toBe('4' + t.overview_pending)
+  expect(personalStat('habitCompletions')).toMatch(/(^|\D)13(\D|$)/)
+  expect(personalStat('habitStreak')).toMatch(/(^|\D)10(\D|$)/)
+  expect(dimensionValue('home')).toBe(20.5)
+  const afterUpdate = businessSnapshot()
+  await click(button(t.heatmap_countMetric))
+  expect(chart.dataset.capabilityMetric).toBe('count')
+  expect(dimensionValue('home')).toBe(1)
+  expect(businessSnapshot()).toBe(afterUpdate)
+  expect(useCharacterStore.getState().character).toMatchObject({ totalXP: 12345, ore: 678, level: 35 })
+})

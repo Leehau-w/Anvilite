@@ -1,8 +1,10 @@
-interface ElectronAPI {
+import type { McpRendererApi } from '../mcp/contracts'
+
+interface ElectronAPI extends Partial<McpRendererApi> {
   minimize: () => void
   maximize: () => void
   close: () => void
-  saveFile: (content: string, defaultName: string) => Promise<{ success: boolean }>
+  saveFile: (content: string, defaultName: string) => Promise<{ success: boolean; canceled?: boolean; error?: string }>
   selectSyncDirectory: () => Promise<{ success: boolean; path?: string; error?: string }>
   readSyncFile: (
     dirPath: string,

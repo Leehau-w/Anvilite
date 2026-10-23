@@ -16,30 +16,13 @@ interface BadgeStore {
 
 export const useBadgeStore = create<BadgeStore>()(
   persist(
-    (set, get) => ({
+    (_set, get) => ({
       earnedIds: {},
       notifyQueue: [],
 
-      earn: (ids) => {
-        if (ids.length === 0) return
-        const now = new Date().toISOString()
-        set((s) => {
-          const updated = { ...s.earnedIds }
-          for (const id of ids) {
-            if (!updated[id]) updated[id] = now
-          }
-          // 只将真正新获得的加入队列
-          const newIds = ids.filter((id) => !s.earnedIds[id])
-          return {
-            earnedIds: updated,
-            notifyQueue: [...s.notifyQueue, ...newIds],
-          }
-        })
-      },
-
-      dismissNotify: (id) => {
-        set((s) => ({ notifyQueue: s.notifyQueue.filter((i) => i !== id) }))
-      },
+      // Historical badges remain exportable; earning and notification queues are inactive.
+      earn: () => {},
+      dismissNotify: () => {},
 
       isEarned: (id) => !!get().earnedIds[id],
 

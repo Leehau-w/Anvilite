@@ -1,189 +1,76 @@
-
 import { useCharacterStore } from '@/stores/characterStore'
 import { useTaskStore } from '@/stores/taskStore'
 import { useHabitStore } from '@/stores/habitStore'
-import { getXPProgress, xpToNextLevel } from '@/engines/levelEngine'
-import { useT } from '@/i18n'
-import type { Translations } from '@/i18n'
+import { getTaskActivity } from '@/utils/activityStats'
+import { useT, type Translations } from '@/i18n'
 import type { GlobalStatus } from '@/types'
 
 const GLOBAL_STATUS_CYCLE: GlobalStatus[] = ['active', 'charging', 'resting', 'traveling', 'returning']
-
-const STATUS_ICONS: Record<string, { icon: string; key: keyof Translations }> = {
-  active:    { icon: '⚡', key: 'charCard_status_active' },
-  charging:  { icon: '🔋', key: 'charCard_status_charging' },
-  resting:   { icon: '💤', key: 'charCard_status_resting' },
+const STATUS_ICONS: Record<GlobalStatus, { icon: string; key: keyof Translations }> = {
+  active: { icon: '⚡', key: 'charCard_status_active' },
+  charging: { icon: '🔋', key: 'charCard_status_charging' },
+  resting: { icon: '💤', key: 'charCard_status_resting' },
   traveling: { icon: '🌄', key: 'charCard_status_traveling' },
   returning: { icon: '🌅', key: 'charCard_status_returning' },
 }
-
 const CATEGORY_STATUS: Record<string, { icon: string; key: keyof Translations }> = {
-  library:  { icon: '📚', key: 'charCard_catStatus_library' },
-  forge:    { icon: '💼', key: 'charCard_catStatus_forge' },
-  arena:    { icon: '🏃', key: 'charCard_catStatus_arena' },
+  library: { icon: '📚', key: 'charCard_catStatus_library' },
+  forge: { icon: '💼', key: 'charCard_catStatus_forge' },
+  arena: { icon: '🏃', key: 'charCard_catStatus_arena' },
   workshop: { icon: '✨', key: 'charCard_catStatus_workshop' },
-  home:     { icon: '🏠', key: 'charCard_catStatus_home' },
+  home: { icon: '🏠', key: 'charCard_catStatus_home' },
 }
 
-const TITLE_THRESHOLDS = [1, 6, 11, 16, 21, 31, 41, 51] as const
-function getTitleIndex(level: number): number {
-  for (let i = TITLE_THRESHOLDS.length - 1; i >= 0; i--) {
-    if (level >= TITLE_THRESHOLDS[i]) return i
-  }
-  return 0
-}
-
-interface CharacterMiniCardProps {
-  onClickMilestone?: () => void
-}
-
-export function CharacterMiniCard({ onClickMilestone }: CharacterMiniCardProps) {
+export function CharacterMiniCard({ onClickMilestone }: { onClickMilestone?: () => void }) {
   const { character, setGlobalStatus } = useCharacterStore()
-  const { tasks } = useTaskStore()
-  const { habits } = useHabitStore()
+  const tasks = useTaskStore(s => s.tasks)
+  const habits = useHabitStore(s => s.habits)
   const t = useT()
+  const activity = getTaskActivity(tasks)
+  const activeHabits = habits.filter(h => !h.deletedAt && (h.status === 'active' || h.status === 'completed_today'))
+  const priorityOrder = { urgent: 0, high: 1, medium: 2, low: 3 }
+  const topTask = tasks.filter(task => task.status === 'doing' && !task.deletedAt && !task.isHidden)
+    .sort((a, b) => priorityOrder[a.priority] - priorityOrder[b.priority])[0]
+  const currentActivity = topTask ?? activeHabits.find(h => !h.isHidden && h.status === 'active' && h.timerStartedAt !== null)
+  const status = currentActivity
+    ? CATEGORY_STATUS[currentActivity.category] ?? { icon: '📌', key: 'charCard_busy' }
+    : STATUS_ICONS[character.globalStatus] ?? STATUS_ICONS.active
 
   function cycleStatus() {
-    const idx = GLOBAL_STATUS_CYCLE.indexOf(character.globalStatus)
-    const next = GLOBAL_STATUS_CYCLE[(idx + 1) % GLOBAL_STATUS_CYCLE.length]
-    setGlobalStatus(next)
-  }
-
-  // Translated title via i18n arrays
-  const titleIdx = getTitleIndex(character.level)
-  const titleDisplay = character.titlePreset === 'rpg'
-    ? t.titles_rpg[titleIdx]
-    : (character.titlePreset === 'custom' && character.customTitles?.[titleIdx])
-      ? character.customTitles[titleIdx]
-      : t.titles_forge[titleIdx]
-
-  // 找优先级最高的进行中任务
-  const doingTasks = tasks.filter((task) => task.status === 'doing' && !task.deletedAt)
-  const priorityOrder = { urgent: 0, high: 1, medium: 2, low: 3 }
-  const topDoing = doingTasks.sort((a, b) => priorityOrder[a.priority] - priorityOrder[b.priority])[0]
-
-  // 找正在进行的习惯
-  const topDoingHabit = !topDoing ? habits.find((h) => !h.deletedAt && h.timerStartedAt !== null) : undefined
-  const topActive = topDoing ?? topDoingHabit ?? null
-
-  let statusInfo: { icon: string; label: string; extra?: string }
-  if (topActive) {
-    const catStatus = CATEGORY_STATUS[topActive.category]
-    const icon = catStatus ? catStatus.icon : '📌'
-    const label = catStatus ? (t[catStatus.key] as string) : t.charCard_busy
-    statusInfo = { icon, label }
-  } else {
-    const s = STATUS_ICONS[character.globalStatus] ?? STATUS_ICONS.active
-    statusInfo = { icon: s.icon, label: t[s.key] as string }
+    const index = GLOBAL_STATUS_CYCLE.indexOf(character.globalStatus)
+    setGlobalStatus(GLOBAL_STATUS_CYCLE[(index + 1) % GLOBAL_STATUS_CYCLE.length])
   }
 
   return (
-    <div
-      onClick={onClickMilestone}
-      style={{
-        cursor: onClickMilestone ? 'pointer' : 'default',
-        padding: '14px',
-        background: 'var(--color-surface)',
-        borderRadius: 'var(--radius-lg)',
-        border: '1px solid var(--color-border)',
-        boxShadow: 'var(--shadow-sm)',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 12,
-        transition: 'box-shadow 0.15s',
-      }}
-      onMouseEnter={(e) => {
-        if (onClickMilestone) e.currentTarget.style.boxShadow = 'var(--shadow-md)'
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.boxShadow = 'var(--shadow-sm)'
-      }}
-    >
-      {/* 状态行 */}
-      <div
-        style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: !topActive ? 'pointer' : 'default' }}
-        onClick={!topActive ? (e) => { e.stopPropagation(); cycleStatus() } : (e) => e.stopPropagation()}
-        title={!topActive ? t.charCard_clickToChangeStatus : undefined}
-      >
-        <span style={{ fontSize: 22 }}>{statusInfo.icon}</span>
-        <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: 6 }}>
-            {statusInfo.label}
-            {topActive && (
-              <span style={{ fontSize: 10, fontWeight: 500, color: 'var(--color-accent)', background: 'color-mix(in srgb, var(--color-accent) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--color-accent) 30%, transparent)', borderRadius: 'var(--radius-sm)', padding: '1px 5px', lineHeight: 1.4 }}>
-                {t.charCard_statusAutoLabel}
-              </span>
-            )}
-            {statusInfo.extra && (
-              <span style={{ fontSize: 11, color: 'var(--color-text-dim)', fontWeight: 400 }}>
-                · {statusInfo.extra}
-              </span>
-            )}
-          </div>
-          <div style={{ fontSize: 12, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 4 }}>
-            {(character.prestigeLevel ?? 0) > 0 && (
-              <span style={{ fontSize: 10, letterSpacing: 1 }}>{'🌟'.repeat(Math.min(character.prestigeLevel, 5))}</span>
-            )}
-            <span style={{ color: 'var(--color-accent)' }}>Lv.{character.level}</span>
-            <span style={{ color: 'var(--color-text-dim)' }}>·</span>
-            <span
-              className={(character.prestigeLevel ?? 0) > 0 ? 'prestige-title' : ''}
-              style={(character.prestigeLevel ?? 0) === 0 ? { color: 'var(--color-accent)' } : {}}
-            >
-              {titleDisplay}
-            </span>
-          </div>
+    <div data-personal-overview style={{ height: '100%', boxSizing: 'border-box', padding: 12,
+      background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-lg)',
+      boxShadow: 'var(--shadow-sm)', display: 'flex', flexDirection: 'column', gap: 8, overflow: 'auto' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <span style={{ fontSize: 10, color: 'var(--color-text-dim)', marginRight: 6 }}>{t.overview_title}</span>
+          <strong style={{ fontSize: 14, color: 'var(--color-text)', overflowWrap: 'anywhere' }}>{character.name}</strong>
         </div>
-        {onClickMilestone && (
-          <span style={{ fontSize: 10, color: 'var(--color-text-dim)' }}>→</span>
-        )}
+        {onClickMilestone && <button type="button" onClick={onClickMilestone} title={t.activity_record} aria-label={t.activity_record}
+          style={{ background: 'none', border: 'none', color: 'var(--color-accent)', cursor: 'pointer', fontSize: 16 }}>→</button>}
       </div>
-
-      {/* 经验条 */}
-      <div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-          <span style={{ fontSize: 10, color: 'var(--color-text-dim)' }}>{t.charCard_xp}</span>
-          <span style={{ fontSize: 10, fontFamily: 'var(--font-num)', color: 'var(--color-text-dim)' }}>
-            {character.currentXP}/{xpToNextLevel(character.level)}
-          </span>
-        </div>
-        <div
-          style={{
-            height: 6,
-            background: 'var(--color-border)',
-            borderRadius: 'var(--radius-full)',
-            overflow: 'hidden',
-          }}
-        >
-          <div
-            style={{
-              height: '100%',
-              width: `${getXPProgress(character.currentXP, character.level) * 100}%`,
-              background: 'var(--color-accent)',
-              borderRadius: 'var(--radius-full)',
-              transition: 'width 0.6s cubic-bezier(0.4, 0, 0.2, 1)',
-            }}
-          />
-        </div>
-      </div>
-
-      {/* 矿石 + 总XP */}
-      <div style={{ display: 'flex', gap: 16 }}>
-        <MiniStat label={t.charCard_statOre} value={`⛏ ${character.ore}`} />
-        <MiniStat label={t.charCard_statTotalXP} value={character.totalXP} />
-        <MiniStat label={t.charCard_statStreak} value={`🔥${character.streakDays}${t.dash_unitDays}`} />
+      <button type="button" onClick={currentActivity ? undefined : cycleStatus} disabled={!!currentActivity}
+        title={currentActivity ? t.charCard_statusAutoLabel : t.charCard_clickToChangeStatus}
+        style={{ padding: 0, display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none',
+          color: 'var(--color-text)', cursor: currentActivity ? 'default' : 'pointer', textAlign: 'left', fontSize: 12 }}>
+        <span aria-hidden="true">{status.icon}</span><span>{t[status.key] as string}</span>
+        {currentActivity && <span style={{ fontSize: 10, color: 'var(--color-text-dim)' }}>{t.charCard_statusAutoLabel}</span>}
+      </button>
+      <div style={{ display: 'flex', gap: 16, marginTop: 'auto' }}>
+        <MiniStat label={t.overview_pending} value={activity.activeCount} />
+        <MiniStat label={t.overview_habits} value={activeHabits.length} />
       </div>
     </div>
   )
 }
 
-function MiniStat({ label, value }: { label: string; value: string | number }) {
-  return (
-    <div>
-      <div style={{ fontSize: 10, color: 'var(--color-text-dim)' }}>{label}</div>
-      <div style={{ fontSize: 12, fontFamily: 'var(--font-num)', fontWeight: 600, color: 'var(--color-text)' }}>
-        {value}
-      </div>
-    </div>
-  )
+function MiniStat({ label, value }: { label: string; value: number }) {
+  return <div style={{ minWidth: 0 }}>
+    <div style={{ fontSize: 10, color: 'var(--color-text-dim)' }}>{label}</div>
+    <div style={{ fontSize: 16, fontFamily: 'var(--font-num)', fontWeight: 600, color: 'var(--color-text)' }}>{value}</div>
+  </div>
 }

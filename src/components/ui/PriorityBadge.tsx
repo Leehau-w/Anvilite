@@ -1,13 +1,9 @@
 
 import type { TaskPriority } from '@/types/task'
 import { useT } from '@/i18n'
+import { TASK_PRIORITY_COLORS } from '@/utils/taskPriority'
 
-const PRIORITY_COLORS: Record<TaskPriority, string> = {
-  urgent: '#dc2626',
-  high: 'var(--color-accent)',
-  medium: 'var(--color-text-dim)',
-  low: 'var(--color-border)',
-}
+const PRIORITY_COLORS = TASK_PRIORITY_COLORS
 
 const PRIORITY_KEYS: Record<TaskPriority, 'priority_urgent' | 'priority_high' | 'priority_medium' | 'priority_low'> = {
   urgent: 'priority_urgent',
@@ -43,11 +39,11 @@ export function PriorityBadge({ priority, compact }: PriorityBadgeProps) {
 
 export function PriorityDot({ priority }: { priority: TaskPriority }) {
   const t = useT()
-  if (priority === 'urgent') return <span style={{ color: '#dc2626', fontSize: 11,
+  if (priority === 'urgent') return <span style={{ color: PRIORITY_COLORS.urgent, fontSize: 11,
     fontWeight: 700, whiteSpace: 'nowrap', flexShrink: 0 }}>! {t.priority_urgent}</span>
   const config = { color: PRIORITY_COLORS[priority] }
   return (
-    <span
+    <span title={t[PRIORITY_KEYS[priority]]} aria-label={t[PRIORITY_KEYS[priority]]}
       style={{
         display: 'inline-block',
         width: 6,

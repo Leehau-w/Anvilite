@@ -1,10 +1,7 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react'
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { motion, AnimatePresence, Reorder } from 'framer-motion'
 import { useHabitStore } from '@/stores/habitStore'
 import { SubHabitList } from '@/components/tasks/SubTaskItem'
-import { useCharacterStore } from '@/stores/characterStore'
-import { useGrowthEventStore } from '@/stores/growthEventStore'
-import { useFeedback } from '@/components/feedback/FeedbackContext'
 import { useToast } from '@/components/feedback/Toast'
 import { itemMotion } from '@/components/tasks/itemMotion'
 import { CollapsibleGroup } from '@/components/ui/CollapsibleGroup'
@@ -14,98 +11,124 @@ import type { Habit } from '@/types/habit'
 import { useT } from '@/i18n'
 import { useUIStore } from '@/stores/uiStore'
 import { HabitContextMenu } from './HabitContextMenu'
+import type { CardId, TaskCardFilter } from '@/stores/dashboardStore'
 
-export function HabitCard({ onEdit }: { onEdit?: (habit: Habit) => void }) {
-  const { getTodayHabits, completeHabit, skipHabit, habits, startHabitTimer, pauseHabitTimer, reorderHabits, undoComplete } = useHabitStore()
-  const { gainXPAndOre, recordActivity } = useCharacterStore()
-  const { addEvent } = useGrowthEventStore()
-  const { triggerFeedback } = useFeedback()
+export function matchesHabitCardFilter(habit: Habit, filter?: TaskCardFilter): boolean {
+  if (habit.deletedAt || habit.isHidden) return false
+  if (!filter || filter.mode === 'all') return true
+  return filter.mode === 'single' ? habit.category === filter.categories[0] : filter.categories.includes(habit.category)
+}
+
+export function HabitCard({ onEdit, cardId = 'habits', filter }: { onEdit?: (habit: Habit) => void; cardId?: CardId; filter?: TaskCardFilter }) {
+  const { getTodayHabits, completeHabit, skipHabit, habits, undoComplete } = useHabitStore()
   const { showToast } = useToast()
   const t = useT()
 
-  const todayHabits = getTodayHabits()
-    .filter((h) => h.status === 'active')
-    .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
-  const allActive = habits.filter((h) => !h.deletedAt && !h.isHidden && h.status === 'active')
-
-  // Completed today habits (for the collapsible group at bottom of dashboard)
-  const completedTodayHabits = habits.filter(
-    (h) => !h.deletedAt && !h.isHidden && h.status === 'completed_today'
-  )
+  const allToday = useMemo(() => getTodayHabits()
+    .filter(habit => habit.status === 'active')
+    .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)), [habits, getTodayHabits])
+  const todayHabits = useMemo(() => allToday.filter(habit => matchesHabitCardFilter(habit, filter)), [allToday, filter])
+  const allActive = useMemo(() => habits.filter(habit => habit.status === 'active' && matchesHabitCardFilter(habit, filter)), [habits, filter])
+  const completedTodayHabits = useMemo(() => habits.filter(habit => habit.status === 'completed_today' && matchesHabitCardFilter(habit, filter)), [habits, filter])
 
   const [localHabits, setLocalHabits] = useState<Habit[]>(todayHabits)
   const isDraggingRef = useRef(false)
+  const orderRef = useRef(todayHabits)
+  const filterRef = useRef(filter)
+  filterRef.current = filter
 
-  // sync from store when not dragging
   useEffect(() => {
-    if (!isDraggingRef.current) setLocalHabits(todayHabits)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [habits])
+    if (isDraggingRef.current) return
+    orderRef.current = todayHabits
+    setLocalHabits(todayHabits)
+  }, [todayHabits])
 
   const handleReorder = useCallback((newOrder: Habit[]) => {
     isDraggingRef.current = true
+    orderRef.current = newOrder
     setLocalHabits(newOrder)
   }, [])
 
   const handleDragEnd = useCallback(() => {
     isDraggingRef.current = false
-    reorderHabits(localHabits.map((h) => h.id))
-  }, [localHabits, reorderHabits])
+    const store = useHabitStore.getState()
+    const globalToday = store.getTodayHabits().filter(habit => habit.status === 'active')
+      .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
+    const current = globalToday.filter(habit => matchesHabitCardFilter(habit, filterRef.current))
+    const currentIds = new Set(current.map(habit => habit.id))
+    const ordered = orderRef.current.map(habit => habit.id).filter(id => currentIds.has(id))
+    const included = new Set(ordered)
+    for (const habit of current) if (!included.has(habit.id)) ordered.push(habit.id)
+    if (ordered.length) {
+      // Place this card's current records back in their original global slots.
+      let cursor = 0
+      const merged = globalToday.map(habit => currentIds.has(habit.id) ? ordered[cursor++] : habit.id)
+      if (merged.some((id, index) => id !== globalToday[index].id)) store.reorderHabits(merged)
+    }
+    const latest = store.getTodayHabits().filter(habit => habit.status === 'active' && matchesHabitCardFilter(habit, filterRef.current))
+      .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
+    orderRef.current = latest
+    setLocalHabits(latest)
+  }, [])
+
+  // During a gesture, use fresh records and immediately remove items completed,
+  // hidden, deleted or filtered out in another card.
+  const remaining = new Map(todayHabits.map(habit => [habit.id, habit]))
+  const displayedHabits: Habit[] = []
+  for (const habit of localHabits) {
+    const current = remaining.get(habit.id)
+    if (current) { displayedHabits.push(current); remaining.delete(habit.id) }
+  }
+  displayedHabits.push(...remaining.values())
+
+  function handleStartPause(id: string) {
+    const store = useHabitStore.getState()
+    const current = store.getTodayHabits().find(habit => habit.id === id && habit.status === 'active')
+    if (!current) return
+    if (current.timerStartedAt) store.pauseHabitTimer(id)
+    else store.startHabitTimer(id)
+  }
 
   function handleComplete(habit: Habit) {
-    const result = completeHabit(habit.id)
-    if (!result) return
+    try {
+      const result = completeHabit(habit.id)
+      if (!result) return
 
-    if (result.partial) {
-      const current = (habit.currentCycleCount ?? 0) + 1
-      const target = habit.targetCount ?? 1
-      showToast(`${habit.title} ${current}/${target} ✓`)
-      return
+      if (result.partial) {
+        const current = (habit.currentCycleCount ?? 0) + 1
+        const target = habit.targetCount ?? 1
+        showToast(`${habit.title} ${current}/${target} ✓`)
+        return
+      }
+
+      const actionId = useHabitStore.getState().habits.find(h => h.id === habit.id)?.lastAction?.id
+      showToast(t.habit_completedToast(habit.title, 0), {
+        label: t.common_undo,
+        onClick: () => handleUndoComplete(habit, actionId),
+      })
+    } catch {
+      showToast(t.activity_actionFailed)
     }
-
-    const { leveledUp, oldLevel, newLevel, prestigeUnlocked } = gainXPAndOre(result.xp, result.ore)
-    const { oldStreak, newStreak } = recordActivity()
-
-    addEvent({
-      type: 'habit_complete',
-      title: t.habitCard_eventTitle(habit.title),
-      details: {
-        entityId: habit.id,
-        completionId: useHabitStore.getState().habits.find(h => h.id === habit.id)?.lastAction?.id,
-        xpGained: result.xp,
-        oreGained: result.ore,
-        consecutiveCount: result.newStreak,
-        categoryName: habit.category,
-      },
-      isMilestone: false,
-    })
-
-    triggerFeedback({ xp: result.xp, ore: result.ore, leveledUp, oldLevel, newLevel, oldStreakDays: oldStreak, newStreakDays: newStreak, prestigeUnlocked })
-
-    const actionId = useHabitStore.getState().habits.find(h => h.id === habit.id)?.lastAction?.id
-    showToast(t.habit_completedToast(habit.title, result.xp), {
-      label: t.common_undo,
-      onClick: () => handleUndoComplete(habit, actionId),
-    })
   }
 
   function handleSkip(habit: Habit) {
-    const result = skipHabit(habit.id)
-    if (!result) return
+    try {
+      const result = skipHabit(habit.id)
+      if (!result) return
 
-    addEvent({
-      type: 'habit_skip',
-      title: t.habitCard_eventSkip(habit.title),
-      details: { entityId: habit.id, completionId: useHabitStore.getState().habits.find(h => h.id === habit.id)?.lastAction?.id,
-        consecutiveCount: result.newStreak, categoryName: habit.category },
-      isMilestone: false,
-    })
 
-    showToast(t.habitCard_toastSkip(habit.title))
+      showToast(t.habitCard_toastSkip(habit.title))
+    } catch {
+      showToast(t.activity_actionFailed)
+    }
   }
 
   function handleUndoComplete(habit: Habit, actionId?: string) {
-    showToast(undoComplete(habit.id, actionId) ? t.habit_undoneToast(habit.title) : t.habit_undoUnavailable)
+    try {
+      showToast(undoComplete(habit.id, actionId) ? t.habit_undoneToast(habit.title) : t.habit_undoUnavailable)
+    } catch {
+      showToast(t.activity_actionFailed)
+    }
   }
 
   if (allActive.length === 0 && completedTodayHabits.length === 0) {
@@ -121,12 +144,13 @@ export function HabitCard({ onEdit }: { onEdit?: (habit: Habit) => void }) {
       {todayHabits.length > 0 && (
         <Reorder.Group
           axis="y"
-          values={localHabits}
+          values={displayedHabits}
           onReorder={handleReorder}
+          data-habit-card-group={cardId}
           style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 0 }}
         >
           <AnimatePresence mode="popLayout">
-            {localHabits.map((habit) => {
+            {displayedHabits.map((habit) => {
               const children: typeof habits = []  // v0.3: 子习惯已内嵌为 subHabits，此处不再从 habits[] 查找
               return (
                 <Reorder.Item
@@ -140,7 +164,7 @@ export function HabitCard({ onEdit }: { onEdit?: (habit: Habit) => void }) {
                     habit={habit}
                     onComplete={() => handleComplete(habit)}
                     onSkip={() => handleSkip(habit)}
-                    onStartPause={() => habit.timerStartedAt ? pauseHabitTimer(habit.id) : startHabitTimer(habit.id)}
+                    onStartPause={() => handleStartPause(habit.id)}
                     onEdit={onEdit ? () => onEdit(habit) : undefined}
                   />
                   {children.length > 0 && (
@@ -151,7 +175,7 @@ export function HabitCard({ onEdit }: { onEdit?: (habit: Habit) => void }) {
                           habit={child}
                           onComplete={() => handleComplete(child)}
                           onSkip={() => handleSkip(child)}
-                          onStartPause={() => child.timerStartedAt ? pauseHabitTimer(child.id) : startHabitTimer(child.id)}
+                          onStartPause={() => handleStartPause(child.id)}
                           onEdit={onEdit ? () => onEdit(child) : undefined}
                         />
                       ))}
@@ -177,7 +201,7 @@ export function HabitCard({ onEdit }: { onEdit?: (habit: Habit) => void }) {
                 <CompletedHabitItem
                   key={habit.id}
                   habit={habit}
-                  onUndo={() => handleUndoComplete(habit)}
+                  onUndo={() => handleUndoComplete(habit, habit.lastAction?.id)}
                   onEdit={onEdit ? () => onEdit(habit) : undefined}
                   undoLabel={t.common_undo}
                 />
@@ -215,6 +239,8 @@ function CompletedHabitItem({
 
   return (
     <motion.div
+      data-habit-id={habit.id}
+      data-habit-status={habit.status}
       layout
       {...itemMotion}
       onMouseEnter={() => setHovered(true)}
@@ -352,6 +378,8 @@ function HabitItem({
 
   return (
     <motion.div
+      data-habit-id={habit.id}
+      data-habit-status={habit.status}
       layout
       onContextMenu={handleContextMenu}
       style={{
@@ -368,12 +396,15 @@ function HabitItem({
         {/* 完成按钮 */}
         {(habit.targetCount ?? 1) > 1 ? (
           <ProgressButton
+            habitId={habit.id}
             current={habit.currentCycleCount ?? 0}
             target={habit.targetCount}
             onClick={onComplete}
           />
         ) : (
           <button
+            type="button"
+            data-habit-complete={habit.id}
             onClick={onComplete}
             style={{
               width: 28, height: 28, borderRadius: 'var(--radius-sm)',
@@ -439,7 +470,7 @@ function HabitItem({
         {/* 连续次数 */}
         {habit.consecutiveCount > 0 && (
           <span style={{ fontSize: 11, color: 'var(--color-xp)', fontFamily: 'var(--font-num)', fontWeight: 600, whiteSpace: 'nowrap' }}>
-            🔥{habit.consecutiveCount}
+            {t.archive_streak(habit.consecutiveCount)}
           </span>
         )}
 
@@ -512,10 +543,12 @@ function HabitItem({
 
 
 function ProgressButton({
+  habitId,
   current,
   target,
   onClick,
 }: {
+  habitId: string
   current: number
   target: number
   onClick: () => void
@@ -527,6 +560,8 @@ function ProgressButton({
 
   return (
     <button
+      type="button"
+      data-habit-complete={habitId}
       onClick={onClick}
       title={`${current}/${target}`}
       style={{

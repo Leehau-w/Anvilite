@@ -3,7 +3,7 @@ export interface SOPFolder {
   name: string
   parentId: string | null  // 父文件夹 ID，null = 根级
   sortOrder: number
-  isSystem: boolean       // 系统预设文件夹（只读）
+  isSystem: boolean       // 内置目录来源标记（允许本地编辑覆盖）
   createdAt: string
 }
 
@@ -24,7 +24,7 @@ export interface SOP {
   title: string
   displayStyle: 'numbered' | 'bullet' | 'timeline'
   steps: SOPStep[]
-  isSystem: boolean       // 系统预设（只读）
+  isSystem: boolean       // 内置流程来源标记（允许本地编辑覆盖）
   lastUsedAt: string | null  // 最近一次转为任务的时间
   sortOrder: number
   createdAt: string

@@ -74,7 +74,7 @@ it('control: editing task duration preserves completed descendants at store leve
 
 it('skip and undo preserve XP', () => {
   const id = habit()
-  useCharacterStore.getState().gainXPAndOre(100, 100)
+  useCharacterStore.setState({ character: { ...useCharacterStore.getState().character, totalXP: 100, ore: 100 } })
   useHabitStore.getState().skipHabit(id)
   useHabitStore.getState().undoComplete(id)
   expect(useCharacterStore.getState().character.totalXP).toBe(100)
@@ -138,7 +138,7 @@ it('settling another timer session adds to previous actual minutes', () => {
   expect(useTaskStore.getState().tasks[0].actualMinutes).toBe(40)
 })
 
-it('undo revokes the recorded reward after a habit has been renamed and its difficulty changed', () => {
+it('undo preserves balances and identifies the completion after habit renaming and difficulty changes', () => {
   const id = habit()
   const result = useHabitStore.getState().completeHabit(id)!
   useCharacterStore.getState().gainXPAndOre(result.xp, result.ore)
@@ -224,15 +224,15 @@ it('undo identifies the correct completion among same-title tasks and is idempot
   const s = useTaskStore.getState()
   const a = s.addTask({ title: 'Same' })
   const b = s.addTask({ title: 'Same' })
+  useCharacterStore.setState({ character: { ...useCharacterStore.getState().character, totalXP: 100, ore: 100 } })
   for (const task of [a, b]) {
     const done = s.completeTask(task.id)!
-    s.updateTask(task.id, { xpReward: 3 })
-    useCharacterStore.getState().gainXPAndOre(3, 3)
+    expect(done.xpReward).toBe(0)
     useGrowthEventStore.getState().addEvent({ type: 'task_complete', title: 'Same',
       details: { entityId: task.id, completionId: done.completionId }, isMilestone: false })
   }
   expect(undoTaskCompletion(a.id)).toBe(true)
   expect(undoTaskCompletion(a.id)).toBe(false)
-  expect(useCharacterStore.getState().character.totalXP).toBe(3)
+  expect(useCharacterStore.getState().character.totalXP).toBe(100)
   expect(useGrowthEventStore.getState().events.filter(e => e.type === 'task_complete').map(e => e.details.entityId)).toEqual([b.id])
 })

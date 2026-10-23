@@ -1,4 +1,5 @@
 
+import { CategoryCreator } from './CategoryCreator'
 import { useT } from '@/i18n'
 import { useAreaStore } from '@/stores/areaStore'
 import { getAreaDisplayName, categoryDisplay } from '@/utils/area'
@@ -9,9 +10,10 @@ interface CategorySelectProps {
   value: string
   onChange: (v: string) => void
   categories?: string[]
+  allowCreate?: boolean
 }
 
-export function CategorySelect({ value, onChange, categories = DEFAULT_CATEGORIES }: CategorySelectProps) {
+export function CategorySelect({ value, onChange, categories = DEFAULT_CATEGORIES, allowCreate = false }: CategorySelectProps) {
   const t = useT()
   const areas = useAreaStore((s) => s.areas)
 
@@ -49,6 +51,7 @@ export function CategorySelect({ value, onChange, categories = DEFAULT_CATEGORIE
           </button>
         )
       })}
+      {allowCreate && <CategoryCreator onCreated={onChange} />}
     </div>
   )
 }

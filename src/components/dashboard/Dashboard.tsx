@@ -3,6 +3,7 @@ import { getStorageUsage } from '@/utils/storageMonitor'
 import { useTaskStore } from '@/stores/taskStore'
 import { useCharacterStore } from '@/stores/characterStore'
 import { useHabitStore } from '@/stores/habitStore'
+import { useAreaStore } from '@/stores/areaStore'
 import {
   useDashboardStore,
   DEFAULT_LAYOUT,
@@ -12,13 +13,15 @@ import {
   snapSpan,
   gridHeight,
   COLS,
+  isTaskCardId,
+  isHabitCardId,
+  type BaseCardId,
   type CardId,
   type CardLayout,
 } from '@/stores/dashboardStore'
-import { getGreetingKey, getTodayString, isSameLocalDate } from '@/utils/time'
-import { sortTasksInGroup } from '@/utils/task'
+import { getGreetingKey, getTodayString } from '@/utils/time'
+import { getTaskActivity } from '@/utils/activityStats'
 import { useT } from '@/i18n'
-import { TaskItem } from '@/components/tasks/TaskItem'
 import { QuickInput } from '@/components/tasks/QuickInput'
 import { TaskDrawer } from '@/components/tasks/TaskDrawer'
 import { CharacterMiniCard } from './CharacterMiniCard'
@@ -28,8 +31,9 @@ import { HabitManageModal } from './HabitManageModal'
 import { Heatmap } from './Heatmap'
 import { InspirationCard } from './InspirationCard'
 import { FlowsSummaryCard } from './FlowsSummaryCard'
-import { AnimatePresence, Reorder } from 'framer-motion'
-import { CollapsibleGroup } from '@/components/ui/CollapsibleGroup'
+import { WaitingTasksCard } from './WaitingTasksCard'
+import { TaskCard, matchesTaskCardFilter } from './TaskCard'
+import { TaskCardFilterButton, getCardFilterSummary } from './TaskCardFilter'
 import type { Habit } from '@/types/habit'
 import type { Task } from '@/types/task'
 
@@ -41,23 +45,22 @@ interface DashboardProps {
 }
 
 export function Dashboard({ onNavigate, onOpenInspiration }: DashboardProps) {
-  const { tasks, getTodayStats, reorderTasks } = useTaskStore()
+  const { tasks } = useTaskStore()
   const { character } = useCharacterStore()
+  const areas = useAreaStore(s => s.areas)
   const { getTodayStats: getHabitStats } = useHabitStore()
   const t = useT()
-  const { layout, visibleCards, updateCard, removeCard, addCard, resetLayout } = useDashboardStore()
+  const { layout, visibleCards, updateCard, removeCard, addCard, addTaskCard, addHabitCard, resetLayout } = useDashboardStore()
   const [editMode, setEditMode] = useState(false)
   const [cardPickerOpen, setCardPickerOpen] = useState(false)
 
   const [drawerOpen, setDrawerOpen] = useState(false)
+  const [drawerCategory, setDrawerCategory] = useState<string | undefined>()
   const [editTask, setEditTask] = useState<Task | null>(null)
   const [habitDrawerOpen, setHabitDrawerOpen] = useState(false)
+  const [habitDrawerCategory, setHabitDrawerCategory] = useState<string | undefined>()
   const [editHabit, setEditHabit] = useState<Habit | null>(null)
   const [habitManageOpen, setHabitManageOpen] = useState(false)
-
-  const [localDoing, setLocalDoing] = useState<Task[]>([])
-  const [localTodo, setLocalTodo] = useState<Task[]>([])
-  const isDraggingTaskRef = useRef(false)
 
   const containerRef = useRef<HTMLDivElement>(null)
   const [cw, setCw] = useState(800)
@@ -76,48 +79,9 @@ export function Dashboard({ onNavigate, onOpenInspiration }: DashboardProps) {
   const greetingKey = getGreetingKey()
   const greeting =
     greetingKey === 'morning' ? t.greeting_morning : greetingKey === 'afternoon' ? t.greeting_afternoon : t.greeting_evening
-  const taskStats = getTodayStats()
+  const taskStats = getTaskActivity(tasks, undefined, getTodayString())
   const habitStats = getHabitStats()
   const totalCompleted = taskStats.completedCount + habitStats.completed
-  const totalXP = taskStats.totalXP + habitStats.totalXP
-
-  const doingTasks = useMemo(
-    () => sortTasksInGroup(tasks.filter((t) => !t.deletedAt && t.status === 'doing')),
-    [tasks]
-  )
-  const todoTasks = useMemo(
-    () => sortTasksInGroup(tasks.filter((t) => !t.deletedAt && t.status === 'todo')),
-    [tasks]
-  )
-  const doneTasks = useMemo(() => {
-    const today = getTodayString()
-    return tasks
-      .filter((t) => !t.deletedAt && t.status === 'done' && isSameLocalDate(t.completedAt, today))
-      .slice(0, 8)
-  }, [tasks])
-
-  // sync drag-sort local state from store
-  useEffect(() => {
-    if (!isDraggingTaskRef.current) {
-      setLocalDoing(doingTasks)
-      setLocalTodo(todoTasks)
-    }
-  }, [doingTasks, todoTasks])
-
-  const handleDoingReorder = useCallback((newOrder: Task[]) => {
-    isDraggingTaskRef.current = true
-    setLocalDoing(newOrder)
-  }, [])
-
-  const handleTodoReorder = useCallback((newOrder: Task[]) => {
-    isDraggingTaskRef.current = true
-    setLocalTodo(newOrder)
-  }, [])
-
-  const handleTaskDragEnd = useCallback(() => {
-    isDraggingTaskRef.current = false
-    reorderTasks([...localDoing, ...localTodo].map((t) => t.id))
-  }, [localDoing, localTodo, reorderTasks])
 
   function getCard(id: CardId) {
     return layout.find((c) => c.id === id) ?? DEFAULT_LAYOUT.find((c) => c.id === id)!
@@ -125,7 +89,13 @@ export function Dashboard({ onNavigate, onOpenInspiration }: DashboardProps) {
 
   const visibleLayout = useMemo(() => layout.filter((c) => visibleCards.includes(c.id)), [layout, visibleCards])
   const gh = useMemo(() => gridHeight(visibleLayout.length ? visibleLayout : DEFAULT_LAYOUT), [visibleLayout])
-  const hiddenCards = useMemo(() => ALL_CARD_IDS.filter((id) => !visibleCards.includes(id)), [visibleCards])
+  const hiddenCards = useMemo(() => [...new Set([...ALL_CARD_IDS, ...layout.map(card => card.id)])].filter(id => !visibleCards.includes(id)), [layout, visibleCards])
+  const restoreCardLabel = (id: CardId) => {
+    const card = layout.find(item => item.id === id)
+    if (isTaskCardId(id)) return t.dash_tasks + ' · ' + getCardFilterSummary(card?.taskFilter, areas, t)
+    if (isHabitCardId(id)) return t.dash_habits + ' · ' + getCardFilterSummary(card?.habitFilter, areas, t)
+    return undefined
+  }
 
   const storageWarning = useMemo(() => {
     const usage = getStorageUsage()
@@ -142,14 +112,12 @@ export function Dashboard({ onNavigate, onOpenInspiration }: DashboardProps) {
         <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
           {editMode && (
             <>
-              {hiddenCards.length > 0 && (
-                <button
-                  onClick={() => setCardPickerOpen(true)}
-                  style={{ fontSize: 11, color: 'var(--color-accent)', background: 'color-mix(in srgb, var(--color-accent) 10%, transparent)', border: '1px solid var(--color-accent)', borderRadius: 'var(--radius-sm)', padding: '3px 8px', cursor: 'pointer', fontWeight: 600 }}
-                >
-                  {t.dash_addCard}
-                </button>
-              )}
+              <button type="button"
+                onClick={() => setCardPickerOpen(true)}
+                style={{ fontSize: 11, color: 'var(--color-accent)', background: 'color-mix(in srgb, var(--color-accent) 10%, transparent)', border: '1px solid var(--color-accent)', borderRadius: 'var(--radius-sm)', padding: '3px 8px', cursor: 'pointer', fontWeight: 600 }}
+              >
+                {t.dash_addCard}
+              </button>
               <button
                 onClick={() => { resetLayout(); setEditMode(false) }}
                 style={{ fontSize: 11, color: 'var(--color-text-dim)', background: 'none', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', padding: '3px 8px', cursor: 'pointer' }}
@@ -199,7 +167,7 @@ export function Dashboard({ onNavigate, onOpenInspiration }: DashboardProps) {
 
           {visibleCards.includes('quickAdd') && (
             <GridCard card={getCard('quickAdd')} cw={cw} containerRef={containerRef} onUpdate={(p) => updateCard('quickAdd', p)} locked={!editMode} onRemove={editMode ? () => removeCard('quickAdd') : undefined} title={t.dash_quickAdd}>
-              <QuickInput onOpenDrawer={() => setDrawerOpen(true)} />
+              <QuickInput onOpenDrawer={(category) => { setEditTask(null); setDrawerCategory(category); setDrawerOpen(true) }} />
             </GridCard>
           )}
 
@@ -208,67 +176,25 @@ export function Dashboard({ onNavigate, onOpenInspiration }: DashboardProps) {
               <div style={{ display: 'flex', justifyContent: 'space-around', padding: '4px 0' }}>
                 <BigStat label={t.dash_statDone} value={totalCompleted} />
                 <div style={{ width: 1, background: 'var(--color-border)' }} />
-                <BigStat label={t.dash_statXP} value={totalXP} />
-                <div style={{ width: 1, background: 'var(--color-border)' }} />
-                <BigStat label={t.dash_statStreak} value={character.streakDays} emoji="🔥" />
+                <BigStat label={t.stats_todayMinutes} value={t.heatmap_minutes(taskStats.minutes)} />
               </div>
             </GridCard>
           )}
 
-          {visibleCards.includes('tasks') && (
-            <GridCard card={getCard('tasks')} cw={cw} containerRef={containerRef} onUpdate={(p) => updateCard('tasks', p)} locked={!editMode} onRemove={editMode ? () => removeCard('tasks') : undefined} resizable title={t.dash_tasks}
-              titleExtra={<span style={{ fontSize: 12, color: 'var(--color-text-dim)' }}>{t.dash_pendingCount(doingTasks.length + todoTasks.length)}</span>}
+          {visibleLayout.filter(card => isTaskCardId(card.id)).map(card => (
+            <GridCard key={card.id} card={card} cw={cw} containerRef={containerRef} onUpdate={patch => updateCard(card.id, patch)} locked={!editMode} onRemove={editMode ? () => removeCard(card.id) : undefined} resizable title={t.dash_tasks}
+              titleExtra={<>
+                <span style={{ fontSize: 11, color: 'var(--color-text-dim)' }}>{t.dash_pendingCount(tasks.filter(task => matchesTaskCardFilter(task, card.taskFilter) && (task.status === 'todo' || task.status === 'doing')).length)}</span>
+                <TaskCardFilterButton cardId={card.id} filter={card.taskFilter} />
+              </>}
             >
-              <div style={{ overflowY: 'auto', height: '100%', scrollbarWidth: 'thin', scrollbarColor: 'var(--color-border) transparent' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  {localDoing.length > 0 && (
-                    <>
-                      <SectionLabel label={t.dash_doing} color="var(--color-accent)" />
-                      <Reorder.Group axis="y" values={localDoing} onReorder={handleDoingReorder} style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-                        <AnimatePresence mode="popLayout">
-                          {localDoing.map((task) => (
-                            <Reorder.Item key={task.id} value={task} onDragEnd={handleTaskDragEnd} style={{ listStyle: 'none' }}>
-                              <TaskItem task={task} compact onEdit={openEditTask} />
-                            </Reorder.Item>
-                          ))}
-                        </AnimatePresence>
-                      </Reorder.Group>
-                    </>
-                  )}
-                  {localTodo.length > 0 && (
-                    <>
-                      {localDoing.length > 0 && <div style={{ height: 4 }} />}
-                      <SectionLabel label={t.dash_todo} />
-                      <Reorder.Group axis="y" values={localTodo} onReorder={handleTodoReorder} style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-                        <AnimatePresence mode="popLayout">
-                          {localTodo.map((task) => (
-                            <Reorder.Item key={task.id} value={task} onDragEnd={handleTaskDragEnd} style={{ listStyle: 'none' }}>
-                              <TaskItem task={task} compact onEdit={openEditTask} />
-                            </Reorder.Item>
-                          ))}
-                        </AnimatePresence>
-                      </Reorder.Group>
-                    </>
-                  )}
-                  {doneTasks.length > 0 && (
-                    <>
-                      <div style={{ height: 4, borderTop: '1px solid var(--color-border)', marginTop: 4 }} />
-                      <CollapsibleGroup
-                        label={t.dashboard_todayCompleted}
-                        count={doneTasks.length}
-                        defaultOpen={true}
-                      >
-                        <AnimatePresence mode="popLayout">
-                          {doneTasks.map((task) => <TaskItem key={task.id} task={task} compact onEdit={openEditTask} />)}
-                        </AnimatePresence>
-                      </CollapsibleGroup>
-                    </>
-                  )}
-                  {localDoing.length === 0 && localTodo.length === 0 && doneTasks.length === 0 && (
-                    <Empty>{t.dash_empty}</Empty>
-                  )}
-                </div>
-              </div>
+              <TaskCard cardId={card.id} filter={card.taskFilter} onEdit={openEditTask} />
+            </GridCard>
+          ))}
+
+          {visibleCards.includes('waiting') && (
+            <GridCard card={getCard('waiting')} cw={cw} containerRef={containerRef} onUpdate={(p) => updateCard('waiting', p)} locked={!editMode} onRemove={editMode ? () => removeCard('waiting') : undefined} resizable title={t.card_waiting}>
+              <WaitingTasksCard onEdit={openEditTask} layoutEditing={editMode} />
             </GridCard>
           )}
 
@@ -278,20 +204,21 @@ export function Dashboard({ onNavigate, onOpenInspiration }: DashboardProps) {
             </GridCard>
           )}
 
-          {visibleCards.includes('habits') && (
-            <GridCard card={getCard('habits')} cw={cw} containerRef={containerRef} onUpdate={(p) => updateCard('habits', p)} locked={!editMode} onRemove={editMode ? () => removeCard('habits') : undefined} resizable title={t.dash_habits}
+          {visibleLayout.filter(card => isHabitCardId(card.id)).map(card => (
+            <GridCard key={card.id} card={card} cw={cw} containerRef={containerRef} onUpdate={patch => updateCard(card.id, patch)} locked={!editMode} onRemove={editMode ? () => removeCard(card.id) : undefined} resizable title={t.dash_habits}
               titleExtra={
-                <div style={{ display: 'flex', gap: 4 }}>
+                <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 4 }}>
+                  <TaskCardFilterButton kind="habits" cardId={card.id} filter={card.habitFilter} />
                   <ActionBtn onClick={() => setHabitManageOpen(true)} title={t.dash_habitManage}>{t.dash_habitManage}</ActionBtn>
-                  <ActionBtn onClick={() => { setEditHabit(null); setHabitDrawerOpen(true) }} title={t.dash_addHabit} accent>＋</ActionBtn>
+                  <ActionBtn onClick={() => { setEditHabit(null); setHabitDrawerCategory(card.habitFilter?.mode === 'single' ? card.habitFilter.categories[0] : undefined); setHabitDrawerOpen(true) }} title={t.dash_addHabit} accent>＋</ActionBtn>
                 </div>
               }
             >
               <div style={{ overflowY: 'auto', height: '100%', scrollbarWidth: 'thin', scrollbarColor: 'var(--color-border) transparent' }}>
-                <HabitCard onEdit={(h) => { setEditHabit(h); setHabitDrawerOpen(true) }} />
+                <HabitCard cardId={card.id} filter={card.habitFilter} onEdit={(h) => { setEditHabit(h); setHabitDrawerOpen(true) }} />
               </div>
             </GridCard>
-          )}
+          ))}
 
           {visibleCards.includes('growth') && (
             <GridCard card={getCard('growth')} cw={cw} containerRef={containerRef} onUpdate={(p) => updateCard('growth', p)} locked={!editMode} onRemove={editMode ? () => removeCard('growth') : undefined} title={t.dash_growth}>
@@ -320,10 +247,10 @@ export function Dashboard({ onNavigate, onOpenInspiration }: DashboardProps) {
         </div>
       </div>
 
-      <TaskDrawer open={drawerOpen} onClose={() => { setDrawerOpen(false); setEditTask(null) }} editTask={editTask} />
-      <HabitDrawer open={habitDrawerOpen} onClose={() => { setHabitDrawerOpen(false); setEditHabit(null) }} editHabit={editHabit} />
+      <TaskDrawer initialCategory={drawerCategory} open={drawerOpen} onClose={() => { setDrawerOpen(false); setEditTask(null) }} editTask={editTask} />
+      <HabitDrawer defaultCategory={habitDrawerCategory} open={habitDrawerOpen} onClose={() => { setHabitDrawerOpen(false); setEditHabit(null) }} editHabit={editHabit} />
       <HabitManageModal open={habitManageOpen} onClose={() => setHabitManageOpen(false)} onEdit={(h) => { setEditHabit(h); setHabitDrawerOpen(true) }} />
-      <CardPickerModal open={cardPickerOpen} onClose={() => setCardPickerOpen(false)} hiddenCards={hiddenCards} onAdd={(id) => { addCard(id); setCardPickerOpen(false) }} />
+      <CardPickerModal open={cardPickerOpen} onClose={() => setCardPickerOpen(false)} hiddenCards={hiddenCards} restoreCardLabel={restoreCardLabel} onAddHabit={() => { addHabitCard(); setCardPickerOpen(false) }} onAddTask={() => { addTaskCard(); setCardPickerOpen(false) }} onAdd={(id) => { addCard(id); setCardPickerOpen(false) }} />
     </div>
   )
 }
@@ -418,6 +345,7 @@ function GridCard({ card, cw, containerRef, onUpdate, onRemove, resizable, noShe
 
   return (
     <div
+      data-dashboard-card={card.id}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
@@ -434,7 +362,7 @@ function GridCard({ card, cw, containerRef, onUpdate, onRemove, resizable, noShe
         <div style={{ position: 'relative', width: '100%', height: '100%' }}>
           <div
             onPointerDown={startDrag}
-            style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 24, cursor: 'grab', zIndex: 2 }}
+            style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 24, cursor: locked ? 'default' : 'grab', pointerEvents: locked ? 'none' : 'auto', zIndex: 2 }}
           />
           {onRemove && hovered && (
             <button
@@ -477,11 +405,11 @@ function GridCard({ card, cw, containerRef, onUpdate, onRemove, resizable, noShe
               onPointerDown={locked ? undefined : startDrag}
               style={{
                 display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                padding: '10px 16px 0', flexShrink: 0, cursor: locked ? 'default' : 'grab', userSelect: 'none',
+                padding: '10px 16px 0', flexShrink: 0, gap: 6, flexWrap: 'wrap', cursor: locked ? 'default' : 'grab', userSelect: 'none',
               }}
             >
-              <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-text)' }}>{title}</span>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }} onPointerDown={(e) => e.stopPropagation()}>
+              <span data-card-title style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-text)' }}>{title}</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap', minWidth: 0, maxWidth: '100%' }} onPointerDown={(e) => e.stopPropagation()}>
                 {titleExtra}
                 {onRemove && hovered && (
                   <button
@@ -576,15 +504,7 @@ function ActionBtn({ children, onClick, title, accent }: { children: React.React
   )
 }
 
-function SectionLabel({ label, color, dim }: { label: string; color?: string; dim?: boolean }) {
-  return (
-    <div style={{ fontSize: 11, fontWeight: 600, color: color ?? (dim ? 'var(--color-text-dim)' : 'var(--color-text)'), letterSpacing: '0.03em', marginBottom: 2 }}>
-      {label}
-    </div>
-  )
-}
-
-function BigStat({ label, value, emoji }: { label: string; value: number; emoji?: string }) {
+function BigStat({ label, value, emoji }: { label: string; value: number | string; emoji?: string }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
       <div style={{ fontSize: 20, fontWeight: 800, fontFamily: 'var(--font-num)', color: 'var(--color-text)', lineHeight: 1 }}>
@@ -596,25 +516,20 @@ function BigStat({ label, value, emoji }: { label: string; value: number; emoji?
   )
 }
 
-function Empty({ children }: { children: React.ReactNode }) {
-  return (
-    <div style={{ textAlign: 'center', padding: '16px 0', fontSize: 12, color: 'var(--color-text-dim)' }}>
-      {children}
-    </div>
-  )
-}
-
 // ─── CardPickerModal ──────────────────────────────────────────────────────────
 
-function CardPickerModal({ open, onClose, hiddenCards, onAdd }: {
+function CardPickerModal({ open, onClose, hiddenCards, onAdd, onAddTask, onAddHabit, restoreCardLabel }: {
   open: boolean
   onClose: () => void
   hiddenCards: CardId[]
   onAdd: (id: CardId) => void
+  onAddTask: () => void
+  onAddHabit: () => void
+  restoreCardLabel: (id: CardId) => string | undefined
 }) {
   const t = useT()
 
-  const CARD_LABELS: Record<CardId, string> = {
+  const CARD_LABELS: Record<BaseCardId, string> = {
     quickAdd: t.dash_quickAdd,
     stats: t.dash_stats,
     tasks: t.dash_tasks,
@@ -623,6 +538,7 @@ function CardPickerModal({ open, onClose, hiddenCards, onAdd }: {
     growth: t.dash_growth,
     inspiration: t.inspiration_list,
     flows: t.dash_flows,
+    waiting: t.card_waiting,
   }
 
   if (!open) return null
@@ -645,6 +561,8 @@ function CardPickerModal({ open, onClose, hiddenCards, onAdd }: {
           padding: '20px 24px',
           minWidth: 280,
           maxWidth: 400,
+          maxHeight: 'calc(100vh - 40px)',
+          overflowY: 'auto',
           boxShadow: '0 8px 32px rgba(0,0,0,0.15)',
         }}
       >
@@ -656,6 +574,8 @@ function CardPickerModal({ open, onClose, hiddenCards, onAdd }: {
           >×</button>
         </div>
 
+        <button type="button" data-add-task-card onClick={onAddTask} style={{ width: '100%', padding: '10px 14px', marginBottom: 12, borderRadius: 'var(--radius-md)', border: '1px solid var(--color-accent)', background: 'color-mix(in srgb, var(--color-accent) 8%, var(--color-bg))', color: 'var(--color-accent)', fontWeight: 600, cursor: 'pointer', textAlign: 'left' }}>＋ {t.dash_addTaskCard}</button>
+        <button type="button" data-add-habit-card onClick={onAddHabit} style={{ width: '100%', padding: '10px 14px', marginBottom: 12, borderRadius: 'var(--radius-md)', border: '1px solid var(--color-accent)', background: 'color-mix(in srgb, var(--color-accent) 8%, var(--color-bg))', color: 'var(--color-accent)', fontWeight: 600, cursor: 'pointer', textAlign: 'left' }}>＋ {t.dash_addHabitCard}</button>
         {hiddenCards.length === 0 ? (
           <p style={{ fontSize: 13, color: 'var(--color-text-dim)', textAlign: 'center', padding: '12px 0' }}>
             {t.dash_cardPickerEmpty}
@@ -664,7 +584,9 @@ function CardPickerModal({ open, onClose, hiddenCards, onAdd }: {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {hiddenCards.map((id) => (
               <button
+                type="button"
                 key={id}
+                data-restore-card={id}
                 onClick={() => onAdd(id)}
                 style={{
                   display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -679,8 +601,8 @@ function CardPickerModal({ open, onClose, hiddenCards, onAdd }: {
                 onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--color-accent)'; e.currentTarget.style.background = 'color-mix(in srgb, var(--color-accent) 6%, var(--color-bg))' }}
                 onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--color-border)'; e.currentTarget.style.background = 'var(--color-bg)' }}
               >
-                <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--color-text)' }}>{CARD_LABELS[id]}</span>
-                <span style={{ fontSize: 12, color: 'var(--color-accent)', fontWeight: 600 }}>+ 添加</span>
+                <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--color-text)' }}>{restoreCardLabel(id) ?? CARD_LABELS[id as BaseCardId]}</span>
+                <span style={{ fontSize: 12, color: 'var(--color-accent)', fontWeight: 600 }}>＋ {t.dash_restoreCard}</span>
               </button>
             ))}
           </div>

@@ -8,7 +8,11 @@ export const SOPLinkNode = Node.create({
 
   addAttributes() {
     return {
-      sopId: { default: null },
+      sopId: {
+        default: null,
+        parseHTML: (element) => element.getAttribute('data-sopid') ?? element.getAttribute('sopid'),
+        renderHTML: (attributes) => ({ 'data-sopid': attributes.sopId }),
+      },
       sopTitle: { default: '' },
     }
   },

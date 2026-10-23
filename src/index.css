@@ -171,6 +171,144 @@
   --color-xp: #d97706;
 }
 
+/* Muted task colors: independent of success/warning theme semantics. */
+:root, [data-theme="dawn-white"] {
+  --task-tone-red: #b97878;
+  --task-tone-orange: #b78d70;
+  --task-tone-sand: #b1a185;
+  --task-tone-blue: #8599ab;
+  --task-tone-purple: #9c8fa7;
+  --task-tone-gray: #a49b92;
+  --task-tone-brown: #9e8377;
+  --task-priority-urgent: #98474b;
+  --task-priority-high: #895936;
+  --task-priority-medium: #4e6276;
+  --task-priority-low: #6f6258;
+  --task-tint-strength: 20%;
+  --task-tint-completed-strength: 9%;
+  --task-tint-base: var(--color-surface);
+}
+
+[data-theme="forge-purple"] {
+  --task-tone-red: #b88991;
+  --task-tone-orange: #bba08a;
+  --task-tone-sand: #b8ad96;
+  --task-tone-blue: #899bad;
+  --task-tone-purple: #a198ae;
+  --task-tone-gray: #aaa1a1;
+  --task-tone-brown: #a5938c;
+  --task-priority-urgent: #dfabad;
+  --task-priority-high: #dfb58f;
+  --task-priority-medium: #aebed0;
+  --task-priority-low: #c0b4a9;
+  --task-tint-strength: 28%;
+  --task-tint-completed-strength: 12%;
+  --task-tint-base: var(--color-surface);
+}
+
+[data-theme="ore-cyan"] {
+  --task-tone-red: #b48386;
+  --task-tone-orange: #b89a82;
+  --task-tone-sand: #b4a58d;
+  --task-tone-blue: #839baa;
+  --task-tone-purple: #9e90a7;
+  --task-tone-gray: #9da5aa;
+  --task-tone-brown: #a38e85;
+  --task-priority-urgent: #d9a4a8;
+  --task-priority-high: #dbb18b;
+  --task-priority-medium: #a9c0d0;
+  --task-priority-low: #bac0c5;
+  --task-tint-strength: 28%;
+  --task-tint-completed-strength: 12%;
+  --task-tint-base: var(--color-surface);
+}
+
+[data-theme="flame-cast"] {
+  --task-tone-red: #bd8c83;
+  --task-tone-orange: #bca08a;
+  --task-tone-sand: #b6aa94;
+  --task-tone-blue: #8f9faa;
+  --task-tone-purple: #a397a5;
+  --task-tone-gray: #afa399;
+  --task-tone-brown: #af9385;
+  --task-priority-urgent: #e3aba2;
+  --task-priority-high: #e0b695;
+  --task-priority-medium: #b2c1cc;
+  --task-priority-low: #c8b8aa;
+  --task-tint-strength: 28%;
+  --task-tint-completed-strength: 12%;
+  --task-tint-base: var(--color-surface);
+}
+
+[data-theme="jade-forest"] {
+  --task-tone-red: #b8898a;
+  --task-tone-orange: #b89d84;
+  --task-tone-sand: #b4ab96;
+  --task-tone-blue: #899eae;
+  --task-tone-purple: #a193aa;
+  --task-tone-gray: #a8a39c;
+  --task-tone-brown: #a68e80;
+  --task-priority-urgent: #dcaaaa;
+  --task-priority-high: #d9b48f;
+  --task-priority-medium: #b1c2d1;
+  --task-priority-low: #c4bdb1;
+  --task-tint-strength: 28%;
+  --task-tint-completed-strength: 12%;
+  --task-tint-base: #1b1e22;
+}
+
+[data-theme="mint-paper"] {
+  --task-tone-red: #b57a80;
+  --task-tone-orange: #b89576;
+  --task-tone-sand: #b0a58c;
+  --task-tone-blue: #879cae;
+  --task-tone-purple: #9b90a8;
+  --task-tone-gray: #a29f98;
+  --task-tone-brown: #a08678;
+  --task-priority-urgent: #984b59;
+  --task-priority-high: #875b36;
+  --task-priority-medium: #4d657b;
+  --task-priority-low: #69645c;
+  --task-tint-strength: 20%;
+  --task-tint-completed-strength: 9%;
+  --task-tint-base: var(--color-surface);
+}
+
+[data-theme="parchment"] {
+  --task-tone-red: #b77b73;
+  --task-tone-orange: #b68a66;
+  --task-tone-sand: #b1a080;
+  --task-tone-blue: #8e9da7;
+  --task-tone-purple: #a18f9c;
+  --task-tone-gray: #a79b8b;
+  --task-tone-brown: #a18470;
+  --task-priority-urgent: #934c47;
+  --task-priority-high: #855735;
+  --task-priority-medium: #4f6373;
+  --task-priority-low: #6d5e4e;
+  --task-tint-strength: 20%;
+  --task-tint-completed-strength: 9%;
+  --task-tint-base: var(--color-surface);
+}
+
+[data-theme="slate-cloud"] {
+  --task-tone-red: #a8757d;
+  --task-tone-orange: #b39177;
+  --task-tone-sand: #afa591;
+  --task-tone-blue: #8395a9;
+  --task-tone-purple: #9d94ac;
+  --task-tone-gray: #9c9da4;
+  --task-tone-brown: #9b877c;
+  --task-priority-urgent: #944653;
+  --task-priority-high: #855a3f;
+  --task-priority-medium: #4e647c;
+  --task-priority-low: #62656d;
+  --task-tint-strength: 20%;
+  --task-tint-completed-strength: 9%;
+  --task-tint-base: var(--color-surface);
+}
+
+
 * {
   box-sizing: border-box;
   margin: 0;

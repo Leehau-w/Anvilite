@@ -11,8 +11,8 @@ import type { Task } from '@/types/task'
 import type { Habit } from '@/types/habit'
 import type { Area } from '@/types/area'
 import { AREA_TEMPLATES } from '@/types/area'
-import type { ProsperityInfo } from '@/engines/prosperityEngine'
 import { formatDateKey } from '@/utils/time'
+import { isActivityHistoryEvent, getActivityHistoryView } from '@/utils/activityHistory'
 
 // ── 类型 ─────────────────────────────────────────────────────────────────────
 
@@ -21,7 +21,6 @@ type ArchiveTab = 'overview' | 'scroll'
 
 interface ArchiveSpaceProps {
   area: Area
-  prosperity: ProsperityInfo
   onExit: () => void
 }
 
@@ -56,7 +55,7 @@ function fmtMinutes(mins: number, t: ReturnType<typeof useT>): string {
 
 // ── 主组件 ────────────────────────────────────────────────────────────────────
 
-export function ArchiveSpace({ area: _area, prosperity: _prosperity, onExit }: ArchiveSpaceProps) {
+export function ArchiveSpace({ area: _area, onExit }: ArchiveSpaceProps) {
   const t = useT()
   const [tab, setTab] = useState<ArchiveTab>('overview')
   const [period, setPeriod] = useState<Period>('week')
@@ -191,7 +190,7 @@ function ArchiveOverview({ period }: { period: Period }) {
   const range = useMemo(() => getPeriodRange(period), [period])
 
   const completedTasks = useMemo(
-    () => tasks.filter((t) => t.status === 'done' && t.completedAt && inPeriod(t.completedAt, range)),
+    () => tasks.filter((t) => !t.deletedAt && t.status === 'done' && t.completedAt && inPeriod(t.completedAt, range)),
     [tasks, range]
   )
 
@@ -496,21 +495,17 @@ interface MonthBlock {
   key: string          // YYYY-MM
   label: string
   events: GrowthEvent[]
-  levelUps: number
-  milestones: number
-  badges: number
-  areaLevelUps: number
+  taskCompletions: number
+  habitCompletions: number
+  skips: number
+  notes: number
 }
 
 // 事件类型 → 符号 + 颜色，作为唯一数据源供图例和卡片行共用
 // 故意使用无 VS-16 变体选择符的字符，确保 CSS color 可以着色
 const EVENT_TYPE_CONFIG: Partial<Record<GrowthEvent['type'], { symbol: string; color: string }>> = {
-  level_up:         { symbol: '⬆', color: 'var(--color-accent)' },
   milestone:        { symbol: '⭐', color: 'var(--color-xp)' },
   custom_milestone: { symbol: '⭐', color: 'var(--color-xp)' },
-  badge_earned:     { symbol: '🏆', color: 'var(--color-secondary)' },
-  area_level_up:    { symbol: '🏘', color: 'var(--color-success)' },
-  prestige:         { symbol: '✦', color: 'var(--color-secondary)' },
   task_complete:    { symbol: '✓', color: 'var(--color-text-dim)' },
   habit_complete:   { symbol: '●', color: 'var(--color-text-dim)' },
   habit_skip:       { symbol: '○', color: 'var(--color-text-dim)' },
@@ -529,11 +524,11 @@ type EventSymbolConfig = Record<string, { symbol: string; label: string; color: 
 
 function getEventSymbolConfig(t: ReturnType<typeof useT>): EventSymbolConfig {
   return {
-    level_up:         { symbol: EVENT_TYPE_CONFIG.level_up!.symbol,         label: t.archive_eventLevelUp,   color: EVENT_TYPE_CONFIG.level_up!.color },
-    milestone:        { symbol: EVENT_TYPE_CONFIG.milestone!.symbol,        label: t.archive_eventMilestone, color: EVENT_TYPE_CONFIG.milestone!.color },
-    custom_milestone: { symbol: EVENT_TYPE_CONFIG.custom_milestone!.symbol, label: t.archive_eventMilestone, color: EVENT_TYPE_CONFIG.custom_milestone!.color },
-    badge_earned:     { symbol: EVENT_TYPE_CONFIG.badge_earned!.symbol,     label: t.archive_eventBadge,     color: EVENT_TYPE_CONFIG.badge_earned!.color },
-    area_level_up:    { symbol: EVENT_TYPE_CONFIG.area_level_up!.symbol,    label: t.archive_eventAreaUp,    color: EVENT_TYPE_CONFIG.area_level_up!.color },
+    task_complete: { ...EVENT_TYPE_CONFIG.task_complete!, label: t.archive_eventTask },
+    habit_complete: { ...EVENT_TYPE_CONFIG.habit_complete!, label: t.archive_eventHabit },
+    habit_skip: { ...EVENT_TYPE_CONFIG.habit_skip!, label: t.archive_eventSkipped },
+    habit_miss: { ...EVENT_TYPE_CONFIG.habit_miss!, label: t.archive_eventMissed },
+    custom_milestone: { ...EVENT_TYPE_CONFIG.custom_milestone!, label: t.archive_eventNote },
   }
 }
 
@@ -542,7 +537,7 @@ const EVENT_SYMBOL_COLORS: Record<string, string> = Object.fromEntries(
   Object.values(EVENT_TYPE_CONFIG).map((v) => [v.symbol, v.color])
 )
 
-const PRIORITY_ORDER = ['prestige', 'custom_milestone', 'milestone', 'badge_earned', 'level_up', 'area_level_up', 'habit_complete', 'task_complete', 'habit_skip', 'habit_miss']
+const PRIORITY_ORDER = ['custom_milestone', 'milestone', 'habit_complete', 'task_complete', 'habit_skip', 'habit_miss']
 
 function eventWeight(e: GrowthEvent): number {
   if (e.isMilestone) return 100
@@ -553,7 +548,8 @@ function eventWeight(e: GrowthEvent): number {
 function groupByMonth(events: GrowthEvent[]): MonthBlock[] {
   const map = new Map<string, GrowthEvent[]>()
   for (const e of events) {
-    const key = e.timestamp.slice(0, 7) // YYYY-MM
+    if (!EVENT_TYPE_CONFIG[e.type] || !Number.isFinite(new Date(e.timestamp).getTime())) continue
+    const key = formatDateKey(new Date(e.timestamp)).slice(0, 7)
     if (!map.has(key)) map.set(key, [])
     map.get(key)!.push(e)
   }
@@ -566,10 +562,10 @@ function groupByMonth(events: GrowthEvent[]): MonthBlock[] {
         key,
         label: `${y}-${m}`,  // resolved to i18n in component
         events: evs,
-        levelUps: evs.filter((e) => e.type === 'level_up').length,
-        milestones: evs.filter((e) => e.isMilestone || e.type === 'milestone' || e.type === 'custom_milestone').length,
-        badges: evs.filter((e) => e.type === 'badge_earned').length,
-        areaLevelUps: evs.filter((e) => e.type === 'area_level_up').length,
+        taskCompletions: evs.filter((e) => e.type === 'task_complete').length,
+        habitCompletions: evs.filter((e) => e.type === 'habit_complete').length,
+        skips: evs.filter((e) => e.type === 'habit_skip' || e.type === 'habit_miss').length,
+        notes: evs.filter((e) => e.type === 'custom_milestone' || e.type === 'milestone').length,
       }
     })
 }
@@ -582,7 +578,7 @@ function ScrollTimeline() {
   const [lockedKey, setLockedKey] = useState<string | null>(null)
 
   const eventSymbolConfig = useMemo(() => getEventSymbolConfig(t), [t])
-  const months = useMemo(() => groupByMonth(events), [events])
+  const months = useMemo(() => groupByMonth(events.filter(isActivityHistoryEvent).map(event => getActivityHistoryView(event, t.activity_legacyNote))), [events, t.activity_legacyNote])
 
   if (months.length === 0) {
     return (
@@ -600,7 +596,7 @@ function ScrollTimeline() {
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       {/* 图例 */}
       <div style={{ display: 'flex', gap: 16, padding: '10px 20px', borderBottom: '1px solid var(--color-border)', flexShrink: 0 }}>
-        {(['milestone','badge_earned','level_up','area_level_up'] as const).map((k) => { const cfg = eventSymbolConfig[k]; if (!cfg) return null; return (
+        {(['task_complete', 'habit_complete', 'habit_skip', 'habit_miss', 'custom_milestone'] as const).map((k) => { const cfg = eventSymbolConfig[k]; if (!cfg) return null; return (
           <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
             <span style={{ fontSize: 11, fontWeight: 700, color: cfg.color, fontFamily: 'var(--font-num)', width: 14, textAlign: 'center' }}>{cfg.symbol}</span>
             <span style={{ fontSize: 11, color: 'var(--color-text-dim)' }}>{cfg.label}</span>
@@ -679,10 +675,10 @@ function MonthBlockCard({
   const topEvents = isLocked ? sortedEvents : isActive ? sortedEvents.slice(0, 12) : sortedEvents.slice(0, 3)
 
   const summaryParts: string[] = []
-  if (block.milestones > 0) summaryParts.push(`⭐×${block.milestones}`)
-  if (block.badges > 0) summaryParts.push(`🏆×${block.badges}`)
-  if (block.levelUps > 0) summaryParts.push(`⬆×${block.levelUps}`)
-  if (block.areaLevelUps > 0) summaryParts.push(`🏘×${block.areaLevelUps}`)
+  if (block.taskCompletions > 0) summaryParts.push(`✓×${block.taskCompletions}`)
+  if (block.habitCompletions > 0) summaryParts.push(`●×${block.habitCompletions}`)
+  if (block.skips > 0) summaryParts.push(`○×${block.skips}`)
+  if (block.notes > 0) summaryParts.push(`⭐×${block.notes}`)
 
   const cardContent = (
     <div
@@ -718,9 +714,16 @@ function MonthBlockCard({
         {topEvents.map((e) => (
           <div key={e.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 5, flexShrink: 0 }}>
             <span style={{ fontSize: 11, flexShrink: 0, marginTop: 1, color: getEventColor(e), fontFamily: 'var(--font-num)', fontWeight: 700 }}>{getEventDisplaySymbol(e)}</span>
-            <span style={{ fontSize: 11, color: e.isMilestone ? 'var(--color-accent)' : 'var(--color-text-dim)', fontWeight: e.isMilestone ? 600 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
-              {e.title.replace(/^.+[：:]\s*/, '')}
-            </span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <span title={e.title} style={{ display: 'block', fontSize: 11, color: e.isMilestone ? 'var(--color-accent)' : 'var(--color-text-dim)', fontWeight: e.isMilestone ? 600 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {e.title}
+              </span>
+              {(isActive || isLocked) && e.details.description && (
+                <div style={{ fontSize: 11, color: 'var(--color-text-dim)', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', marginTop: 2 }}>
+                  {e.details.description}
+                </div>
+              )}
+            </div>
           </div>
         ))}
         {!isActive && !isLocked && block.events.length > 3 && (

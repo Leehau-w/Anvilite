@@ -1,0 +1,502 @@
+{
+  "provenance": {
+    "tag": "v0.3.0",
+    "commit": "046b9e0de30b8724f1b95a4c12073d073bec980e",
+    "method": "Original tagged store modules bundled from git and executed with synthetic actions; no current store modules or real user data.",
+    "synthetic": true
+  },
+  "payload": {
+    "exportVersion": 1,
+    "appVersion": "0.3.0",
+    "exportedAt": "2026-10-23T10:00:00.000Z",
+    "accountId": "default",
+    "data": {
+      "character": {
+        "character": {
+          "name": "Synthetic legacy user",
+          "level": 17,
+          "currentXP": 123,
+          "totalXP": 9876,
+          "ore": 456,
+          "totalOreEarned": 789,
+          "titlePreset": "custom",
+          "customTitles": [
+            "Legacy kept title"
+          ],
+          "streakDays": 0,
+          "lastActiveDate": null,
+          "globalStatus": "active",
+          "prestigeLevel": 0,
+          "xpFormulaVersion": 0,
+          "createdAt": "2026-10-23T10:00:00.000Z"
+        }
+      },
+      "tasks": {
+        "tasks": [
+          {
+            "id": "legacy-id-5",
+            "title": "Legacy recycle bin",
+            "category": "other",
+            "difficulty": 3,
+            "priority": "medium",
+            "dueDate": "2026-10-24",
+            "description": "",
+            "status": "todo",
+            "xpReward": 0,
+            "actualMinutes": 0,
+            "completedAt": null,
+            "deletedAt": "2026-10-23T10:00:00.000Z",
+            "isHidden": false,
+            "sortOrder": 1792749600000,
+            "subTasks": [],
+            "createdAt": "2026-10-23T10:00:00.000Z",
+            "updatedAt": "2026-10-23T10:00:00.000Z"
+          },
+          {
+            "id": "legacy-id-4",
+            "title": "Legacy done",
+            "category": "library",
+            "difficulty": 3,
+            "priority": "medium",
+            "dueDate": "2026-10-24",
+            "description": "",
+            "status": "done",
+            "xpReward": 88,
+            "actualMinutes": 32,
+            "completedAt": "2026-10-23T10:00:00.000Z",
+            "deletedAt": null,
+            "isHidden": false,
+            "sortOrder": 1792749600000,
+            "subTasks": [],
+            "createdAt": "2026-10-23T10:00:00.000Z",
+            "updatedAt": "2026-10-23T10:00:00.000Z"
+          },
+          {
+            "id": "legacy-id-1",
+            "title": "Legacy task root",
+            "category": "home",
+            "difficulty": 3,
+            "priority": "high",
+            "dueDate": "2026-10-24",
+            "description": "Preserve root description",
+            "status": "todo",
+            "xpReward": 0,
+            "actualMinutes": 47,
+            "completedAt": null,
+            "deletedAt": null,
+            "isHidden": true,
+            "sortOrder": 1792749600000,
+            "subTasks": [
+              {
+                "id": "legacy-id-2",
+                "title": "Legacy task child",
+                "completed": false,
+                "sortOrder": 0,
+                "subTasks": [
+                  {
+                    "id": "legacy-id-3",
+                    "title": "Legacy task grandchild",
+                    "completed": false,
+                    "sortOrder": 0,
+                    "subTasks": [],
+                    "createdAt": "2026-10-23T10:00:00.000Z"
+                  }
+                ],
+                "createdAt": "2026-10-23T10:00:00.000Z"
+              }
+            ],
+            "createdAt": "2026-10-23T10:00:00.000Z",
+            "updatedAt": "2026-10-23T10:00:00.000Z"
+          }
+        ],
+        "lastCategory": "other",
+        "completedViewMode": "month",
+        "customTaskGroups": []
+      },
+      "habits": {
+        "habits": [
+          {
+            "title": "Legacy habit root",
+            "category": "home",
+            "difficulty": 2,
+            "estimatedMinutes": 10,
+            "repeatType": "daily",
+            "customIntervalDays": null,
+            "weeklyDays": null,
+            "weeklyMode": null,
+            "weeklyFlexibleCount": null,
+            "monthlyDays": null,
+            "targetCount": 2,
+            "startDate": "2026-10-23",
+            "endDate": null,
+            "reminderTime": null,
+            "description": "Preserve recurring description",
+            "id": "legacy-id-6",
+            "subHabits": [
+              {
+                "id": "legacy-id-7",
+                "title": "Legacy habit child",
+                "completed": false,
+                "sortOrder": 0,
+                "subHabits": [
+                  {
+                    "id": "legacy-id-8",
+                    "title": "Legacy habit grandchild",
+                    "completed": false,
+                    "sortOrder": 0,
+                    "subHabits": [],
+                    "createdAt": "2026-10-23T10:00:00.000Z"
+                  }
+                ],
+                "createdAt": "2026-10-23T10:00:00.000Z"
+              }
+            ],
+            "status": "active",
+            "isHidden": true,
+            "deletedAt": null,
+            "timerStartedAt": null,
+            "actualMinutes": 11,
+            "consecutiveCount": 7,
+            "totalCompletions": 19,
+            "toleranceCharges": 0,
+            "toleranceNextAt": 0,
+            "weeklyCompletionCount": 0,
+            "currentCycleCount": 1,
+            "lastCompletedAt": null,
+            "lastDueAt": null,
+            "sortOrder": 1792749600000,
+            "createdAt": "2026-10-23T10:00:00.000Z",
+            "updatedAt": "2026-10-23T10:00:00.000Z"
+          }
+        ],
+        "completedHabitViewMode": "area",
+        "customHabitGroups": []
+      },
+      "areas": {
+        "areas": [
+          {
+            "id": "area-home",
+            "templateId": "home",
+            "name": "家园",
+            "category": "home",
+            "position": {
+              "x": 700,
+              "y": 360
+            },
+            "sortOrder": 0,
+            "isPreset": true,
+            "canDelete": false,
+            "canMove": false,
+            "createdAt": "2026-10-23T10:00:00.000Z"
+          },
+          {
+            "id": "area-arena",
+            "templateId": "arena",
+            "name": "竞技场",
+            "category": "arena",
+            "position": {
+              "x": 260,
+              "y": 190
+            },
+            "sortOrder": 1,
+            "isPreset": true,
+            "canDelete": true,
+            "canMove": false,
+            "createdAt": "2026-10-23T10:00:00.000Z"
+          },
+          {
+            "id": "area-library",
+            "templateId": "library",
+            "name": "藏书阁",
+            "category": "library",
+            "position": {
+              "x": 1060,
+              "y": 140
+            },
+            "sortOrder": 2,
+            "isPreset": true,
+            "canDelete": true,
+            "canMove": false,
+            "createdAt": "2026-10-23T10:00:00.000Z"
+          },
+          {
+            "id": "area-workshop",
+            "templateId": "workshop",
+            "name": "灵感工坊",
+            "category": "workshop",
+            "position": {
+              "x": 280,
+              "y": 520
+            },
+            "sortOrder": 3,
+            "isPreset": true,
+            "canDelete": true,
+            "canMove": false,
+            "createdAt": "2026-10-23T10:00:00.000Z"
+          },
+          {
+            "id": "area-forge",
+            "templateId": "forge",
+            "name": "锻造坊",
+            "category": "forge",
+            "position": {
+              "x": 920,
+              "y": 580
+            },
+            "sortOrder": 4,
+            "isPreset": true,
+            "canDelete": true,
+            "canMove": false,
+            "createdAt": "2026-10-23T10:00:00.000Z"
+          },
+          {
+            "id": "area-milestone",
+            "templateId": "milestone",
+            "name": "档案馆",
+            "category": "_milestone",
+            "position": {
+              "x": 1220,
+              "y": 700
+            },
+            "sortOrder": 5,
+            "isPreset": true,
+            "canDelete": false,
+            "canMove": false,
+            "createdAt": "2026-10-23T10:00:00.000Z"
+          },
+          {
+            "id": "legacy-id-9",
+            "templateId": null,
+            "name": "Legacy custom category",
+            "category": "Legacy custom category",
+            "position": {
+              "x": 694.2477,
+              "y": 362.8318
+            },
+            "sortOrder": 6,
+            "isPreset": false,
+            "canDelete": true,
+            "canMove": true,
+            "createdAt": "2026-10-23T10:00:00.000Z"
+          }
+        ]
+      },
+      "badges": {
+        "earnedIds": {
+          "legacy_badge": "2026-09-01T10:00:00.000Z"
+        },
+        "notifyQueue": [
+          "legacy_badge"
+        ]
+      },
+      "dashboard": {
+        "layout": [
+          {
+            "id": "quickAdd",
+            "col": 0,
+            "row": 0,
+            "colSpan": 16,
+            "rowSpan": 2
+          },
+          {
+            "id": "stats",
+            "col": 16,
+            "row": 0,
+            "colSpan": 8,
+            "rowSpan": 2
+          },
+          {
+            "id": "tasks",
+            "col": 12,
+            "row": 20,
+            "colSpan": 10,
+            "rowSpan": 9
+          },
+          {
+            "id": "habits",
+            "col": 8,
+            "row": 2,
+            "colSpan": 8,
+            "rowSpan": 8
+          },
+          {
+            "id": "character",
+            "col": 16,
+            "row": 2,
+            "colSpan": 8,
+            "rowSpan": 3
+          },
+          {
+            "id": "growth",
+            "col": 16,
+            "row": 5,
+            "colSpan": 8,
+            "rowSpan": 5
+          },
+          {
+            "id": "inspiration",
+            "col": 0,
+            "row": 10,
+            "colSpan": 8,
+            "rowSpan": 5
+          },
+          {
+            "id": "flows",
+            "col": 8,
+            "row": 10,
+            "colSpan": 8,
+            "rowSpan": 5
+          }
+        ],
+        "visibleCards": [
+          "quickAdd",
+          "stats",
+          "tasks",
+          "habits",
+          "growth",
+          "flows"
+        ]
+      },
+      "settings": {
+        "settings": {
+          "theme": "forge-purple",
+          "language": "zh",
+          "dashboardLayout": [
+            {
+              "id": "tasks",
+              "visible": true,
+              "order": 0
+            },
+            {
+              "id": "habits",
+              "visible": true,
+              "order": 1
+            },
+            {
+              "id": "stats",
+              "visible": true,
+              "order": 2
+            },
+            {
+              "id": "character",
+              "visible": true,
+              "order": 3
+            },
+            {
+              "id": "quick-create",
+              "visible": true,
+              "order": 4
+            },
+            {
+              "id": "growth-trend",
+              "visible": true,
+              "order": 5
+            }
+          ],
+          "unlockedThemes": [
+            "dawn-white"
+          ],
+          "characterName": "旅行者"
+        }
+      },
+      "growthEvents": {
+        "events": [
+          {
+            "type": "level_up",
+            "title": "Legacy reward event",
+            "details": {
+              "oldLevel": 7,
+              "newLevel": 8,
+              "description": "Keep old reward inscription"
+            },
+            "isMilestone": true,
+            "id": "legacy-id-11",
+            "timestamp": "2026-10-23T10:00:00.000Z"
+          },
+          {
+            "type": "custom_milestone",
+            "title": "Legacy personal milestone",
+            "details": {
+              "description": "Keep this inscription"
+            },
+            "isMilestone": true,
+            "id": "legacy-id-10",
+            "timestamp": "2026-10-23T10:00:00.000Z"
+          }
+        ]
+      },
+      "sops": {
+        "folders": [
+          {
+            "id": "legacy-id-12",
+            "name": "Legacy flow folder",
+            "sortOrder": 0,
+            "isSystem": false,
+            "createdAt": "2026-10-23T10:00:00.000Z"
+          }
+        ],
+        "sops": [
+          {
+            "folderId": "legacy-id-12",
+            "title": "Legacy rich flow",
+            "isSystem": false,
+            "type": "schedule",
+            "steps": [
+              {
+                "id": "legacy-step",
+                "title": "Parent step",
+                "sortOrder": 0,
+                "note": "Parent note",
+                "warning": "Parent warning",
+                "time": "07:00",
+                "childSteps": [
+                  {
+                    "id": "legacy-nested-step",
+                    "title": "Nested step",
+                    "sortOrder": 0,
+                    "note": "Nested note",
+                    "warning": "Nested warning",
+                    "time": null,
+                    "childSteps": []
+                  }
+                ]
+              }
+            ],
+            "id": "legacy-id-13",
+            "sortOrder": 0,
+            "lastUsedAt": null,
+            "createdAt": "2026-10-23T10:00:00.000Z",
+            "updatedAt": "2026-10-23T10:00:00.000Z"
+          }
+        ],
+        "selectedSOPId": "legacy-id-13",
+        "collapsedFolderIds": [
+          "legacy-id-12"
+        ]
+      },
+      "inspirations": {
+        "inspirations": [
+          {
+            "id": "legacy-id-14",
+            "content": "Legacy preserved inspiration",
+            "createdAt": "2026-10-23T10:00:00.000Z"
+          }
+        ]
+      }
+    }
+  },
+  "storage": {
+    "anvilite-subtask-migration-v3": "2026-10-23T10:00:00.000Z",
+    "anvilite-subhabit-migration-v3": "2026-10-23T10:00:00.000Z",
+    "anvilite-tasks": "{\"state\":{\"tasks\":[{\"id\":\"legacy-id-5\",\"title\":\"Legacy recycle bin\",\"category\":\"other\",\"difficulty\":3,\"priority\":\"medium\",\"dueDate\":\"2026-10-24\",\"description\":\"\",\"status\":\"todo\",\"xpReward\":0,\"actualMinutes\":0,\"completedAt\":null,\"deletedAt\":\"2026-10-23T10:00:00.000Z\",\"isHidden\":false,\"sortOrder\":1792749600000,\"subTasks\":[],\"createdAt\":\"2026-10-23T10:00:00.000Z\",\"updatedAt\":\"2026-10-23T10:00:00.000Z\"},{\"id\":\"legacy-id-4\",\"title\":\"Legacy done\",\"category\":\"library\",\"difficulty\":3,\"priority\":\"medium\",\"dueDate\":\"2026-10-24\",\"description\":\"\",\"status\":\"done\",\"xpReward\":88,\"actualMinutes\":32,\"completedAt\":\"2026-10-23T10:00:00.000Z\",\"deletedAt\":null,\"isHidden\":false,\"sortOrder\":1792749600000,\"subTasks\":[],\"createdAt\":\"2026-10-23T10:00:00.000Z\",\"updatedAt\":\"2026-10-23T10:00:00.000Z\"},{\"id\":\"legacy-id-1\",\"title\":\"Legacy task root\",\"category\":\"home\",\"difficulty\":3,\"priority\":\"high\",\"dueDate\":\"2026-10-24\",\"description\":\"Preserve root description\",\"status\":\"todo\",\"xpReward\":0,\"actualMinutes\":47,\"completedAt\":null,\"deletedAt\":null,\"isHidden\":true,\"sortOrder\":1792749600000,\"subTasks\":[{\"id\":\"legacy-id-2\",\"title\":\"Legacy task child\",\"completed\":false,\"sortOrder\":0,\"subTasks\":[{\"id\":\"legacy-id-3\",\"title\":\"Legacy task grandchild\",\"completed\":false,\"sortOrder\":0,\"subTasks\":[],\"createdAt\":\"2026-10-23T10:00:00.000Z\"}],\"createdAt\":\"2026-10-23T10:00:00.000Z\"}],\"createdAt\":\"2026-10-23T10:00:00.000Z\",\"updatedAt\":\"2026-10-23T10:00:00.000Z\"}],\"lastCategory\":\"other\",\"completedViewMode\":\"month\",\"customTaskGroups\":[]},\"version\":0}",
+    "anvilite-habits": "{\"state\":{\"habits\":[{\"title\":\"Legacy habit root\",\"category\":\"home\",\"difficulty\":2,\"estimatedMinutes\":10,\"repeatType\":\"daily\",\"customIntervalDays\":null,\"weeklyDays\":null,\"weeklyMode\":null,\"weeklyFlexibleCount\":null,\"monthlyDays\":null,\"targetCount\":2,\"startDate\":\"2026-10-23\",\"endDate\":null,\"reminderTime\":null,\"description\":\"Preserve recurring description\",\"id\":\"legacy-id-6\",\"subHabits\":[{\"id\":\"legacy-id-7\",\"title\":\"Legacy habit child\",\"completed\":false,\"sortOrder\":0,\"subHabits\":[{\"id\":\"legacy-id-8\",\"title\":\"Legacy habit grandchild\",\"completed\":false,\"sortOrder\":0,\"subHabits\":[],\"createdAt\":\"2026-10-23T10:00:00.000Z\"}],\"createdAt\":\"2026-10-23T10:00:00.000Z\"}],\"status\":\"active\",\"isHidden\":true,\"deletedAt\":null,\"timerStartedAt\":null,\"actualMinutes\":11,\"consecutiveCount\":7,\"totalCompletions\":19,\"toleranceCharges\":0,\"toleranceNextAt\":0,\"weeklyCompletionCount\":0,\"currentCycleCount\":1,\"lastCompletedAt\":null,\"lastDueAt\":null,\"sortOrder\":1792749600000,\"createdAt\":\"2026-10-23T10:00:00.000Z\",\"updatedAt\":\"2026-10-23T10:00:00.000Z\"}],\"completedHabitViewMode\":\"area\",\"customHabitGroups\":[]},\"version\":0}",
+    "anvilite-dashboard": "{\"state\":{\"layout\":[{\"id\":\"quickAdd\",\"col\":0,\"row\":0,\"colSpan\":16,\"rowSpan\":2},{\"id\":\"stats\",\"col\":16,\"row\":0,\"colSpan\":8,\"rowSpan\":2},{\"id\":\"tasks\",\"col\":12,\"row\":20,\"colSpan\":10,\"rowSpan\":9},{\"id\":\"habits\",\"col\":8,\"row\":2,\"colSpan\":8,\"rowSpan\":8},{\"id\":\"character\",\"col\":16,\"row\":2,\"colSpan\":8,\"rowSpan\":3},{\"id\":\"growth\",\"col\":16,\"row\":5,\"colSpan\":8,\"rowSpan\":5},{\"id\":\"inspiration\",\"col\":0,\"row\":10,\"colSpan\":8,\"rowSpan\":5},{\"id\":\"flows\",\"col\":8,\"row\":10,\"colSpan\":8,\"rowSpan\":5}],\"visibleCards\":[\"quickAdd\",\"stats\",\"tasks\",\"habits\",\"growth\",\"flows\"]},\"version\":3}",
+    "anvilite-settings": "{\"state\":{\"settings\":{\"theme\":\"forge-purple\",\"language\":\"zh\",\"dashboardLayout\":[{\"id\":\"tasks\",\"visible\":true,\"order\":0},{\"id\":\"habits\",\"visible\":true,\"order\":1},{\"id\":\"stats\",\"visible\":true,\"order\":2},{\"id\":\"character\",\"visible\":true,\"order\":3},{\"id\":\"quick-create\",\"visible\":true,\"order\":4},{\"id\":\"growth-trend\",\"visible\":true,\"order\":5}],\"unlockedThemes\":[\"dawn-white\"],\"characterName\":\"旅行者\"}},\"version\":0}",
+    "anvilite-areas": "{\"state\":{\"areas\":[{\"id\":\"area-home\",\"templateId\":\"home\",\"name\":\"家园\",\"category\":\"home\",\"position\":{\"x\":700,\"y\":360},\"sortOrder\":0,\"isPreset\":true,\"canDelete\":false,\"canMove\":false,\"createdAt\":\"2026-10-23T10:00:00.000Z\"},{\"id\":\"area-arena\",\"templateId\":\"arena\",\"name\":\"竞技场\",\"category\":\"arena\",\"position\":{\"x\":260,\"y\":190},\"sortOrder\":1,\"isPreset\":true,\"canDelete\":true,\"canMove\":false,\"createdAt\":\"2026-10-23T10:00:00.000Z\"},{\"id\":\"area-library\",\"templateId\":\"library\",\"name\":\"藏书阁\",\"category\":\"library\",\"position\":{\"x\":1060,\"y\":140},\"sortOrder\":2,\"isPreset\":true,\"canDelete\":true,\"canMove\":false,\"createdAt\":\"2026-10-23T10:00:00.000Z\"},{\"id\":\"area-workshop\",\"templateId\":\"workshop\",\"name\":\"灵感工坊\",\"category\":\"workshop\",\"position\":{\"x\":280,\"y\":520},\"sortOrder\":3,\"isPreset\":true,\"canDelete\":true,\"canMove\":false,\"createdAt\":\"2026-10-23T10:00:00.000Z\"},{\"id\":\"area-forge\",\"templateId\":\"forge\",\"name\":\"锻造坊\",\"category\":\"forge\",\"position\":{\"x\":920,\"y\":580},\"sortOrder\":4,\"isPreset\":true,\"canDelete\":true,\"canMove\":false,\"createdAt\":\"2026-10-23T10:00:00.000Z\"},{\"id\":\"area-milestone\",\"templateId\":\"milestone\",\"name\":\"档案馆\",\"category\":\"_milestone\",\"position\":{\"x\":1220,\"y\":700},\"sortOrder\":5,\"isPreset\":true,\"canDelete\":false,\"canMove\":false,\"createdAt\":\"2026-10-23T10:00:00.000Z\"},{\"id\":\"legacy-id-9\",\"templateId\":null,\"name\":\"Legacy custom category\",\"category\":\"Legacy custom category\",\"position\":{\"x\":694.2477,\"y\":362.8318},\"sortOrder\":6,\"isPreset\":false,\"canDelete\":true,\"canMove\":true,\"createdAt\":\"2026-10-23T10:00:00.000Z\"}]},\"version\":0}",
+    "anvilite-growth-events": "{\"state\":{\"events\":[{\"type\":\"level_up\",\"title\":\"Legacy reward event\",\"details\":{\"oldLevel\":7,\"newLevel\":8,\"description\":\"Keep old reward inscription\"},\"isMilestone\":true,\"id\":\"legacy-id-11\",\"timestamp\":\"2026-10-23T10:00:00.000Z\"},{\"type\":\"custom_milestone\",\"title\":\"Legacy personal milestone\",\"details\":{\"description\":\"Keep this inscription\"},\"isMilestone\":true,\"id\":\"legacy-id-10\",\"timestamp\":\"2026-10-23T10:00:00.000Z\"}]},\"version\":0}",
+    "anvilite-character": "{\"state\":{\"character\":{\"name\":\"Synthetic legacy user\",\"level\":17,\"currentXP\":123,\"totalXP\":9876,\"ore\":456,\"totalOreEarned\":789,\"titlePreset\":\"custom\",\"customTitles\":[\"Legacy kept title\"],\"streakDays\":0,\"lastActiveDate\":null,\"globalStatus\":\"active\",\"prestigeLevel\":0,\"xpFormulaVersion\":0,\"createdAt\":\"2026-10-23T10:00:00.000Z\"}},\"version\":0}",
+    "anvilite-badges": "{\"state\":{\"earnedIds\":{\"legacy_badge\":\"2026-09-01T10:00:00.000Z\"},\"notifyQueue\":[\"legacy_badge\"]},\"version\":0}",
+    "anvilite-sops": "{\"state\":{\"folders\":[{\"id\":\"legacy-id-12\",\"name\":\"Legacy flow folder\",\"sortOrder\":0,\"isSystem\":false,\"createdAt\":\"2026-10-23T10:00:00.000Z\"}],\"sops\":[{\"folderId\":\"legacy-id-12\",\"title\":\"Legacy rich flow\",\"isSystem\":false,\"type\":\"schedule\",\"steps\":[{\"id\":\"legacy-step\",\"title\":\"Parent step\",\"sortOrder\":0,\"note\":\"Parent note\",\"warning\":\"Parent warning\",\"time\":\"07:00\",\"childSteps\":[{\"id\":\"legacy-nested-step\",\"title\":\"Nested step\",\"sortOrder\":0,\"note\":\"Nested note\",\"warning\":\"Nested warning\",\"time\":null,\"childSteps\":[]}]}],\"id\":\"legacy-id-13\",\"sortOrder\":0,\"lastUsedAt\":null,\"createdAt\":\"2026-10-23T10:00:00.000Z\",\"updatedAt\":\"2026-10-23T10:00:00.000Z\"}],\"selectedSOPId\":\"legacy-id-13\",\"collapsedFolderIds\":[\"legacy-id-12\"]},\"version\":0}",
+    "anvilite-inspirations": "{\"state\":{\"inspirations\":[{\"id\":\"legacy-id-14\",\"content\":\"Legacy preserved inspiration\",\"createdAt\":\"2026-10-23T10:00:00.000Z\"}]},\"version\":0}"
+  }
+}

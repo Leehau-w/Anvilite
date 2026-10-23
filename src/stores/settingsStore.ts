@@ -21,11 +21,16 @@ const DEFAULT_LAYOUT: DashboardCardLayout[] = [
   { id: 'growth-trend', visible: true, order: 5 },
 ]
 
+export const AVAILABLE_THEME_IDS = [
+  'dawn-white', 'mint-paper', 'parchment', 'slate-cloud',
+  'forge-purple', 'ore-cyan', 'flame-cast', 'jade-forest',
+] as const
+
 const DEFAULT_SETTINGS: Settings = {
   theme: 'dawn-white',
   language: 'zh',
   dashboardLayout: DEFAULT_LAYOUT,
-  unlockedThemes: ['dawn-white'],
+  unlockedThemes: [...AVAILABLE_THEME_IDS],
   characterName: '旅行者',
 }
 
@@ -35,6 +40,7 @@ export const useSettingsStore = create<SettingsStore>()(
       settings: DEFAULT_SETTINGS,
 
       setTheme: (theme) => {
+        if (!AVAILABLE_THEME_IDS.some((id) => id === theme)) return
         document.documentElement.setAttribute('data-theme', theme === 'dawn-white' ? '' : theme)
         set((s) => ({ settings: { ...s.settings, theme } }))
       },
@@ -60,6 +66,8 @@ export const useSettingsStore = create<SettingsStore>()(
       name: `${getStoragePrefix()}-settings`,
       onRehydrateStorage: () => (state) => {
         if (state) {
+          // Keep the selected theme and saved layout; all themes are directly available.
+          state.settings.unlockedThemes = [...AVAILABLE_THEME_IDS]
           const theme = state.settings.theme
           if (theme && theme !== 'dawn-white') {
             document.documentElement.setAttribute('data-theme', theme)

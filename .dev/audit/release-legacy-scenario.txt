@@ -1,0 +1,38 @@
+const task=useTaskStore.getState().addTask({title:'Legacy task root',category:'home',priority:'high'})
+useTaskStore.getState().addSubTask(task.id,'Legacy task child')
+const taskChild=useTaskStore.getState().tasks.find(t=>t.id===task.id).subTasks[0]
+useTaskStore.getState().addSubTask(task.id,'Legacy task grandchild',taskChild.id)
+useTaskStore.getState().updateTask(task.id,{description:'Preserve root description',actualMinutes:47,isHidden:true,...(LEGACY_TAG==='v0.3.3'?{tags:['legacy']}: {})})
+const completed=useTaskStore.getState().addTask({title:'Legacy done',category:'library'})
+useTaskStore.getState().updateTask(completed.id,{status:'done',actualMinutes:32,xpReward:88,completedAt:new Date().toISOString()})
+const deleted=useTaskStore.getState().addTask({title:'Legacy recycle bin',category:'other'})
+useTaskStore.getState().deleteTask(deleted.id)
+useHabitStore.getState().addHabit({title:'Legacy habit root',category:'home',difficulty:2,estimatedMinutes:10,repeatType:'daily',customIntervalDays:null,weeklyDays:null,weeklyMode:null,weeklyFlexibleCount:null,monthlyDays:null,targetCount:2,startDate:'2026-10-23',endDate:null,reminderTime:null,description:'Preserve recurring description'})
+const habit=useHabitStore.getState().habits[0]
+useHabitStore.getState().addSubHabit(habit.id,'Legacy habit child')
+const habitChild=useHabitStore.getState().habits[0].subHabits[0]
+useHabitStore.getState().addSubHabit(habit.id,'Legacy habit grandchild',habitChild.id)
+useHabitStore.getState().updateHabit(habit.id,{consecutiveCount:7,totalCompletions:19,currentCycleCount:1,isHidden:true,actualMinutes:11})
+useDashboardStore.getState().updateCard('tasks',{col:12,row:20,colSpan:10,rowSpan:9})
+useDashboardStore.getState().removeCard('character')
+useDashboardStore.getState().removeCard('inspiration')
+useSettingsStore.getState().setTheme('forge-purple')
+useAreaStore.getState().addArea(null,'Legacy custom category')
+useGrowthEventStore.getState().addEvent({type:'custom_milestone',title:'Legacy personal milestone',details:{description:'Keep this inscription'},isMilestone:true})
+useGrowthEventStore.getState().addEvent({type:'level_up',title:'Legacy reward event',details:{oldLevel:7,newLevel:8,description:'Keep old reward inscription'},isMilestone:true})
+useCharacterStore.setState({character:{...useCharacterStore.getState().character,name:'Synthetic legacy user',level:17,totalXP:9876,currentXP:123,ore:456,totalOreEarned:789,xpFormulaVersion:0,customTitles:['Legacy kept title'],titlePreset:'custom'}})
+useBadgeStore.setState({earnedIds:{legacy_badge:'2026-09-01T10:00:00.000Z'},notifyQueue:['legacy_badge']})
+useSOPStore.getState().addFolder('Legacy flow folder')
+const folder=useSOPStore.getState().folders[0].id
+let nested=folder
+if(LEGACY_TAG==='v0.3.3')nested=useSOPStore.getState().addFolder('Legacy nested folder',folder)
+const rich=text=>({type:'doc',content:[{type:'paragraph',content:[{type:'text',text}]}]})
+const steps=LEGACY_TAG==='v0.3.0'
+ ? [{id:'legacy-step',title:'Parent step',sortOrder:0,note:'Parent note',warning:'Parent warning',time:'07:00',childSteps:[{id:'legacy-nested-step',title:'Nested step',sortOrder:0,note:'Nested note',warning:'Nested warning',time:null,childSteps:[]}]}]
+ : [{id:'legacy-step',title:'Parent step',sortOrder:0,content:rich('Parent rich text'),childSteps:[{id:'legacy-nested-step',title:'Nested step',sortOrder:0,content:rich('Nested rich text'),childSteps:[]}]}]
+const sop=useSOPStore.getState().addSOP({folderId:nested,title:'Legacy rich flow',isSystem:false,...(LEGACY_TAG==='v0.3.0'?{type:'schedule'}:{displayStyle:'timeline'}),steps})
+useSOPStore.getState().selectSOP(sop)
+useSOPStore.getState().toggleFolderCollapsed(folder)
+useInspirationStore.getState().addInspiration('Legacy preserved inspiration')
+const data={character:useCharacterStore.getState(),tasks:useTaskStore.getState(),habits:useHabitStore.getState(),areas:useAreaStore.getState(),badges:useBadgeStore.getState(),dashboard:useDashboardStore.getState(),settings:useSettingsStore.getState(),growthEvents:useGrowthEventStore.getState(),sops:useSOPStore.getState(),inspirations:useInspirationStore.getState()}
+module.exports={exportVersion:1,appVersion:LEGACY_TAG.slice(1),exportedAt:new Date().toISOString(),accountId:'default',data}

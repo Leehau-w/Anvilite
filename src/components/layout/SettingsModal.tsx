@@ -1,3 +1,4 @@
+import { McpSettingsPanel } from './McpSettingsPanel'
 import React, { useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useSettingsStore } from '@/stores/settingsStore'
@@ -38,18 +39,6 @@ interface SettingsModalProps {
   onClose: () => void
 }
 
-/** 各主题的矿石解锁价格（dawn-white 为 0 = 免费） */
-const THEME_ORE_COST: Record<string, number> = {
-  'dawn-white':    0,
-  'mint-paper':   200,
-  'parchment':    200,
-  'slate-cloud':  200,
-  'forge-purple': 500,
-  'ore-cyan':     500,
-  'flame-cast':   500,
-  'jade-forest':  500,
-}
-
 const THEME_COLORS: Record<string, { bg: string; accent: string }> = {
   'dawn-white':    { bg: '#faf8f5', accent: '#e8600a' },
   'mint-paper':    { bg: '#f3faf6', accent: '#0d9462' },
@@ -62,12 +51,11 @@ const THEME_COLORS: Record<string, { bg: string; accent: string }> = {
 }
 
 export function SettingsModal({ open, onClose }: SettingsModalProps) {
-  const { settings, setTheme, setLanguage, unlockTheme } = useSettingsStore()
-  const { character, setName, spendOre } = useCharacterStore()
+  const { settings, setTheme, setLanguage } = useSettingsStore()
+  const { character, setName } = useCharacterStore()
   const { showToast } = useToast()
   const t = useT()
   const [nameInput, setNameInput] = useState(character.name)
-  const [confirmTheme, setConfirmTheme] = useState<string | null>(null)
 
   // ── 数据导出/导入 ──
   const [importConfirm, setImportConfirm] = useState(false)
@@ -78,11 +66,28 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
   const [syncMeta, setSyncMeta] = useState<SyncMetadata | null>(null)
   const [syncExists, setSyncExists] = useState<boolean | null>(null)
   const [syncBusy, setSyncBusy] = useState(false)
+  const [syncError, setSyncError] = useState<string | null>(null)
   const [syncRestoreConfirm, setSyncRestoreConfirm] = useState(false)
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(() => getLastSyncExportedAt())
 
+  function syncErrorMessage(error: string) {
+    if (error === 'account_changed') return t.data_accountChanged
+    if (error === 'directory_not_authorized') return t.data_syncReselectFolder
+    if (error === 'invalid_sender') return t.data_syncInvalidWindow
+    if (['invalid_path', 'invalid_file', 'invalid_format', 'parse_error', 'account_mismatch'].includes(error) ||
+        error.startsWith('invalid_') || error.startsWith('missing_') || error.startsWith('version')) return t.data_syncInvalidFile
+    return t.data_syncError
+  }
+
+  function showSyncError(error = 'sync_failed') {
+    setSyncError(error)
+    showToast(syncErrorMessage(error))
+  }
+
   async function handleExport() {
-    await exportData()
+    const result = await exportData()
+    if (result.success) showToast(t.data_exportSuccess)
+    else if (!result.canceled) showToast(result.error === 'account_changed' ? t.data_accountChanged : t.data_exportError)
   }
 
   function handleImportSelect(e: React.ChangeEvent<HTMLInputElement>) {
@@ -99,7 +104,10 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
     setImportConfirm(false)
     setPendingImportFile(null)
     if (!result.success) {
-      const msg = result.error?.startsWith('version') ? t.data_importErrorVersion
+      const msg = result.error === 'account_changed' ? t.data_accountChanged
+        : result.error === 'rollback_failed' ? t.data_importErrorRollback
+        : result.error === 'write_failed' ? t.data_importErrorWrite
+        : result.error?.startsWith('version') ? t.data_importErrorVersion
         : result.error === 'parse_error' ? t.data_importErrorParse
         : t.data_importErrorFormat
       showToast(msg)
@@ -107,50 +115,75 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
     // success: page reloads automatically
   }
 
-  async function refreshSyncMetadata(dir = syncDir) {
+  async function refreshSyncMetadata(dir = syncDir, notify = false) {
     if (!dir || !syncSupported) return
-    const result = await readSyncMetadata(dir)
-    if (result.success) {
-      setSyncExists(!!result.exists)
-      setSyncMeta(result.metadata ?? null)
-    } else {
+    try {
+      const result = await readSyncMetadata(dir)
+      if (result.success) {
+        setSyncExists(!!result.exists)
+        setSyncMeta(result.metadata ?? null)
+        setSyncError(null)
+      } else {
+        setSyncExists(null)
+        setSyncMeta(null)
+        setSyncError(result.error ?? 'read_failed')
+        if (notify) showToast(syncErrorMessage(result.error ?? 'read_failed'))
+      }
+    } catch {
       setSyncExists(null)
       setSyncMeta(null)
+      setSyncError('read_failed')
+      if (notify) showToast(t.data_syncError)
     }
   }
 
   async function handleChooseSyncDir() {
+    if (syncBusy) return
     setSyncBusy(true)
-    const result = await chooseSyncDir()
-    setSyncBusy(false)
-    if (!result.success || !result.dir) {
-      if (result.error !== 'canceled') showToast(t.data_syncError)
-      return
-    }
-    setSyncDirState(result.dir)
-    await refreshSyncMetadata(result.dir)
+    try {
+      const result = await chooseSyncDir()
+      if (!result.success || !result.dir) {
+        if (result.error !== 'canceled') showSyncError(result.error)
+        return
+      }
+      setSyncDirState(result.dir)
+      await refreshSyncMetadata(result.dir, true)
+    } catch {
+      showSyncError()
+    } finally { setSyncBusy(false) }
   }
 
   async function handleWriteSync() {
+    if (syncBusy) return
     setSyncBusy(true)
-    const result = await writeSyncSnapshot(syncDir)
-    setSyncBusy(false)
-    if (!result.success) {
-      showToast(t.data_syncError)
-      return
-    }
-    setSyncMeta(result.metadata ?? null)
-    setSyncExists(true)
-    setLastSyncAt(result.metadata?.exportedAt ?? getLastSyncExportedAt())
-    showToast(t.data_syncWrote)
+    try {
+      const result = await writeSyncSnapshot(syncDir)
+      if (!result.success) {
+        showSyncError(result.error)
+        return
+      }
+      setSyncError(null)
+      setSyncMeta(result.metadata ?? null)
+      setSyncExists(true)
+      setLastSyncAt(result.metadata?.exportedAt ?? getLastSyncExportedAt())
+      showToast(t.data_syncWrote)
+    } catch {
+      showSyncError()
+    } finally { setSyncBusy(false) }
   }
 
   async function handleRestoreSync() {
+    if (syncBusy) return
     setSyncBusy(true)
-    const result = await restoreFromSync(syncDir)
-    setSyncBusy(false)
-    setSyncRestoreConfirm(false)
-    if (!result.success) showToast(t.data_syncError)
+    try {
+      const result = await restoreFromSync(syncDir)
+      if (!result.success) showSyncError(result.error)
+    } catch {
+      showSyncError()
+    } finally {
+      setSyncBusy(false)
+      setSyncRestoreConfirm(false)
+    }
   }
 
   // ── 账号管理 ──
@@ -182,40 +215,6 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
   function handleNameSave() {
     if (nameInput.trim()) setName(nameInput.trim())
   }
-
-  function handleThemeClick(themeId: string) {
-    if (settings.unlockedThemes.includes(themeId)) {
-      setTheme(themeId)
-      return
-    }
-    // 未解锁：弹出确认
-    setConfirmTheme(themeId)
-  }
-
-  function handleBuyTheme(themeId: string) {
-    const cost = THEME_ORE_COST[themeId] ?? 0
-    if (cost === 0) {
-      unlockTheme(themeId)
-      setTheme(themeId)
-      setConfirmTheme(null)
-      return
-    }
-    const ok = spendOre(cost)
-    if (!ok) {
-      showToast(t.settings_toastNoOre(cost - character.ore))
-      setConfirmTheme(null)
-      return
-    }
-    unlockTheme(themeId)
-    setTheme(themeId)
-    setConfirmTheme(null)
-    const nameKey = THEME_NAME_KEY[themeId]
-    showToast(t.settings_toastUnlocked(nameKey ? (t[nameKey] as string) : themeId))
-  }
-
-  const confirmThemeInfo = confirmTheme ? THEMES.find((t) => t.id === confirmTheme) : null
-  const confirmCost = confirmTheme ? (THEME_ORE_COST[confirmTheme] ?? 0) : 0
-  const canAfford = character.ore >= confirmCost
 
   const [storageUsage, setStorageUsage] = useState(() => getStorageUsage())
   useEffect(() => {
@@ -255,6 +254,7 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
               x: '-50%',
               y: '-50%',
               width: 440,
+              maxWidth: 'calc(100vw - 24px)',
               maxHeight: '80vh',
               background: 'var(--color-surface)',
               borderRadius: 'var(--radius-xl)',
@@ -280,10 +280,6 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
             >
               <span style={{ fontSize: 16, fontWeight: 600 }}>{t.settings_title}</span>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                {/* 矿石余额 */}
-                <span style={{ fontSize: 12, color: 'var(--color-text-dim)', fontFamily: 'var(--font-num)' }}>
-                  ⛏ {character.ore.toLocaleString()}
-                </span>
                 <button
                   onClick={onClose}
                   style={{
@@ -407,7 +403,7 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
                   value={nameInput}
                   onChange={(e) => setNameInput(e.target.value)}
                   onBlur={handleNameSave}
-                  onKeyDown={(e) => e.key === 'Enter' && handleNameSave()}
+                  onKeyDown={(e) => e.key === 'Enter' && !e.nativeEvent.isComposing && handleNameSave()}
                   placeholder={t.settings_charName}
                   style={{
                     width: '100%', height: 36, padding: '0 12px',
@@ -432,8 +428,6 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
                       </p>
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                         {THEMES.filter((th) => th.dark === (mode === 'dark')).map((theme) => {
-                          const isUnlocked = settings.unlockedThemes.includes(theme.id)
-                          const cost = THEME_ORE_COST[theme.id] ?? 0
                           const nameKey = THEME_NAME_KEY[theme.id]
                           const displayName = nameKey ? (t[nameKey] as string) : theme.name
                           return (
@@ -441,9 +435,7 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
                               key={theme.id}
                               theme={{ id: theme.id, name: displayName }}
                               isActive={settings.theme === theme.id}
-                              isUnlocked={isUnlocked}
-                              cost={cost}
-                              onClick={() => handleThemeClick(theme.id)}
+                              onClick={() => setTheme(theme.id)}
                             />
                           )
                         })}
@@ -476,6 +468,8 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
                   ))}
                 </div>
               </section>
+
+              <McpSettingsPanel />
 
               {/* 数据管理 */}
               <section>
@@ -525,10 +519,16 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
                         disabled={syncBusy}
                         style={smallOutlineBtnStyle}
                       >
-                        {syncDir ? t.data_syncChangeFolder : t.data_syncChooseFolder}
+                        {syncError === 'directory_not_authorized' ? t.data_syncChooseFolder : syncDir ? t.data_syncChangeFolder : t.data_syncChooseFolder}
                       </button>
                     )}
                   </div>
+
+                  {syncError && (
+                    <div role="alert" style={{ fontSize: 12, color: 'var(--color-danger)', lineHeight: 1.5 }}>
+                      {syncErrorMessage(syncError)}
+                    </div>
+                  )}
 
                   {syncSupported && syncDir && (
                     <>
@@ -548,7 +548,7 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
                         >
                           {t.data_syncRestore}
                         </button>
-                        <button onClick={() => refreshSyncMetadata()} disabled={syncBusy} style={smallOutlineBtnStyle}>
+                        <button onClick={() => refreshSyncMetadata(syncDir, true)} disabled={syncBusy} style={smallOutlineBtnStyle}>
                           {t.data_syncRefresh}
                         </button>
                       </div>
@@ -622,7 +622,7 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
                   <p style={{ fontSize: 13, color: 'var(--color-text-dim)', marginBottom: 16, lineHeight: 1.6 }}>{t.data_syncRestoreConfirmMsg}</p>
                   <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
                     <button onClick={() => setSyncRestoreConfirm(false)} style={{ padding: '6px 14px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', background: 'transparent', color: 'var(--color-text-dim)', cursor: 'pointer', fontSize: 13 }}>{t.common_cancel}</button>
-                    <button onClick={handleRestoreSync} style={{ padding: '6px 14px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-warning)', background: 'color-mix(in srgb, var(--color-warning) 12%, transparent)', color: 'var(--color-warning)', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>{t.data_syncRestore}</button>
+                    <button onClick={handleRestoreSync} disabled={syncBusy} style={{ padding: '6px 14px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-warning)', background: 'color-mix(in srgb, var(--color-warning) 12%, transparent)', color: 'var(--color-warning)', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>{t.data_syncRestore}</button>
                   </div>
                 </motion.div>
               </motion.div>
@@ -693,102 +693,6 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
             )}
           </AnimatePresence>
 
-          {/* 购买主题确认弹窗 */}
-          <AnimatePresence>
-            {confirmTheme && confirmThemeInfo && (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                style={{
-                  position: 'fixed', inset: 0, zIndex: 600,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                }}
-                onClick={() => setConfirmTheme(null)}
-              >
-                <motion.div
-                  initial={{ scale: 0.9, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  exit={{ scale: 0.9, opacity: 0 }}
-                  onClick={(e) => e.stopPropagation()}
-                  style={{
-                    width: 300,
-                    background: 'var(--color-surface)',
-                    borderRadius: 'var(--radius-xl)',
-                    border: '1px solid var(--color-border)',
-                    padding: 20,
-                    boxShadow: '0 8px 32px rgba(0,0,0,0.25)',
-                  }}
-                >
-                  {/* 主题预览色块 */}
-                  <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 12 }}>
-                    <div
-                      style={{
-                        width: 64,
-                        height: 40,
-                        borderRadius: 'var(--radius-md)',
-                        background: THEME_COLORS[confirmTheme]?.bg ?? '#fff',
-                        border: '1px solid rgba(0,0,0,0.12)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                      }}
-                    >
-                      <div
-                        style={{
-                          width: 22,
-                          height: 10,
-                          borderRadius: 5,
-                          background: THEME_COLORS[confirmTheme]?.accent ?? '#666',
-                        }}
-                      />
-                    </div>
-                  </div>
-
-                  <div style={{ textAlign: 'center', marginBottom: 16 }}>
-                    <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--color-text)', marginBottom: 4 }}>
-                      {t.settings_unlockTitle((THEME_NAME_KEY[confirmTheme] ? (t[THEME_NAME_KEY[confirmTheme]] as string) : confirmThemeInfo.name))}
-                    </div>
-                    <div style={{ fontSize: 13, color: 'var(--color-text-dim)' }}>
-                      {t.settings_unlockCost(confirmCost)}
-                    </div>
-                    {!canAfford && (
-                      <div style={{ fontSize: 11, color: '#dc2626', marginTop: 4 }}>
-                        {t.settings_insufficientOre(character.ore)}
-                      </div>
-                    )}
-                  </div>
-
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    <button
-                      onClick={() => setConfirmTheme(null)}
-                      style={{
-                        flex: 1, height: 34, borderRadius: 'var(--radius-md)',
-                        border: '1px solid var(--color-border)', background: 'transparent',
-                        color: 'var(--color-text-dim)', fontSize: 13, cursor: 'pointer',
-                      }}
-                    >
-                      {t.settings_cancel}
-                    </button>
-                    <button
-                      onClick={() => handleBuyTheme(confirmTheme)}
-                      disabled={!canAfford}
-                      style={{
-                        flex: 2, height: 34, borderRadius: 'var(--radius-md)',
-                        border: 'none',
-                        background: canAfford ? 'var(--color-accent)' : 'var(--color-border)',
-                        color: canAfford ? 'white' : 'var(--color-text-dim)',
-                        fontSize: 13, fontWeight: 600,
-                        cursor: canAfford ? 'pointer' : 'not-allowed',
-                      }}
-                    >
-                      {t.settings_confirmBuy(confirmCost)}
-                    </button>
-                  </div>
-                </motion.div>
-              </motion.div>
-            )}
-          </AnimatePresence>
         </>
       )}
     </AnimatePresence>
@@ -826,91 +730,23 @@ const smallOutlineBtnStyle: React.CSSProperties = {
   whiteSpace: 'nowrap',
 }
 
-function ThemeButton({
-  theme,
-  isActive,
-  isUnlocked,
-  cost,
-  onClick,
-}: {
+function ThemeButton({ theme, isActive, onClick }: {
   theme: { id: string; name: string }
   isActive: boolean
-  isUnlocked: boolean
-  cost: number
   onClick: () => void
 }) {
   const colors = THEME_COLORS[theme.id] ?? { bg: '#fff', accent: '#666' }
   return (
-    <button
+    <button type="button" data-theme-option={theme.id} aria-label={theme.name} aria-pressed={isActive}
       onClick={onClick}
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        gap: 4,
-        background: 'none',
-        border: 'none',
-        cursor: 'pointer',
-        padding: 4,
-        position: 'relative',
-      }}
-    >
-      <div
-        style={{
-          width: 52,
-          height: 34,
-          borderRadius: 'var(--radius-md)',
-          background: colors.bg,
-          border: `2px solid ${isActive ? colors.accent : isUnlocked ? 'rgba(0,0,0,0.12)' : 'transparent'}`,
-          boxShadow: isActive ? `0 0 0 2px ${colors.accent}40` : 'inset 0 0 0 1px rgba(0,0,0,0.1)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          opacity: isUnlocked ? 1 : 0.55,
-          transition: 'all 0.15s',
-          position: 'relative',
-          overflow: 'hidden',
-        }}
-      >
-        <div
-          style={{
-            width: 18,
-            height: 9,
-            borderRadius: 4,
-            background: colors.accent,
-          }}
-        />
-        {/* 未解锁蒙层 */}
-        {!isUnlocked && (
-          <div
-            style={{
-              position: 'absolute', inset: 0,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              background: 'rgba(0,0,0,0.15)',
-              fontSize: 12,
-            }}
-          >
-            🔒
-          </div>
-        )}
+      style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, background: 'none', border: 'none', cursor: 'pointer', padding: 4 }}>
+      <div style={{ width: 52, height: 34, borderRadius: 'var(--radius-md)', background: colors.bg,
+        border: `2px solid ${isActive ? colors.accent : 'rgba(0,0,0,0.12)'}`,
+        boxShadow: isActive ? `0 0 0 2px ${colors.accent}40` : 'inset 0 0 0 1px rgba(0,0,0,0.1)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s' }}>
+        <div style={{ width: 18, height: 9, borderRadius: 4, background: colors.accent }} />
       </div>
-      <span style={{ fontSize: 11, color: 'var(--color-text-dim)', whiteSpace: 'nowrap' }}>
-        {theme.name}
-      </span>
-      {/* 价格标签 */}
-      {!isUnlocked && cost > 0 && (
-        <span style={{
-          fontSize: 9,
-          color: 'var(--color-secondary)',
-          fontFamily: 'var(--font-num)',
-          lineHeight: 1,
-        }}>
-          {cost} ⛏
-        </span>
-      )}
-      {isUnlocked && cost > 0 && (
-        <span style={{ fontSize: 9, color: 'var(--color-success)', lineHeight: 1 }}>✓</span>
-      )}
+      <span style={{ fontSize: 11, color: 'var(--color-text-dim)', whiteSpace: 'nowrap' }}>{theme.name}</span>
     </button>
   )
 }

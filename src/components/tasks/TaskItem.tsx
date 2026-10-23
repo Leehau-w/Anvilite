@@ -6,21 +6,19 @@ import type { Task } from '@/types/task'
 import { PriorityDot } from '@/components/ui/PriorityBadge'
 import { formatRelativeDate, isOverdue } from '@/utils/time'
 import { useTaskStore } from '@/stores/taskStore'
-import { useCharacterStore } from '@/stores/characterStore'
 import { useGrowthEventStore } from '@/stores/growthEventStore'
 import { useAreaStore } from '@/stores/areaStore'
-import { calculateTaskXP } from '@/engines/xpEngine'
 import { useToast } from '@/components/feedback/Toast'
-import { useFeedback } from '@/components/feedback/FeedbackContext'
 import { useT } from '@/i18n'
 import { categoryDisplay, getAreaDisplayName } from '@/utils/area'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useUIStore } from '@/stores/uiStore'
 import { SubTaskList } from './SubTaskItem'
-import { findCompletionEvent } from '@/utils/completionEvent'
-import { undoTaskCompletion } from '@/utils/taskCompletion'
+import { undoTaskCompletion, deleteTaskWithRewards } from '@/utils/taskCompletion'
 import { TimerBadge } from './TimerBadge'
 import { TagPill } from './TagPill'
+import { TaskDragHandle } from './TaskDragHandle'
+import { taskPriorityBackground } from '@/utils/taskPriority'
 
 
 interface TaskItemProps {
@@ -30,11 +28,9 @@ interface TaskItemProps {
 }
 
 export function TaskItem({ task, compact, onEdit }: TaskItemProps) {
-  const { completeTask, undoComplete, updateTask, startTask, pauseTask, deleteTask, hideTask, addSubTask } = useTaskStore()
-  const { character, gainXPAndOre, recordActivity, revokeXP } = useCharacterStore()
-  const { addEvent, removeEvent } = useGrowthEventStore()
+  const { completeTask, updateTask, startTask, pauseTask, waitTask, resumeWaitingTask, hideTask, addSubTask } = useTaskStore()
+  const { addEvent } = useGrowthEventStore()
   const { showToast } = useToast()
-  const { triggerFeedback } = useFeedback()
 
   const t = useT()
   const lang = useSettingsStore((s) => s.settings.language)
@@ -58,6 +54,7 @@ export function TaskItem({ task, compact, onEdit }: TaskItemProps) {
   const isOverdueDue = isOverdue(task.dueDate) && task.status !== 'done'
   const isDoing = task.status === 'doing'
   const isDone = task.status === 'done'
+  const isWaiting = task.status === 'waiting'
 
   const subTasks = task.subTasks ?? []
   const completedSubCount = subTasks.filter((s) => s.completed).length
@@ -102,105 +99,61 @@ export function TaskItem({ task, compact, onEdit }: TaskItemProps) {
 
   const handleComplete = useCallback(async () => {
     if (completing) return
-
-    if (isDone) {
-      undoTaskCompletion(task.id, task.completionId)
-      showToast(t.task_toastUndoDone)
-      setShowDurationInput(false)
-      return
-    }
-
-    if (task.difficulty >= 4 && !confirmHigh) {
-      setConfirmHigh(true)
-      if (confirmTimer.current) clearTimeout(confirmTimer.current)
-      confirmTimer.current = setTimeout(() => setConfirmHigh(false), 3000)
-      return
-    }
-    setConfirmHigh(false)
-    if (confirmTimer.current) clearTimeout(confirmTimer.current)
-
-    setCompleting(true)
-    await delay(250)
-
-    // CRIT-03: wrap cross-store completion in try-catch for atomicity
-    let completed: Task | null = null
-    let xp = 0
-    let ore = 0
-    let leveledUp = false
-    let oldLevel = 0
-    let newLevel = 0
-    let prestigeUnlocked = false
-    let oldStreak = 0
-    let newStreak = 0
-
     try {
-      completed = completeTask(task.id)
-      if (!completed) { setCompleting(false); return }
-
-      const result = calculateTaskXP(completed, character.streakDays)
-      xp = result.xp
-      ore = result.ore
-      updateTask(task.id, { xpReward: xp })
-
-      const levelResult = gainXPAndOre(xp, ore)
-      leveledUp = levelResult.leveledUp
-      oldLevel = levelResult.oldLevel
-      newLevel = levelResult.newLevel
-      prestigeUnlocked = levelResult.prestigeUnlocked
-
-      const streakResult = recordActivity()
-      oldStreak = streakResult.oldStreak
-      newStreak = streakResult.newStreak
-
-      addEvent({
-        type: 'task_complete',
-        title: t.task_eventTitle(task.title),
-        details: { entityId: task.id, completionId: completed.completionId, xpGained: xp, oreGained: ore, actualMinutes: completed.actualMinutes, categoryName: task.category },
-        isMilestone: false,
-      })
-    } catch (err) {
-      // Rollback: undo task completion and revoke XP if partially applied
-      console.error('[TaskItem] completion flow error, rolling back:', err)
-      if (completed) {
-        undoComplete(task.id)
-        if (xp > 0) revokeXP(xp)
+      if (isDone) {
+        if (undoTaskCompletion(task.id, task.completionId)) showToast(t.task_toastUndoDone)
+        setShowDurationInput(false)
+        return
       }
+      if (task.difficulty >= 4 && !confirmHigh) {
+        setConfirmHigh(true)
+        if (confirmTimer.current) clearTimeout(confirmTimer.current)
+        confirmTimer.current = setTimeout(() => setConfirmHigh(false), 3000)
+        return
+      }
+      setConfirmHigh(false)
+      if (confirmTimer.current) clearTimeout(confirmTimer.current)
+      setCompleting(true)
+      await delay(250)
+      const completed = completeTask(task.id)
+      if (!completed) return
+      await delay(300)
+      showToast(t.task_toastDone(0), {
+        label: t.task_toastUndo,
+        onClick: () => {
+          try { undoTaskCompletion(task.id, completed.completionId) }
+          catch { showToast(t.activity_actionFailed) }
+        },
+      })
+      if (completed.actualMinutes === 0) {
+        setDurationInput('')
+        setShowDurationInput(true)
+      }
+    } catch {
+      showToast(t.activity_actionFailed)
+    } finally {
       setCompleting(false)
-      return
     }
-
-    await delay(50)
-    triggerFeedback({ xp, ore, leveledUp, oldLevel, newLevel, oldStreakDays: oldStreak, newStreakDays: newStreak, prestigeUnlocked })
-
-    await delay(300)
-    showToast(t.task_toastDone(xp), {
-      label: t.task_toastUndo,
-      onClick: () => {
-        undoTaskCompletion(task.id, completed?.completionId)
-      },
-    })
-
-    if (completed.actualMinutes === 0) {
-      setDurationInput('')
-      setShowDurationInput(true)
-    }
-    setCompleting(false)
-  }, [completing, isDone, task, confirmHigh, character.streakDays, completeTask, undoComplete, updateTask, gainXPAndOre, recordActivity, revokeXP, addEvent, removeEvent, showToast, triggerFeedback, t])
+  }, [completing, isDone, task, confirmHigh, completeTask, showToast, t])
 
   function handleStatusToggle(e: React.MouseEvent) {
     e.stopPropagation()
     if (isDoing) {
       pauseTask(task.id)
-    } else if (!isDone) {
+    } else if (!isDone && !isWaiting) {
       startTask(task.id)
     }
   }
 
   function handleSaveDuration(e?: React.MouseEvent) {
-    e?.stopPropagation()
-    const mins = parseInt(durationInput, 10)
-    if (!isNaN(mins) && mins > 0) updateTask(task.id, { actualMinutes: mins })
-    setShowDurationInput(false)
+    try {
+      e?.stopPropagation()
+      const mins = parseInt(durationInput, 10)
+      if (!isNaN(mins) && mins > 0) updateTask(task.id, { actualMinutes: mins })
+      setShowDurationInput(false)
+    } catch {
+      showToast(t.activity_actionFailed)
+    }
   }
 
   function hideCurrentTask() {
@@ -219,7 +172,6 @@ export function TaskItem({ task, compact, onEdit }: TaskItemProps) {
       title: task.title,
       details: {
         sourceType: 'task',
-        xpGained: task.xpReward,
         actualMinutes: task.actualMinutes,
         categoryName: task.category,
         difficulty: task.difficulty,
@@ -235,11 +187,12 @@ export function TaskItem({ task, compact, onEdit }: TaskItemProps) {
   }
 
   function deleteTaskWithCleanup() {
-    if (task.status === 'done' && task.xpReward > 0) revokeXP(task.xpReward)
-    const ev = findCompletionEvent(useGrowthEventStore.getState().events, task.id, task.completionId)
-    if (ev) removeEvent(ev.id)
-    deleteTask(task.id)
-    showToast(t.task_toastDeleted)
+    try {
+      deleteTaskWithRewards(task.id)
+      showToast(t.task_toastDeleted)
+    } catch {
+      showToast(t.activity_actionFailed)
+    }
   }
 
   function handleDeleteDone(e: React.MouseEvent) {
@@ -278,11 +231,7 @@ export function TaskItem({ task, compact, onEdit }: TaskItemProps) {
     return area ? getAreaDisplayName(area, t) : categoryDisplay(category, t)
   }
 
-  const bgColor = isDoing
-    ? 'color-mix(in srgb, var(--color-accent) 5%, var(--color-surface))'
-    : isOverdueDue
-    ? 'color-mix(in srgb, var(--color-danger) 5%, var(--color-surface))'
-    : 'var(--color-surface)'
+  const bgColor = taskPriorityBackground(task.priority, isDone, task.backgroundColor)
 
   const borderColor = isDoing
     ? 'color-mix(in srgb, var(--color-accent) 25%, var(--color-border))'
@@ -290,6 +239,7 @@ export function TaskItem({ task, compact, onEdit }: TaskItemProps) {
 
   return (
     <motion.div
+      data-task-id={task.id}
       layout
       {...itemMotion}
       onMouseEnter={() => {
@@ -318,6 +268,7 @@ export function TaskItem({ task, compact, onEdit }: TaskItemProps) {
     >
       {/* ── 主行 ────────────────────────────────────────────── */}
       <div style={{ display: 'flex', alignItems: compact ? 'center' : 'flex-start', gap: 8 }}>
+        <TaskDragHandle task={task} compact={compact} />
         {/* 勾选框 */}
         <CheckButton
           done={isDone}
@@ -414,6 +365,7 @@ export function TaskItem({ task, compact, onEdit }: TaskItemProps) {
           >
             <PriorityDot priority={task.priority} />
             <span
+              title={task.title}
               style={{
                 fontSize: 14,
                 color: isDone ? 'var(--color-text-dim)' : 'var(--color-text)',
@@ -447,11 +399,6 @@ export function TaskItem({ task, compact, onEdit }: TaskItemProps) {
               {isDoing && (
                 <span style={{ color: 'var(--color-accent)', fontSize: 11 }}>
                   {t.task_doing}
-                </span>
-              )}
-              {isDone && task.xpReward > 0 && (
-                <span style={{ color: 'var(--color-success)', fontFamily: 'var(--font-num)', fontWeight: 600 }}>
-                  +{task.xpReward} XP
                 </span>
               )}
               {isDone && task.actualMinutes > 0 && (
@@ -507,7 +454,7 @@ export function TaskItem({ task, compact, onEdit }: TaskItemProps) {
                       color={deleteConfirm ? 'var(--color-danger)' : 'var(--color-text-dim)'}
                       borderColor={deleteConfirm ? 'var(--color-danger)' : undefined}
                     >
-                      {deleteConfirm ? t.task_confirmDelete(task.xpReward) : t.task_delete}
+                      {deleteConfirm ? t.task_confirmDeleteNoXP : t.task_delete}
                     </ActionButton>
                   </motion.div>
                 )}
@@ -538,6 +485,9 @@ export function TaskItem({ task, compact, onEdit }: TaskItemProps) {
                   exit={{ opacity: 0, x: -4 }} transition={{ duration: 0.15 }}
                   style={{ display: 'flex', gap: 4, marginTop: 6 }}
                 >
+                  <ActionButton onClick={(e) => { e.stopPropagation(); isWaiting ? resumeWaitingTask(task.id) : waitTask(task.id) }} color="var(--color-secondary)">
+                    {isWaiting ? t.task_resumeWaiting : t.task_waitingAction}
+                  </ActionButton>
                   <ActionButton onClick={handleInscribe} color="var(--color-xp)">⭐ {t.task_inscribe}</ActionButton>
                   <ActionButton onClick={handleHide} color="var(--color-text-dim)">{t.task_hide}</ActionButton>
                   <ActionButton
@@ -559,8 +509,18 @@ export function TaskItem({ task, compact, onEdit }: TaskItemProps) {
           </span>
         )}
 
+        {isWaiting && !task.deletedAt && (
+          <button type="button"
+            onClick={(e) => { e.stopPropagation(); resumeWaitingTask(task.id) }}
+            title={t.task_resumeWaiting} aria-label={t.task_resumeWaiting}
+            style={{ width: 26, height: 26, flexShrink: 0, borderRadius: 'var(--radius-sm)',
+              border: '1px solid var(--color-border)', background: 'transparent',
+              color: 'var(--color-secondary)', cursor: 'pointer' }}>
+            ↩
+          </button>
+        )}
         {/* 计时中/暂停态：TimerBadge / 空闲：▶ 按钮 */}
-        {!isDone && (
+        {!isDone && !isWaiting && (
           isDoing ? (
             <TimerBadge
               startedAt={task.timerStartedAt}
@@ -645,6 +605,14 @@ export function TaskItem({ task, compact, onEdit }: TaskItemProps) {
           {onEdit && (
             <ContextMenuButton onClick={() => { setContextMenu(null); onEdit(task) }}>
               {t.common_edit}
+            </ContextMenuButton>
+          )}
+          {!isDone && !task.deletedAt && (
+            <ContextMenuButton onClick={() => {
+              setContextMenu(null)
+              isWaiting ? resumeWaitingTask(task.id) : waitTask(task.id)
+            }}>
+              {isWaiting ? t.task_resumeWaiting : t.task_waitingAction}
             </ContextMenuButton>
           )}
           <ContextMenuButton onClick={() => { setContextMenu(null); inscribeTask() }}>

@@ -1,9 +1,11 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { SOP, SOPFolder } from '@/types/sop'
 import { useSOPStore } from '@/stores/sopStore'
 import { useT } from '@/i18n'
 import { useSettingsStore } from '@/stores/settingsStore'
-import { getSystemFolder, getSystemSOPs } from '@/data/systemSOPs'
+import { isSystemTemplateFolder } from '@/utils/sopLibrary'
+import { beginSOPDrag, endSOPDrag, isSOPDrag, takeDraggedSOP } from '@/utils/sopDrag'
+import { useSOPLibrary } from './useSOPLibrary'
 import { SOPContextMenu } from './SOPContextMenu'
 
 function getDisplayStyleIcon(style: SOP['displayStyle']): string {
@@ -17,16 +19,20 @@ function getDisplayStyleIcon(style: SOP['displayStyle']): string {
 
 interface Props {
   onNewSOP: (folderId: string) => void
+  onEditSOP?: (id: string) => void
 }
 
-export function SOPTree({ onNewSOP }: Props) {
+export function SOPTree({ onNewSOP, onEditSOP }: Props) {
   const t = useT()
   const lang = useSettingsStore((s) => s.settings.language)
   const {
-    folders, sops, selectedSOPId, selectSOP,
+    selectedSOPId, selectSOP, transferSOP,
     addFolder, renameFolder,
     collapsedFolderIds, toggleFolderCollapsed,
   } = useSOPStore()
+  const { folders, sops } = useSOPLibrary()
+  const [draggingId, setDraggingId] = useState<string | null>(null)
+  const [dropFolderId, setDropFolderId] = useState<string | null>(null)
   const [newFolderInput, setNewFolderInput] = useState(false)
   const [newFolderName, setNewFolderName] = useState('')
   const [renamingId, setRenamingId] = useState<string | null>(null)
@@ -35,16 +41,43 @@ export function SOPTree({ onNewSOP }: Props) {
     x: number; y: number; type: 'folder' | 'sop'; target: SOPFolder | SOP
   } | null>(null)
 
-  const systemFolder = useMemo(() => getSystemFolder(lang), [lang])
-  const systemSOPs = useMemo(() => getSystemSOPs(lang), [lang])
-  const allFolders = useMemo(
-    () => [systemFolder, ...folders].sort((a, b) => {
-      if (a.isSystem !== b.isSystem) return a.isSystem ? -1 : 1
-      return a.sortOrder - b.sortOrder
-    }),
-    [systemFolder, folders]
-  )
-  const allSOPs = useMemo(() => [...systemSOPs, ...sops], [systemSOPs, sops])
+  const allFolders = useMemo(() => [...folders].sort((a, b) => {
+    if (a.isSystem !== b.isSystem) return a.isSystem ? -1 : 1
+    return a.sortOrder - b.sortOrder
+  }), [folders])
+  const allSOPs = sops
+  const draggingSOP = sops.find(sop => sop.id === draggingId)
+  const dragCopies = !!draggingSOP && isSystemTemplateFolder(draggingSOP.folderId, folders)
+
+  useEffect(() => {
+    const clear = () => { setDraggingId(null); setDropFolderId(null); endSOPDrag() }
+    const escape = (event: KeyboardEvent) => { if (event.key === 'Escape') clear() }
+    window.addEventListener('dragend', clear)
+    window.addEventListener('drop', clear)
+    window.addEventListener('blur', clear)
+    window.addEventListener('keydown', escape)
+    return () => {
+      window.removeEventListener('dragend', clear)
+      window.removeEventListener('drop', clear)
+      window.removeEventListener('blur', clear)
+      window.removeEventListener('keydown', escape)
+      endSOPDrag()
+    }
+  }, [])
+
+  function canDrop(dataTransfer: DataTransfer, folderId: string) {
+    return isSOPDrag(dataTransfer) && !!draggingSOP && draggingSOP.folderId !== folderId
+  }
+
+  function onDrop(event: React.DragEvent, folderId: string) {
+    if (!canDrop(event.dataTransfer, folderId)) return
+    event.preventDefault(); event.stopPropagation()
+    const sourceId = takeDraggedSOP(event.dataTransfer)
+    setDraggingId(null); setDropFolderId(null)
+    if (!sourceId) return
+    const id = transferSOP(sourceId, folderId, lang)
+    if (id) selectSOP(id)
+  }
 
   function handleContextMenu(
     e: React.MouseEvent,
@@ -90,6 +123,19 @@ export function SOPTree({ onNewSOP }: Props) {
         {/* 文件夹标题行 */}
         <div
           className="group"
+          data-sop-folder={folder.id}
+          data-sop-drop-active={dropFolderId === folder.id ? 'true' : 'false'}
+          onDragOver={event => {
+            if (!canDrop(event.dataTransfer, folder.id)) return
+            event.preventDefault(); event.stopPropagation()
+            event.dataTransfer.dropEffect = dragCopies ? 'copy' : 'move'
+            setDropFolderId(folder.id)
+          }}
+          onDragLeave={event => {
+            if (event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget)) return
+            setDropFolderId(current => current === folder.id ? null : current)
+          }}
+          onDrop={event => onDrop(event, folder.id)}
           style={{
             display: 'flex',
             alignItems: 'center',
@@ -98,6 +144,8 @@ export function SOPTree({ onNewSOP }: Props) {
             paddingLeft: 12 + depth * 16,
             cursor: 'pointer',
             userSelect: 'none',
+            background: dropFolderId === folder.id ? 'color-mix(in srgb, var(--color-accent) 12%, transparent)' : 'transparent',
+            boxShadow: dropFolderId === folder.id ? 'inset 0 0 0 1px var(--color-accent)' : undefined,
           }}
           onClick={() => toggleFolderCollapsed(folder.id)}
           onContextMenu={(e) => handleContextMenu(e, 'folder', folder)}
@@ -114,7 +162,8 @@ export function SOPTree({ onNewSOP }: Props) {
               onChange={(e) => setRenameValue(e.target.value)}
               onBlur={() => handleRename(folder.id)}
               onKeyDown={(e) => {
-                if (e.key === 'Enter') handleRename(folder.id)
+                if (e.nativeEvent.isComposing || e.keyCode === 229) return
+                if (e.key === 'Enter') { e.preventDefault(); handleRename(folder.id) }
                 if (e.key === 'Escape') setRenamingId(null)
               }}
               onClick={(e) => e.stopPropagation()}
@@ -137,8 +186,10 @@ export function SOPTree({ onNewSOP }: Props) {
             </span>
           )}
 
+          {dropFolderId === folder.id && <span role="status" style={{ fontSize: 10, color: 'var(--color-accent)', maxWidth: '48%', overflowWrap: 'anywhere' }}>{dragCopies ? t.sop_dropCopy : t.sop_dropMove}</span>}
+
           {/* ⋯ 按钮触发右键菜单 */}
-          {!folder.isSystem && !isRenaming && (
+          {!isRenaming && (
             <span
               style={{ fontSize: 14, color: 'var(--color-text-dim)', padding: '0 2px', opacity: 0 }}
               className="group-hover:opacity-100"
@@ -159,6 +210,15 @@ export function SOPTree({ onNewSOP }: Props) {
             {folderSOPs.map((sop) => (
               <div
                 key={sop.id}
+                data-sop-id={sop.id}
+                draggable
+                title={t.sop_dragToFolder}
+                onDragStart={event => {
+                  event.stopPropagation()
+                  beginSOPDrag(event, sop.id)
+                  setDraggingId(sop.id)
+                }}
+                onDragEnd={() => { endSOPDrag(); setDraggingId(null); setDropFolderId(null) }}
                 onClick={() => selectSOP(sop.id)}
                 onContextMenu={(e) => handleContextMenu(e, 'sop', sop)}
                 style={{
@@ -193,7 +253,7 @@ export function SOPTree({ onNewSOP }: Props) {
             ))}
 
             {/* 在此文件夹内新建 SOP */}
-            {!folder.isSystem && (
+            {(
               <div
                 onClick={() => onNewSOP(folder.id)}
                 style={{
@@ -221,6 +281,7 @@ export function SOPTree({ onNewSOP }: Props) {
 
   return (
     <div
+      data-sop-tree
       style={{
         width: '30%',
         minWidth: 200,
@@ -243,7 +304,8 @@ export function SOPTree({ onNewSOP }: Props) {
             onChange={(e) => setNewFolderName(e.target.value)}
             onBlur={handleAddFolder}
             onKeyDown={(e) => {
-              if (e.key === 'Enter') handleAddFolder()
+              if (e.nativeEvent.isComposing || e.keyCode === 229) return
+              if (e.key === 'Enter') { e.preventDefault(); handleAddFolder() }
               if (e.key === 'Escape') { setNewFolderInput(false); setNewFolderName('') }
             }}
             placeholder={t.sop_newFolder}
@@ -279,6 +341,7 @@ export function SOPTree({ onNewSOP }: Props) {
           target={contextMenu.target}
           onClose={() => setContextMenu(null)}
           onNewSOP={onNewSOP}
+          onEditSOP={onEditSOP}
           onStartRename={(id, name) => {
             setRenamingId(id)
             setRenameValue(name)

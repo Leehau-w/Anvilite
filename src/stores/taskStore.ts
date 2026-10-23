@@ -3,6 +3,9 @@ import { persist } from 'zustand/middleware'
 import type { Task, SubTask, TaskGroup } from '@/types/task'
 import { getStoragePrefix } from './accountManager'
 import { generateId } from '@/utils/id'
+import { useGrowthEventStore } from './growthEventStore'
+import { useCharacterStore } from './characterStore'
+import { findCompletionEvent, restoreRemovedCompletionEvent } from '@/utils/completionEvent'
 import { getTodayString, getTomorrowString, isSameLocalDate } from '@/utils/time'
 import { migrateCategory } from '@/utils/area'
 import {
@@ -37,6 +40,8 @@ interface TaskStore {
 
   startTask: (id: string) => void
   pauseTask: (id: string) => void
+  waitTask: (id: string) => boolean
+  resumeWaitingTask: (id: string) => boolean
 
   // ── 子任务 ───────────────────────────────────────────────────
   addSubTask: (taskId: string, title: string, parentSubTaskId?: string) => void
@@ -97,6 +102,7 @@ function makeDefaultTask(partial: Partial<Task> & { title: string }): Task {
     category: partial.category ?? 'other',
     difficulty: partial.difficulty ?? 3,
     priority: partial.priority ?? 'medium',
+    backgroundColor: partial.backgroundColor ?? null,
     dueDate: partial.dueDate !== undefined ? partial.dueDate : getTomorrowString(),
     description: partial.description ?? '',
     status: 'todo',
@@ -133,26 +139,53 @@ export const useTaskStore = create<TaskStore>()(
       },
 
       updateTask: (id, patch) => {
+        const task = get().tasks.find(t => t.id === id)
         set((s) => ({
           tasks: s.tasks.map((t) =>
             t.id === id ? { ...t, ...patch, updatedAt: new Date().toISOString() } : t
           ),
         }))
+        if (task?.status === 'done' && patch.actualMinutes !== undefined) {
+          const event = findCompletionEvent(useGrowthEventStore.getState().events.filter(e => e.type === 'task_complete'), id, task.completionId)
+          if (event) useGrowthEventStore.getState().updateEventDetails(event.id, { actualMinutes: patch.actualMinutes })
+        }
       },
 
       deleteTask: (id) => {
+        const task = get().tasks.find(t => t.id === id)
+        if (!task || task.deletedAt) return
+        const previousEvents = useGrowthEventStore.getState().events
+        const event = findCompletionEvent(previousEvents.filter(e => e.type === 'task_complete'), id, task.completionId)
         const now = new Date().toISOString()
-        set((s) => ({
-          tasks: s.tasks.map((t) =>
-            t.id === id ? { ...t, deletedAt: now, updatedAt: now } : t
-          ),
-        }))
+        try {
+          set((s) => ({
+            tasks: s.tasks.map((t) =>
+              t.id === id ? { ...t, deletedAt: now, completionId: undefined, updatedAt: now } : t
+            ),
+          }))
+          if (event) useGrowthEventStore.getState().removeEvent(event.id)
+        } catch (error) {
+          // The entity and its event are one operation; retain the receipt for a clean retry.
+          try { set(state => ({ tasks: state.tasks.map(current =>
+            current.id === id && current.deletedAt === now && current.completionId === undefined ? task : current) })) } catch { /* best-effort storage rollback */ }
+          if (event) {
+            const current = useGrowthEventStore.getState().events
+            const restored = restoreRemovedCompletionEvent(current, previousEvents, event)
+            if (restored !== current) {
+              try { useGrowthEventStore.setState({ events: restored }) } catch { /* memory is restored even if storage remains full */ }
+            }
+          }
+          throw error
+        }
       },
 
       restoreTask: (id) => {
         set((s) => ({
           tasks: s.tasks.map((t) =>
-            t.id === id ? { ...t, deletedAt: null, updatedAt: new Date().toISOString() } : t
+            t.id === id && t.deletedAt ? {
+              ...t, deletedAt: null, completionId: undefined,
+              updatedAt: new Date().toISOString(),
+            } : t
           ),
         }))
       },
@@ -171,7 +204,7 @@ export const useTaskStore = create<TaskStore>()(
 
       completeTask: (id) => {
         const task = get().tasks.find((t) => t.id === id)
-        if (!task || task.status === 'done') return null
+        if (!task || task.deletedAt || task.status === 'done') return null
 
         const now = new Date().toISOString()
 
@@ -190,6 +223,7 @@ export const useTaskStore = create<TaskStore>()(
           status: 'done',
           completedAt: now,
           completionId: generateId(),
+          xpReward: 0,
           updatedAt: now,
           actualMinutes: taskActualMinutes,
           timerStartedAt: null,
@@ -197,24 +231,66 @@ export const useTaskStore = create<TaskStore>()(
           subTasks: setSubTasksCompleted(task.subTasks, true),
         }
 
-        set((s) => ({
-          tasks: s.tasks.map((t) => (t.id === id ? updatedTask : t)),
-        }))
+        try {
+          set((s) => ({
+            tasks: s.tasks.map((t) => (t.id === id ? updatedTask : t)),
+          }))
 
+          useGrowthEventStore.getState().addEvent({
+            type: 'task_complete', title: task.title,
+            details: { entityId: id, completionId: updatedTask.completionId,
+              actualMinutes: updatedTask.actualMinutes, categoryName: task.category },
+            isMilestone: false,
+          })
+        } catch (error) {
+          // Persist may update memory before a write throws. Restore both sides of this receipt.
+          try { set(state => ({ tasks: state.tasks.map(current =>
+            current.id === id && current.completionId === updatedTask.completionId ? task : current) })) } catch { /* best-effort storage rollback */ }
+          const events = useGrowthEventStore.getState().events
+          const kept = events.filter(event => !(event.type === 'task_complete' && event.details.entityId === id &&
+            event.details.completionId === updatedTask.completionId))
+          if (kept.length !== events.length) {
+            try { useGrowthEventStore.setState({ events: kept }) } catch { /* memory is restored even if storage remains full */ }
+          }
+          throw error
+        }
+        // Activity bookkeeping must not invalidate an otherwise completed, recorded task.
+        try { useCharacterStore.getState().recordActivity() } catch (error) { console.warn('[TaskStore] Unable to record activity:', error) }
         return updatedTask
       },
 
       undoComplete: (id) => {
-        set((s) => ({
-          tasks: s.tasks.map((t) =>
-            t.id === id
-              ? { ...t, status: 'todo', completedAt: null, updatedAt: new Date().toISOString() }
-              : t
-          ),
-        }))
+        const task = get().tasks.find(t => t.id === id)
+        if (!task || task.deletedAt || task.status !== 'done') return
+        const previousEvents = useGrowthEventStore.getState().events
+        const event = findCompletionEvent(previousEvents.filter(e => e.type === 'task_complete'), id, task.completionId)
+        try {
+          set((s) => ({
+            tasks: s.tasks.map((t) =>
+              t.id === id
+                ? { ...t, status: 'todo', completedAt: null, completionId: undefined, updatedAt: new Date().toISOString() }
+                : t
+            ),
+          }))
+          if (event) useGrowthEventStore.getState().removeEvent(event.id)
+        } catch (error) {
+          // The entity and its event are one operation; retain the receipt for a clean retry.
+          try { set(state => ({ tasks: state.tasks.map(current =>
+            current.id === id && current.status === 'todo' && current.completedAt === null && current.completionId === undefined ? task : current) })) } catch { /* best-effort storage rollback */ }
+          if (event) {
+            const current = useGrowthEventStore.getState().events
+            const restored = restoreRemovedCompletionEvent(current, previousEvents, event)
+            if (restored !== current) {
+              try { useGrowthEventStore.setState({ events: restored }) } catch { /* memory is restored even if storage remains full */ }
+            }
+          }
+          throw error
+        }
       },
 
       startTask: (id) => {
+        const task = get().tasks.find(t => t.id === id)
+        if (!task || task.deletedAt || task.isHidden || !['todo', 'doing'].includes(task.status)) return
         const now = new Date().toISOString()
         set((s) => ({
           tasks: s.tasks.map((t) =>
@@ -227,7 +303,7 @@ export const useTaskStore = create<TaskStore>()(
 
       pauseTask: (id) => {
         const task = get().tasks.find((t) => t.id === id)
-        if (!task) return
+        if (!task || task.deletedAt || task.isHidden || !['todo', 'doing'].includes(task.status)) return
         // Accumulate elapsed time but don't settle into actualMinutes yet
         // (only completeTask settles the timer)
         let accumulated = task.timerAccumulated
@@ -247,6 +323,28 @@ export const useTaskStore = create<TaskStore>()(
               : t
           ),
         }))
+      },
+
+      waitTask: (id) => {
+        const task = get().tasks.find(t => t.id === id)
+        if (!task || task.deletedAt || task.isHidden || !['todo', 'doing'].includes(task.status)) return false
+        const now = new Date().toISOString()
+        const elapsed = task.timerStartedAt
+          ? Math.max(0, Math.floor((Date.now() - new Date(task.timerStartedAt).getTime()) / 1000)) : 0
+        set(s => ({ tasks: s.tasks.map(t => t.id === id ? {
+          ...t, status: 'waiting', timerStartedAt: null,
+          timerAccumulated: (t.timerAccumulated ?? 0) + elapsed, updatedAt: now,
+        } : t) }))
+        return true
+      },
+
+      resumeWaitingTask: (id) => {
+        const task = get().tasks.find(t => t.id === id)
+        if (!task || task.deletedAt || task.isHidden || task.status !== 'waiting') return false
+        set(s => ({ tasks: s.tasks.map(t => t.id === id ? {
+          ...t, status: 'todo', timerStartedAt: null, updatedAt: new Date().toISOString(),
+        } : t) }))
+        return true
       },
 
       // ── 子任务 actions ─────────────────────────────────────────
@@ -311,6 +409,8 @@ export const useTaskStore = create<TaskStore>()(
       // ── 计时器 actions ────────────────────────────────────────
 
       startTimer: (taskId) => {
+        const task = get().tasks.find(t => t.id === taskId)
+        if (!task || task.deletedAt || task.isHidden || !['todo', 'doing'].includes(task.status)) return
         set((s) => ({
           tasks: s.tasks.map((t) =>
             t.id === taskId && !t.timerStartedAt
@@ -484,7 +584,7 @@ export const useTaskStore = create<TaskStore>()(
         )
         return {
           completedCount: todayDone.length,
-          totalXP: todayDone.reduce((sum, t) => sum + t.xpReward, 0),
+          totalXP: 0,
         }
       },
     }),
@@ -516,24 +616,21 @@ export const useTaskStore = create<TaskStore>()(
           localStorage.setItem(SUBTASK_MIGRATION_KEY, new Date().toISOString())
         }
 
-        // ── 兼容：确保所有任务都有 subTasks ──────────────────────
+        // ── 兼容：每次载入补齐旧备份的子项、计时和标签字段 ────────
         state.tasks = state.tasks.map((t) => ({
           ...t,
           category: migrateCategory(t.category),
           actualMinutes: t.actualMinutes ?? 0,
           sortOrder: t.sortOrder ?? 0,
           subTasks: t.subTasks ?? [],
+          timerStartedAt: t.timerStartedAt ?? null,
+          timerAccumulated: t.timerAccumulated ?? 0,
+          tags: t.tags ?? [],
         }))
 
         // ── v0.3.1 迁移：timer + tags 字段 ──────────────────────
         const TIMER_TAGS_MIGRATION = 'anvilite-migration-timer-tags-v031'
         if (!localStorage.getItem(TIMER_TAGS_MIGRATION)) {
-          state.tasks = state.tasks.map((t) => ({
-            ...t,
-            timerStartedAt: t.timerStartedAt ?? null,
-            timerAccumulated: t.timerAccumulated ?? 0,
-            tags: t.tags ?? [],
-          }))
           localStorage.setItem(TIMER_TAGS_MIGRATION, new Date().toISOString())
         }
 

@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import type { SOP, SOPStep } from '@/types/sop'
 import type { JSONContent } from '@tiptap/react'
 import { useSOPStore } from '@/stores/sopStore'
+import { useSOPLibrary } from './useSOPLibrary'
 import { useT } from '@/i18n'
 import { renderContentHTML, preprocessContent } from './SOPRichEditor'
 import { getSOPStepPrefix } from '@/utils/sop'
@@ -123,7 +124,7 @@ function StepRow({
 // Shared rich content viewer
 function StepContentView({ content, indentLeft }: { content: JSONContent | null; indentLeft: number }) {
   const t = useT()
-  const sops = useSOPStore((s) => s.sops)
+  const { sops } = useSOPLibrary()
   const selectSOP = useSOPStore((s) => s.selectSOP)
 
   const html = useMemo(() => {
@@ -260,14 +261,30 @@ function TimelineLayout({
                         <span
                           style={{
                             fontSize: 13,
-                            color: checkedIds.has(child.id) ? 'var(--color-text-dim)' : 'var(--color-text)',
-                            textDecoration: checkedIds.has(child.id) ? 'line-through' : 'none',
+                            color: executionMode && checkedIds.has(child.id) ? 'var(--color-text-dim)' : 'var(--color-text)',
+                            textDecoration: executionMode && checkedIds.has(child.id) ? 'line-through' : 'none',
                           }}
                         >
                           {child.title}
                         </span>
                       </div>
                       <StepContentView content={child.content} indentLeft={executionMode ? 24 : 8} />
+                      {child.childSteps.length > 0 && (
+                        <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                          {[...child.childSteps].sort((a, b) => a.sortOrder - b.sortOrder).map((grandchild, gi) => (
+                            <StepRow
+                              key={grandchild.id}
+                              step={grandchild}
+                              index={gi}
+                              displayStyle="timeline"
+                              executionMode={executionMode}
+                              checkedIds={checkedIds}
+                              onToggle={onToggle}
+                              depth={1}
+                            />
+                          ))}
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>

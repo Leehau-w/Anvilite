@@ -2,9 +2,31 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { getStoragePrefix } from './accountManager'
 
-export type CardId = 'quickAdd' | 'stats' | 'tasks' | 'character' | 'habits' | 'growth' | 'inspiration' | 'flows'
+export type BaseCardId = 'quickAdd' | 'stats' | 'tasks' | 'character' | 'habits' | 'growth' | 'inspiration' | 'flows' | 'waiting'
+export type TaskCardId = 'tasks' | `tasks:${string}`
+export type HabitCardId = 'habits' | `habits:${string}`
+export type CardId = BaseCardId | TaskCardId | HabitCardId
 
-export const ALL_CARD_IDS: CardId[] = ['quickAdd', 'stats', 'tasks', 'character', 'habits', 'growth', 'inspiration', 'flows']
+export type TaskCardFilter = {
+  mode: 'all' | 'single' | 'multiple'
+  categories: string[]
+}
+
+export function isTaskCardId(id: string): id is TaskCardId {
+  return id === 'tasks' || id.startsWith('tasks:') && id.length > 6
+}
+
+export function isHabitCardId(id: string): id is HabitCardId {
+  return id === 'habits' || id.startsWith('habits:') && id.length > 7
+}
+
+function normalizeCategoryFilter(filter: TaskCardFilter): TaskCardFilter {
+  const categories = [...new Set(filter.categories)]
+  return { mode: filter.mode, categories: filter.mode === 'all' ? []
+    : filter.mode === 'single' ? categories.slice(0, 1) : categories }
+}
+
+export const ALL_CARD_IDS: BaseCardId[] = ['quickAdd', 'stats', 'tasks', 'character', 'habits', 'growth', 'inspiration', 'flows', 'waiting']
 
 export interface CardLayout {
   id: CardId
@@ -12,6 +34,8 @@ export interface CardLayout {
   row: number
   colSpan: number
   rowSpan: number
+  taskFilter?: TaskCardFilter
+  habitFilter?: TaskCardFilter
 }
 
 export const COLS = 24
@@ -27,6 +51,7 @@ export const DEFAULT_LAYOUT: CardLayout[] = [
   { id: 'growth',       col: 16, row: 5,  colSpan: 8,  rowSpan: 5 },
   { id: 'inspiration',  col: 0,  row: 10, colSpan: 8,  rowSpan: 5 },
   { id: 'flows',        col: 8,  row: 10, colSpan: 8,  rowSpan: 5 },
+  { id: 'waiting',      col: 16, row: 10, colSpan: 8,  rowSpan: 5 },
 ]
 
 interface DashboardStore {
@@ -35,12 +60,16 @@ interface DashboardStore {
   updateCard: (id: CardId, patch: Partial<Omit<CardLayout, 'id'>>) => void
   removeCard: (id: CardId) => void
   addCard: (id: CardId) => void
+  addTaskCard: () => CardId
+  addHabitCard: () => CardId
+  setTaskCardFilter: (id: CardId, filter: TaskCardFilter) => void
+  setHabitCardFilter: (id: CardId, filter: TaskCardFilter) => void
   resetLayout: () => void
 }
 
 export const useDashboardStore = create<DashboardStore>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       layout: DEFAULT_LAYOUT,
       visibleCards: ALL_CARD_IDS,
       updateCard: (id, patch) =>
@@ -51,9 +80,41 @@ export const useDashboardStore = create<DashboardStore>()(
         set((s) => ({ visibleCards: s.visibleCards.filter((c) => c !== id) })),
       addCard: (id) =>
         set((s) => {
-          if (s.visibleCards.includes(id)) return s
+          if (s.visibleCards.includes(id) || !s.layout.some(card => card.id === id)) return s
           return { visibleCards: [...s.visibleCards, id] }
         }),
+      addTaskCard: () => {
+        const state = get()
+        let id: CardId
+        do { id = `tasks:${crypto.randomUUID()}` } while (state.layout.some(card => card.id === id))
+        const row = Math.max(0, ...state.layout.map(card => card.row + card.rowSpan))
+        set({
+          layout: [...state.layout, { id, col: 0, row, colSpan: 8, rowSpan: 8 }],
+          visibleCards: [...state.visibleCards, id],
+        })
+        return id
+      },
+      addHabitCard: () => {
+        const state = get()
+        let id: CardId
+        do { id = `habits:${crypto.randomUUID()}` } while (state.layout.some(card => card.id === id))
+        const row = Math.max(0, ...state.layout.map(card => card.row + card.rowSpan))
+        set({
+          layout: [...state.layout, { id, col: 0, row, colSpan: 8, rowSpan: 8 }],
+          visibleCards: [...state.visibleCards, id],
+        })
+        return id
+      },
+      setHabitCardFilter: (id, filter) => {
+        if (!isHabitCardId(id)) return
+        set(s => ({ layout: s.layout.map(card => card.id === id
+          ? { ...card, habitFilter: normalizeCategoryFilter(filter) } : card) }))
+      },
+      setTaskCardFilter: (id, filter) => {
+        if (!isTaskCardId(id)) return
+        set(s => ({ layout: s.layout.map(card => card.id === id
+          ? { ...card, taskFilter: normalizeCategoryFilter(filter) } : card) }))
+      },
       resetLayout: () => set({ layout: DEFAULT_LAYOUT, visibleCards: ALL_CARD_IDS }),
     }),
     {
@@ -69,10 +130,18 @@ export const useDashboardStore = create<DashboardStore>()(
       onRehydrateStorage: () => (state) => {
         if (!state) return
         const ids = new Set(state.layout.map((c) => c.id))
-        const missing = DEFAULT_LAYOUT.filter((c) => !ids.has(c.id))
+        const missing = DEFAULT_LAYOUT.filter((c) => c.id !== 'waiting' && !ids.has(c.id))
         if (missing.length) state.layout = [...state.layout, ...missing]
-        if (!state.visibleCards) {
-          state.visibleCards = ALL_CARD_IDS
+        if (!state.visibleCards) state.visibleCards = ALL_CARD_IDS
+        if (!ids.has('waiting')) {
+          // Add the new card below the saved layout without moving any old card.
+          const bottom = Math.max(0, ...state.layout.map(c => c.row + c.rowSpan))
+          state.layout = [...state.layout, { id: 'waiting', col: 0, row: bottom, colSpan: 8, rowSpan: 5 }]
+          // An explicitly empty list means the user hid every card. Once the
+          // layout contains waiting, later user hiding must survive reloads.
+          if (state.visibleCards.length && !state.visibleCards.includes('waiting')) {
+            state.visibleCards = [...state.visibleCards, 'waiting']
+          }
         }
       },
     }

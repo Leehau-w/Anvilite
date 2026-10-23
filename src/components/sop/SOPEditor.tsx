@@ -1,10 +1,12 @@
 import React, { useEffect, useRef, useState, lazy, Suspense } from 'react'
-import type { SOP, SOPStep } from '@/types/sop'
+import type { SOP, SOPFolder, SOPStep } from '@/types/sop'
 import type { JSONContent } from '@tiptap/react'
 import { useSOPStore } from '@/stores/sopStore'
 import { useT } from '@/i18n'
 import { generateId } from '@/utils/id'
 import { extractSOPPlainText } from '@/utils/sop'
+import { useSettingsStore } from '@/stores/settingsStore'
+import { useSOPLibrary } from './useSOPLibrary'
 
 const SOPRichEditor = lazy(() =>
   import('./SOPRichEditor').then((m) => ({ default: m.SOPRichEditor }))
@@ -13,7 +15,7 @@ const SOPRichEditor = lazy(() =>
 interface Props {
   sopId: string | null
   defaultFolderId?: string
-  onSave: () => void
+  onSave: (id?: string) => void
   onCancel: () => void
 }
 
@@ -30,7 +32,9 @@ function makeStep(sortOrder: number): SOPStep {
 
 export function SOPEditor({ sopId, defaultFolderId = '', onSave, onCancel }: Props) {
   const t = useT()
-  const { folders, sops, addSOP, updateSOP, addFolder, getFolderDepth } = useSOPStore()
+  const { addSOP, updateSOP, addFolder, getFolderDepth } = useSOPStore()
+  const { folders, sops } = useSOPLibrary()
+  const lang = useSettingsStore((state) => state.settings.language)
   const existingSOP = sopId ? sops.find((s) => s.id === sopId) : null
 
   const [title, setTitle] = useState(existingSOP?.title ?? '')
@@ -46,7 +50,8 @@ export function SOPEditor({ sopId, defaultFolderId = '', onSave, onCancel }: Pro
   const [focusStepId, setFocusStepId] = useState<string | null>(null)
   const stepInputRefs = useRef(new Map<string, HTMLInputElement>())
 
-  const userFolders = folders.filter((f) => !f.isSystem)
+  const [draftFolders, setDraftFolders] = useState<SOPFolder[]>([])
+  const availableFolders = [...folders, ...draftFolders]
 
   useEffect(() => {
     if (!focusStepId) return
@@ -278,8 +283,12 @@ export function SOPEditor({ sopId, defaultFolderId = '', onSave, onCancel }: Pro
   // ── Save ─────────────────────────────────────────────────
   function handleSave() {
     if (!title.trim()) return
-    const resolvedFolderId = folderId || (userFolders[0]?.id ?? '')
-    if (!resolvedFolderId) return
+    let resolvedFolderId = folderId || (availableFolders[0]?.id ?? '')
+    if (!resolvedFolderId || !availableFolders.some((folder) => folder.id === resolvedFolderId)) return
+    for (const draft of draftFolders) {
+      const persistedId = addFolder(draft.name, draft.parentId ?? undefined)
+      if (draft.id === resolvedFolderId) resolvedFolderId = persistedId
+    }
 
     const finalSteps = steps.map((s, i) => ({
       ...s,
@@ -297,22 +306,27 @@ export function SOPEditor({ sopId, defaultFolderId = '', onSave, onCancel }: Pro
         displayStyle,
         folderId: resolvedFolderId,
         steps: finalSteps,
-      })
+      }, lang)
+      onSave(sopId)
     } else {
-      addSOP({
+      const id = addSOP({
         title: title.trim(),
         displayStyle,
         folderId: resolvedFolderId,
         steps: finalSteps,
         isSystem: false,
       })
+      onSave(id)
     }
-    onSave()
   }
 
   function handleCreateFolder() {
     if (!newFolderName.trim()) return
-    const id = addFolder(newFolderName.trim())
+    const id = generateId()
+    setDraftFolders((current) => [...current, {
+      id, name: newFolderName.trim(), parentId: null, sortOrder: availableFolders.length,
+      isSystem: false, createdAt: new Date().toISOString(),
+    }])
     setFolderId(id)
     setCreatingFolder(false)
     setNewFolderName('')
@@ -456,6 +470,7 @@ export function SOPEditor({ sopId, defaultFolderId = '', onSave, onCancel }: Pro
         <Suspense fallback={<div style={{ height: fallbackHeight, background: 'var(--color-bg)', borderRadius: 'var(--radius-sm)' }} />}>
           <SOPRichEditor
             compact
+            currentSOPId={sopId ?? undefined}
             content={step.content}
             onChange={onChange}
             placeholder={t.sop_content_placeholder}
@@ -792,13 +807,13 @@ export function SOPEditor({ sopId, defaultFolderId = '', onSave, onCancel }: Pro
       <div style={{ marginBottom: 16 }}>
         <label style={labelStyle}>{t.sop_folderLabel}</label>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          {userFolders.length > 0 && (
+          {availableFolders.length > 0 && (
             <select
-              value={folderId || userFolders[0]?.id}
+              value={folderId || availableFolders[0]?.id}
               onChange={(e) => setFolderId(e.target.value)}
               style={{ ...inputStyle, flex: 1 }}
             >
-              {userFolders.map((f) => (
+              {availableFolders.map((f) => (
                 <option key={f.id} value={f.id}>
                   {'  '.repeat(getFolderDepth(f.id))}📁 {f.name}
                 </option>
@@ -904,7 +919,7 @@ export function SOPEditor({ sopId, defaultFolderId = '', onSave, onCancel }: Pro
         <button
           type="button"
           onClick={handleSave}
-          disabled={!title.trim() || (!folderId && userFolders.length === 0)}
+          disabled={!title.trim() || (!folderId && availableFolders.length === 0)}
           style={{
             height: 36,
             padding: '0 20px',

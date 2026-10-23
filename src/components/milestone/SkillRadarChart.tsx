@@ -3,326 +3,181 @@ import { motion } from 'framer-motion'
 import { useT } from '@/i18n'
 
 export interface SkillDimension {
-  name: string       // 区域名称（短版，最多4字）
-  value: number      // 技能等级
-  emoji?: string     // 区域 emoji
+  name: string
+  value: number
+  emoji?: string
 }
 
 interface SkillRadarChartProps {
   dimensions: SkillDimension[]
-  size?: number      // SVG 边长，默认 200
+  size?: number
+  formatValue?: (value: number) => string
+  ariaLabel?: string
 }
 
-// ── 工具 ─────────────────────────────────────────────────────────────────────
+type ChartProps = {
+  dimensions: SkillDimension[]
+  size: number
+  formatValue: (value: number) => string
+  description: string
+}
 
-/** 极坐标 → 直角坐标 */
 function polar(cx: number, cy: number, r: number, angleDeg: number) {
-  const rad = (angleDeg - 90) * (Math.PI / 180)   // 从正上方开始
+  const rad = (angleDeg - 90) * (Math.PI / 180)
   return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) }
 }
 
-/** 数组转 SVG polygon points 字符串 */
 function pts(points: { x: number; y: number }[]): string {
-  return points.map((p) => `${p.x.toFixed(2)},${p.y.toFixed(2)}`).join(' ')
+  return points.map(p => p.x.toFixed(2) + ',' + p.y.toFixed(2)).join(' ')
 }
 
-// ── 标签分行 ─────────────────────────────────────────────────────────────────
-
-/** 将名称按最大字符数分行（中文每字=1，英文按空格断词） */
-function splitLabel(name: string, maxChars = 4): string[] {
-  // 英文：按空格拆成多行，单个词不强制截断
-  if (/[a-zA-Z]/.test(name)) {
-    const words = name.split(' ')
-    return words.length > 1 ? words : [name]
-  }
-  // 中文/其他：每 maxChars 字一行
-  if (name.length <= maxChars) return [name]
+/** Bound long names to two lines; titles and accessible summaries retain the full name. */
+function splitLabel(name: string): string[] {
   const lines: string[] = []
-  let remaining = name
-  while (remaining.length > 0) {
-    lines.push(remaining.slice(0, maxChars))
-    remaining = remaining.slice(maxChars)
+  let line = ''
+  let width = 0
+  for (const char of name) {
+    const charWidth = /[\u0000-\u007f]/.test(char) ? 1 : 2
+    if (width + charWidth > 8 && line) {
+      lines.push(line.trim())
+      line = ''
+      width = 0
+    }
+    line += char
+    width += charWidth
   }
-  return lines
+  if (line.trim()) lines.push(line.trim())
+  if (lines.length > 2) return [lines[0], Array.from(lines[1]).slice(0, -1).join('') + '…']
+  return lines.length ? lines : ['']
 }
 
-// ── 雷达图（≥3 维度） ──────────────────────────────────────────────────────
-
-/** 估算标签到圆心所需最小半径，保证标签不与图形重叠 */
-function calcLabelR(
-  maxR: number,
-  name: string,
-  angleDeg: number,
-  fontSize: number,
-) {
-  const lineH = fontSize + 2
-  const lines = splitLabel(name)
-  const isEn = /[a-zA-Z]/.test(name)
-  const charW = isEn ? fontSize * 0.58 : fontSize * 1.05
-  const halfW = Math.max(...lines.map((l) => l.length)) * charW / 2
-  const halfH = (lines.length * lineH) / 2
-  const θ = (angleDeg - 90) * (Math.PI / 180)
-  // 标签文字块沿径向方向向圆心延伸的最大距离
-  const inward = halfW * Math.abs(Math.cos(θ)) + halfH * Math.abs(Math.sin(θ))
-  return maxR + inward + 8   // 8px 安全间距
+function textWidth(text: string, fontSize = 10) {
+  return Array.from(text).reduce((width, char) => width + (/[\u0000-\u007f]/.test(char) ? 0.6 : 1) * fontSize, 0)
 }
 
-function RadarChart({ dimensions, size }: Required<SkillRadarChartProps>) {
+function clamp(value: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, value))
+}
+
+function chartMaximum(dimensions: SkillDimension[]) {
+  const max = Math.max(1, ...dimensions.map(d => d.value))
+  const step = 10 ** Math.floor(Math.log10(max))
+  const roundedMax = Math.ceil(max / step) * step
+  return Number.isFinite(roundedMax) ? roundedMax : max
+}
+
+function RadarChart({ dimensions, size, formatValue, description }: ChartProps) {
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null)
-
   const cx = size / 2
   const cy = size / 2
-  const maxR = size * 0.35          // 图形区半径
-  const n = dimensions.length
-  const maxVal = Math.max(1, ...dimensions.map((d) => d.value))
-  // 最大刻度：取 maxVal 上取整到 5 的倍数，至少 5
-  const gridMax = Math.max(5, Math.ceil(maxVal / 5) * 5)
-  const GRIDS = 4                   // 背景同心圈数
-
-  const angles = dimensions.map((_, i) => (360 / n) * i)
-
-  // 背景圈顶点（正多边形）
-  function gridPolygon(fraction: number) {
-    return angles.map((a) => polar(cx, cy, maxR * fraction, a))
-  }
-
-  // 数据多边形顶点
-  const dataPoints = dimensions.map((d, i) =>
-    polar(cx, cy, maxR * Math.min(d.value / gridMax, 1), angles[i])
-  )
-
-  // 轴端点（最大值）
-  const axisPoints = angles.map((a) => polar(cx, cy, maxR, a))
+  const maxR = size * 0.27
+  const gridMax = chartMaximum(dimensions)
+  const angles = dimensions.map((_, i) => (360 / dimensions.length) * i)
+  const dataPoints = dimensions.map((d, i) => polar(cx, cy, maxR * Math.min(d.value / gridMax, 1), angles[i]))
+  const axisPoints = angles.map(a => polar(cx, cy, maxR, a))
+  const hovered = hoveredIdx === null ? undefined : dimensions[hoveredIdx]
+  const hoveredPoint = hoveredIdx === null ? undefined : dataPoints[hoveredIdx]
+  const tooltip = hovered && hoveredPoint ? (() => {
+    const value = formatValue(hovered.value)
+    const width = Math.min(size - 8, Math.max(44, textWidth(value) + 16))
+    return { value, width, x: clamp(hoveredPoint.x - width / 2, 4, size - width - 4), y: clamp(hoveredPoint.y - 24, 4, size - 22) }
+  })() : undefined
 
   return (
-    <svg
-      width={size}
-      height={size}
-      viewBox={`0 0 ${size} ${size}`}
-      style={{ display: 'block', overflow: 'visible' }}
-    >
-      {/* 背景同心多边形 */}
-      {Array.from({ length: GRIDS }, (_, gi) => {
-        const frac = (gi + 1) / GRIDS
-        return (
-          <polygon
-            key={gi}
-            points={pts(gridPolygon(frac))}
-            fill="none"
-            stroke="var(--color-border)"
-            strokeWidth={0.8}
-          />
-        )
-      })}
-
-      {/* 轴线 */}
-      {axisPoints.map((pt, i) => (
-        <line
-          key={i}
-          x1={cx} y1={cy}
-          x2={pt.x} y2={pt.y}
-          stroke="var(--color-border)"
-          strokeWidth={0.8}
-        />
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}
+      role="img" aria-label={description} data-capability-radar
+      style={{ display: 'block', maxWidth: '100%', overflow: 'hidden' }}>
+      <title>{description}</title>
+      {[0.25, 0.5, 0.75, 1].map(fraction => (
+        <polygon key={fraction} points={pts(angles.map(a => polar(cx, cy, maxR * fraction, a)))}
+          fill="none" stroke="var(--color-border)" strokeWidth={0.8} />
       ))}
-
-      {/* 数据填充 */}
-      <motion.polygon
-        points={pts(dataPoints)}
-        fill="color-mix(in srgb, var(--color-accent) 20%, transparent)"
-        stroke="var(--color-accent)"
-        strokeWidth={1.5}
-        strokeLinejoin="round"
-        initial={{ opacity: 0, scale: 0.4 }}
-        animate={{ opacity: 1, scale: 1 }}
-        style={{ transformOrigin: `${cx}px ${cy}px` }}
-        transition={{ duration: 0.6, ease: [0.34, 1.2, 0.64, 1] }}
-      />
-
-      {/* 数据点 */}
-      {dataPoints.map((pt, i) => (
-        <motion.circle
-          key={i}
-          cx={pt.x} cy={pt.y} r={hoveredIdx === i ? 5 : 3}
-          fill="var(--color-accent)"
-          stroke="var(--color-surface)"
-          strokeWidth={1.5}
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.4 + i * 0.04 }}
-          style={{ cursor: 'default' }}
-          onMouseEnter={() => setHoveredIdx(i)}
-          onMouseLeave={() => setHoveredIdx(null)}
-        />
+      {axisPoints.map((point, i) => (
+        <line key={i} x1={cx} y1={cy} x2={point.x} y2={point.y} stroke="var(--color-border)" strokeWidth={0.8} />
       ))}
-
-      {/* 悬浮值标签 */}
-      {hoveredIdx !== null && (() => {
-        const d = dimensions[hoveredIdx]
-        const pt = dataPoints[hoveredIdx]
-        return (
-          <g>
-            <rect
-              x={pt.x - 22} y={pt.y - 22}
-              width={44} height={16}
-              rx={4}
-              fill="var(--color-surface)"
-              stroke="var(--color-border)"
-              strokeWidth={0.8}
-            />
-            <text
-              x={pt.x} y={pt.y - 11}
-              textAnchor="middle"
-              fontSize={10}
-              fontFamily="var(--font-num)"
-              fontWeight={600}
-              fill="var(--color-accent)"
-            >
-              Lv.{d.value}
-            </text>
-          </g>
-        )
-      })()}
-
-      {/* 轴标签 */}
-      {angles.map((a, i) => {
+      <motion.polygon points={pts(dataPoints)}
+        fill="color-mix(in srgb, var(--color-accent) 20%, transparent)" stroke="var(--color-accent)"
+        strokeWidth={1.5} strokeLinejoin="round" initial={{ opacity: 0, scale: 0.4 }} animate={{ opacity: 1, scale: 1 }}
+        style={{ transformOrigin: cx + 'px ' + cy + 'px' }} transition={{ duration: 0.6, ease: [0.34, 1.2, 0.64, 1] }} />
+      {dataPoints.map((point, i) => (
+        <motion.circle key={i} cx={point.x} cy={point.y} r={hoveredIdx === i ? 5 : 3}
+          fill="var(--color-accent)" stroke="var(--color-surface)" strokeWidth={1.5}
+          initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4 + i * 0.04 }}
+          tabIndex={0} aria-label={dimensions[i].name + ': ' + formatValue(dimensions[i].value)}
+          onFocus={() => setHoveredIdx(i)} onBlur={() => setHoveredIdx(null)}
+          onMouseEnter={() => setHoveredIdx(i)} onMouseLeave={() => setHoveredIdx(null)}
+          style={{ cursor: 'default' }} />
+      ))}
+      {angles.map((angle, i) => {
         const d = dimensions[i]
         const isHovered = hoveredIdx === i
-        const fontSize = isHovered ? 12 : 10
-        const lineH = fontSize + 2
+        const lineH = 12
         const lines = splitLabel(d.name)
         const blockH = lines.length * lineH
-        // 位置用基准字号计算，避免 hover 时跳动
-        const labelR = calcLabelR(maxR, d.name, a, 10)
-        const lp = polar(cx, cy, labelR, a)
-        const startY = lp.y - (blockH - lineH) / 2
+        const rawPoint = polar(cx, cy, maxR + 27, angle)
+        const halfWidth = Math.max(...lines.map(line => textWidth(line))) / 2
+        const x = clamp(rawPoint.x, halfWidth + 4, size - halfWidth - 4)
+        const y = clamp(rawPoint.y, blockH / 2 + 4, size - blockH / 2 - 4) - (blockH - lineH) / 2
         return (
-          <text
-            key={i}
-            x={lp.x}
-            y={startY}
-            textAnchor="middle"
-            dominantBaseline="middle"
-            fontSize={fontSize}
-            fontFamily="var(--font-en)"
-            fontWeight={isHovered ? 600 : 400}
+          <text key={i} x={x} y={y} textAnchor="middle" dominantBaseline="middle"
+            fontSize={10} fontFamily="var(--font-en)" fontWeight={isHovered ? 600 : 400}
             fill={isHovered ? 'var(--color-accent)' : 'var(--color-text-dim)'}
-            style={{ cursor: 'default', transition: 'fill 0.15s' }}
-            onMouseEnter={() => setHoveredIdx(i)}
-            onMouseLeave={() => setHoveredIdx(null)}
-          >
-            {lines.map((line, li) => (
-              <tspan key={li} x={lp.x} dy={li === 0 ? 0 : lineH}>
-                {line}
-              </tspan>
-            ))}
+            onMouseEnter={() => setHoveredIdx(i)} onMouseLeave={() => setHoveredIdx(null)}
+            style={{ cursor: 'default', transition: 'fill 0.15s' }}>
+            <title>{d.name + ': ' + formatValue(d.value)}</title>
+            {lines.map((line, index) => <tspan key={index} x={x} dy={index === 0 ? 0 : lineH}>{line}</tspan>)}
           </text>
         )
       })}
-
-      {/* 中心点 */}
       <circle cx={cx} cy={cy} r={2} fill="var(--color-border)" />
-
-      {/* 最大刻度标注 */}
-      {(() => {
-        const topPt = polar(cx, cy, maxR, 0)
-        return (
-          <text
-            x={topPt.x + 4} y={topPt.y}
-            fontSize={8}
-            fontFamily="var(--font-num)"
-            fill="var(--color-text-dim)"
-            dominantBaseline="middle"
-            opacity={0.6}
-          >
-            {gridMax}
-          </text>
-        )
-      })()}
+      <text x={cx + 4} y={cy - maxR} fontSize={8} fontFamily="var(--font-num)"
+        fill="var(--color-text-dim)" dominantBaseline="middle" opacity={0.6}>{gridMax}</text>
+      {tooltip && (
+        <g data-capability-tooltip>
+          <rect x={tooltip.x} y={tooltip.y} width={tooltip.width} height={18} rx={4}
+            fill="var(--color-surface)" stroke="var(--color-border)" strokeWidth={0.8} />
+          <text x={tooltip.x + tooltip.width / 2} y={tooltip.y + 12} textAnchor="middle"
+            fontSize={10} fontFamily="var(--font-num)" fontWeight={600} fill="var(--color-accent)">{tooltip.value}</text>
+        </g>
+      )}
     </svg>
   )
 }
 
-// ── 柱状图（1-2 维度回退） ─────────────────────────────────────────────────
-
-function BarChart({ dimensions, size }: Required<SkillRadarChartProps>) {
-  const maxVal = Math.max(1, ...dimensions.map((d) => d.value))
-  const gridMax = Math.max(5, Math.ceil(maxVal / 5) * 5)
-
+function BarChart({ dimensions, size, formatValue, description }: ChartProps) {
+  const gridMax = chartMaximum(dimensions)
   return (
-    <div
-      style={{
-        width: size,
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 12,
-        padding: '8px 4px',
-      }}
-    >
-      {dimensions.map((d, i) => {
-        const frac = Math.min(d.value / gridMax, 1)
-        return (
-          <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-              <span style={{ fontSize: 12, color: 'var(--color-text)', fontWeight: 500 }}>
-                {d.emoji ? `${d.emoji} ` : ''}{d.name}
-              </span>
-              <span style={{ fontSize: 12, fontFamily: 'var(--font-num)', fontWeight: 600, color: 'var(--color-accent)' }}>
-                Lv.{d.value}
-              </span>
-            </div>
-            <div
-              style={{
-                height: 8,
-                borderRadius: 'var(--radius-full)',
-                background: 'var(--color-border)',
-                overflow: 'hidden',
-              }}
-            >
-              <motion.div
-                initial={{ width: 0 }}
-                animate={{ width: `${frac * 100}%` }}
-                transition={{ duration: 0.7, delay: i * 0.1, ease: 'easeOut' }}
-                style={{
-                  height: '100%',
-                  borderRadius: 'var(--radius-full)',
-                  background: 'var(--color-accent)',
-                }}
-              />
-            </div>
+    <div role="img" aria-label={description} data-capability-bars style={{ width: size, maxWidth: '100%',
+      boxSizing: 'border-box', display: 'flex', flexDirection: 'column', gap: 12, padding: '8px 4px' }}>
+      {dimensions.map((d, i) => (
+        <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
+            <span title={d.name} style={{ minWidth: 0, overflowWrap: 'anywhere', fontSize: 12, color: 'var(--color-text)', fontWeight: 500 }}>
+              {d.emoji ? d.emoji + ' ' : ''}{d.name}
+            </span>
+            <span style={{ flexShrink: 0, fontSize: 12, fontFamily: 'var(--font-num)', fontWeight: 600, color: 'var(--color-accent)' }}>
+              {formatValue(d.value)}
+            </span>
           </div>
-        )
-      })}
+          <div style={{ height: 8, borderRadius: 'var(--radius-full)', background: 'var(--color-border)', overflow: 'hidden' }}>
+            <motion.div initial={{ width: 0 }} animate={{ width: Math.min(d.value / gridMax, 1) * 100 + '%' }}
+              transition={{ duration: 0.7, delay: i * 0.1, ease: 'easeOut' }}
+              style={{ height: '100%', borderRadius: 'var(--radius-full)', background: 'var(--color-accent)' }} />
+          </div>
+        </div>
+      ))}
     </div>
   )
 }
 
-// ── 主导出 ────────────────────────────────────────────────────────────────────
-
-export function SkillRadarChart({ dimensions, size = 200 }: SkillRadarChartProps) {
+export function SkillRadarChart({ dimensions, size = 200, formatValue = String, ariaLabel }: SkillRadarChartProps) {
   const t = useT()
-
+  const safeDimensions = dimensions.map(d => ({ ...d, value: Number.isFinite(d.value) ? Math.max(0, d.value) : 0 }))
+  const description = [ariaLabel, ...safeDimensions.map(d => d.name + ': ' + formatValue(d.value))].filter(Boolean).join('; ')
   if (dimensions.length === 0) {
-    return (
-      <div
-        style={{
-          width: size,
-          height: size * 0.5,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          fontSize: 12,
-          color: 'var(--color-text-dim)',
-        }}
-      >
-        {t.radar_empty}
-      </div>
-    )
+    return <div style={{ width: size, maxWidth: '100%', height: size * 0.5, display: 'flex', alignItems: 'center',
+      justifyContent: 'center', fontSize: 12, color: 'var(--color-text-dim)' }}>{t.radar_empty}</div>
   }
-
-  if (dimensions.length <= 2) {
-    return <BarChart dimensions={dimensions} size={size} />
-  }
-
-  return <RadarChart dimensions={dimensions} size={size} />
+  const Component = dimensions.length <= 2 ? BarChart : RadarChart
+  return <Component dimensions={safeDimensions} size={size} formatValue={formatValue} description={description} />
 }

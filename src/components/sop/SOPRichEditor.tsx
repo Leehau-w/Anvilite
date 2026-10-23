@@ -12,10 +12,11 @@ import { generateHTML } from '@tiptap/html'
 import { common, createLowlight } from 'lowlight'
 import { CalloutExtension } from './CalloutExtension'
 import { SOPLinkNode } from './SOPLinkNode'
-import { useSOPStore } from '@/stores/sopStore'
+import { useSOPLibrary } from './useSOPLibrary'
 import { useT } from '@/i18n'
 import type { JSONContent } from '@tiptap/react'
 import type { Editor } from '@tiptap/react'
+import { isNodeEmpty } from '@tiptap/core'
 import type { SOP } from '@/types/sop'
 
 const lowlight = createLowlight(common)
@@ -77,9 +78,10 @@ interface Props {
   onChange: (content: JSONContent | null) => void
   placeholder?: string
   compact?: boolean
+  currentSOPId?: string
 }
 
-export function SOPRichEditor({ content, onChange, placeholder, compact }: Props) {
+export function SOPRichEditor({ content, onChange, placeholder, compact, currentSOPId }: Props) {
   const t = useT()
 
   const editor = useEditor({
@@ -87,7 +89,7 @@ export function SOPRichEditor({ content, onChange, placeholder, compact }: Props
     content: content ?? undefined,
     onUpdate: ({ editor: ed }) => {
       const json = ed.getJSON()
-      const isEmpty = !ed.state.doc.textContent.trim()
+      const isEmpty = isNodeEmpty(ed.state.doc, { ignoreWhitespace: true })
       onChange(isEmpty ? null : json)
     },
   })
@@ -99,10 +101,10 @@ export function SOPRichEditor({ content, onChange, placeholder, compact }: Props
       style={{
         border: '1px solid var(--color-border)',
         borderRadius: 'var(--radius-sm)',
-        overflow: 'hidden',
+        overflow: 'visible',
       }}
     >
-      <Toolbar editor={editor} />
+      <Toolbar editor={editor} currentSOPId={currentSOPId} />
       <div className="sop-rich-editor-content">
         <EditorContent
           editor={editor}
@@ -121,9 +123,9 @@ export function SOPRichEditor({ content, onChange, placeholder, compact }: Props
 
 // ── Toolbar ──────────────────────────────────────────────────
 
-function Toolbar({ editor }: { editor: Editor }) {
+function Toolbar({ editor, currentSOPId }: { editor: Editor; currentSOPId?: string }) {
   const t = useT()
-  const { sops } = useSOPStore()
+  const { sops } = useSOPLibrary()
   const [showSOPSearch, setShowSOPSearch] = useState(false)
   const [sopSearchQuery, setSOPSearchQuery] = useState('')
   const searchRef = useRef<HTMLDivElement>(null)
@@ -147,7 +149,7 @@ function Toolbar({ editor }: { editor: Editor }) {
   }, [editor, t])
 
   const filteredSOPs = sops.filter((s) =>
-    !s.isSystem && s.title.toLowerCase().includes(sopSearchQuery.toLowerCase())
+    s.id !== currentSOPId && s.title.toLowerCase().includes(sopSearchQuery.toLowerCase())
   )
 
   function insertSOPLink(sop: SOP) {
@@ -298,7 +300,7 @@ function Toolbar({ editor }: { editor: Editor }) {
         </button>
 
         {showSOPSearch && (
-          <div
+          <div data-sop-link-picker
             style={{
               position: 'absolute',
               top: 32,
@@ -339,6 +341,7 @@ function Toolbar({ editor }: { editor: Editor }) {
                 filteredSOPs.map((sop) => (
                   <button
                     key={sop.id}
+                    data-sop-link-option={sop.id}
                     type="button"
                     onClick={() => insertSOPLink(sop)}
                     style={{

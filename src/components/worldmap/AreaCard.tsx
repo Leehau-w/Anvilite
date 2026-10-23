@@ -1,10 +1,10 @@
 import { motion, type TargetAndTransition } from 'framer-motion'
 import type { Area } from '@/types/area'
-import { AREA_TEMPLATES, PROSPERITY_NAMES } from '@/types/area'
+import { AREA_TEMPLATES } from '@/types/area'
 import { useTaskStore } from '@/stores/taskStore'
 import { useHabitStore } from '@/stores/habitStore'
 import { isHabitDueToday } from '@/engines/habitEngine'
-import { getProsperityInfo, getAreaSkillXP } from '@/engines/prosperityEngine'
+import { getAreaActivityStats } from '@/utils/areaStats'
 import { getAreaDisplayName } from '@/utils/area'
 import { useT } from '@/i18n'
 
@@ -19,12 +19,11 @@ interface AreaCardProps {
   onDelete: (id: string) => void
 }
 
-function getAreaEmoji(templateId: string | null, prosperityLevel: number): string {
+function getAreaEmoji(templateId: string | null): string {
   if (!templateId) return '🏕️'
   const template = AREA_TEMPLATES[templateId as keyof typeof AREA_TEMPLATES]
   if (!template) return '🏕️'
-  // 繁荣度 1-6，数组 index 0-5
-  return template.prosperityEmojis[Math.max(0, prosperityLevel - 1)] ?? template.prosperityEmojis[0]
+  return template.prosperityEmojis[0]
 }
 
 export function AreaCard({ area, editMode, onClick, onRename, onDelete }: AreaCardProps) {
@@ -33,22 +32,16 @@ export function AreaCard({ area, editMode, onClick, onRename, onDelete }: AreaCa
   const habits = useHabitStore((s) => s.habits)
   const isArchiveArea = area.category === '_milestone' || area.templateId === 'milestone'
 
-  // 计算繁荣度
-  const skillXP = isArchiveArea ? 0 : getAreaSkillXP(tasks, area.category)
-  const { prosperityLevel } = getProsperityInfo(skillXP)
-  const prosperityName = PROSPERITY_NAMES[prosperityLevel - 1] ?? PROSPERITY_NAMES[0]
-  const prosperityStars = '★'.repeat(prosperityLevel) + '☆'.repeat(6 - prosperityLevel)
-
-  const emoji = getAreaEmoji(area.templateId, prosperityLevel)
+  const { completedTaskCount, totalMinutes } = getAreaActivityStats(tasks, isArchiveArea ? undefined : area.category)
+  const emoji = getAreaEmoji(area.templateId)
   const displayName = getAreaDisplayName(area, t)
 
-  const isHighProsperity = !isArchiveArea && prosperityLevel >= 5
   const areaTasks = isArchiveArea
     ? []
     : tasks.filter((task) => !task.deletedAt && !task.isHidden && task.category === area.category)
   const todoCount = areaTasks.filter((task) => task.status === 'todo').length
   const doingCount = areaTasks.filter((task) => task.status === 'doing').length
-  const doneCount = areaTasks.filter((task) => task.status === 'done').length
+  const waitingCount = areaTasks.filter((task) => task.status === 'waiting').length
   const todayHabitCount = isArchiveArea
     ? 0
     : habits.filter((habit) =>
@@ -62,8 +55,8 @@ export function AreaCard({ area, editMode, onClick, onRename, onDelete }: AreaCa
   const metrics = [
     { label: t.worldmap_cardTodo, value: todoCount, color: 'var(--color-text)' },
     { label: t.worldmap_cardDoing, value: doingCount, color: 'var(--color-accent)' },
-    { label: t.worldmap_cardHabits, value: todayHabitCount, color: 'var(--color-success)' },
-    { label: t.worldmap_cardXP, value: skillXP, color: 'var(--color-xp)' },
+    { label: t.worldmap_cardCompleted, value: completedTaskCount, color: 'var(--color-success)' },
+    { label: t.worldmap_cardTime, value: t.heatmap_minutes(totalMinutes), color: 'var(--color-text)' },
   ]
 
   return (
@@ -87,9 +80,6 @@ export function AreaCard({ area, editMode, onClick, onRename, onDelete }: AreaCa
         overflow: 'hidden',
         transition: 'border-color 0.15s',
         boxSizing: 'border-box',
-        boxShadow: isHighProsperity
-          ? '0 0 12px color-mix(in srgb, var(--color-accent) 30%, transparent)'
-          : undefined,
       }}
     >
       {isArchiveArea ? (
@@ -137,9 +127,6 @@ export function AreaCard({ area, editMode, onClick, onRename, onDelete }: AreaCa
               >
                 {displayName}
               </div>
-              <div style={{ fontSize: 'clamp(10px, 6%, 12px)', color: 'var(--color-text-dim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {prosperityName}
-              </div>
             </div>
           </div>
 
@@ -168,11 +155,10 @@ export function AreaCard({ area, editMode, onClick, onRename, onDelete }: AreaCa
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', gap: 6 }}>
-            <div style={{ fontSize: 'clamp(10px, 6%, 12px)', color: 'var(--color-xp)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              {prosperityStars}
-            </div>
+
             <div style={{ fontSize: 'clamp(10px, 6%, 12px)', color: 'var(--color-text-dim)', fontFamily: 'var(--font-num)', whiteSpace: 'nowrap' }}>
-              {t.worldmap_cardDone} {doneCount}
+              {waitingCount > 0 && <span title={t.task_waiting} aria-label={`${t.task_waiting}: ${waitingCount}`}>⏳ {waitingCount} · </span>}
+              {t.worldmap_cardHabits} {todayHabitCount}
             </div>
           </div>
         </>

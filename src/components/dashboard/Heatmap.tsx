@@ -1,24 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useGrowthEventStore } from '@/stores/growthEventStore'
+import { useTaskStore } from '@/stores/taskStore'
 import { useT } from '@/i18n'
 import { formatDateKey } from '@/utils/time'
+import {
+  buildTaskTrend, getTaskTrendHeatLevel, getTaskTrendMax, getTaskTrendMonthDates,
+  getTaskTrendValue, getTaskTrendWeekDates, type TaskTrendMetric, type TaskTrendTotal,
+} from '@/utils/taskTrend'
 
 type HeatmapMode = 'month' | 'week'
-
-interface DayData {
-  date: string
-  xp: number
-  count: number
-}
-
-function getHeatLevel(xp: number, max: number): 0 | 1 | 2 | 3 | 4 {
-  if (xp === 0 || max === 0) return 0
-  const ratio = xp / max
-  if (ratio < 0.2) return 1
-  if (ratio < 0.45) return 2
-  if (ratio < 0.75) return 3
-  return 4
-}
+type TrendMap = ReadonlyMap<string, TaskTrendTotal>
 
 const HEAT_COLORS = [
   'var(--color-border)',
@@ -28,42 +18,17 @@ const HEAT_COLORS = [
   'var(--color-accent)',
 ]
 
-type SlotMap = Map<string, number>
-
-function hourToSlot(hour: number): 0 | 1 | 2 | 3 {
-  if (hour >= 0 && hour < 6)   return 0
-  if (hour >= 6 && hour < 12)  return 1
-  if (hour >= 12 && hour < 18) return 2
-  return 3
-}
-
-/**
- * 量容器宽高，取宽/高两个方向的最小格子尺寸，确保格子不超出容器。
- * @param cols   列数（横向）
- * @param rows   行数（纵向，不含标题行）
- * @param gap    格子间距
- * @param headerH 标题行占用高度（含下方 gap）
- * @param labelW  左侧标签列宽度（周视图用）
- */
-function useContainerCellSize(
-  cols: number,
-  rows: number,
-  gap: number,
-  headerH: number,
-  labelW = 0,
-) {
+/** Fit the existing calendar cells to both dimensions of their card. */
+function useContainerCellSize(cols: number, rows: number, gap: number, headerH: number, labelW = 0) {
   const ref = useRef<HTMLDivElement>(null)
   const [cell, setCell] = useState(16)
-
   useEffect(() => {
     const el = ref.current
     if (!el) return
     const compute = () => {
       const rect = el.getBoundingClientRect()
-      const availW = rect.width - labelW
-      const availH = rect.height - headerH
-      const fromW = Math.floor((availW - (cols - 1) * gap) / cols)
-      const fromH = Math.floor((availH - (rows - 1) * gap) / rows)
+      const fromW = Math.floor((rect.width - labelW - (cols - 1) * gap) / cols)
+      const fromH = Math.floor((rect.height - headerH - (rows - 1) * gap) / rows)
       setCell(Math.max(8, Math.min(fromW, fromH)))
     }
     compute()
@@ -71,127 +36,84 @@ function useContainerCellSize(
     obs.observe(el)
     return () => obs.disconnect()
   }, [cols, rows, gap, headerH, labelW])
-
   return { ref, cell }
 }
 
 export function Heatmap() {
   const [mode, setMode] = useState<HeatmapMode>('month')
-  const { events } = useGrowthEventStore()
-
-  const GAP = 3
-
-  const dayMap = useMemo(() => {
-    const map = new Map<string, DayData>()
-    events.forEach((e) => {
-      const xp = e.details.xpGained ?? 0
-      if (!xp) return
-      const date = formatDateKey(new Date(e.timestamp))
-      const existing = map.get(date)
-      if (existing) { existing.xp += xp; existing.count += 1 }
-      else map.set(date, { date, xp, count: 1 })
-    })
-    return map
-  }, [events])
-
-  const slotMap = useMemo<SlotMap>(() => {
-    const map = new Map<string, number>()
-    events.forEach((e) => {
-      const xp = e.details.xpGained ?? 0
-      if (!xp) return
-      const date = formatDateKey(new Date(e.timestamp))
-      const slot = hourToSlot(new Date(e.timestamp).getHours())
-      const key = `${date}-${slot}`
-      map.set(key, (map.get(key) ?? 0) + xp)
-    })
-    return map
-  }, [events])
-
-  return (
-    <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <TabSwitcher mode={mode} onMode={setMode} />
-      {mode === 'month'
-        ? <MonthHeatmap dayMap={dayMap} gap={GAP} />
-        : <WeekHeatmap slotMap={slotMap} gap={GAP} />
-      }
-    </div>
-  )
-}
-
-function TabSwitcher({ mode, onMode }: { mode: HeatmapMode; onMode: (m: HeatmapMode) => void }) {
-  const t = useT()
-  return (
-    <div style={{ display: 'flex', gap: 4, marginBottom: 12 }}>
-      {(['month', 'week'] as HeatmapMode[]).map((m) => (
-        <button key={m} onClick={() => onMode(m)}
-          style={{
-            fontSize: 12, padding: '3px 10px', borderRadius: 'var(--radius-full)', border: 'none',
-            background: mode === m ? 'color-mix(in srgb, var(--color-accent) 15%, transparent)' : 'transparent',
-            color: mode === m ? 'var(--color-accent)' : 'var(--color-text-dim)',
-            cursor: 'pointer', fontWeight: mode === m ? 500 : 400,
-          }}
-        >
-          {m === 'month' ? t.heatmap_month : t.heatmap_week}
-        </button>
-      ))}
-    </div>
-  )
-}
-
-function MonthHeatmap({ dayMap, gap }: { dayMap: Map<string, DayData>; gap: number }) {
-  const t = useT()
-
+  const [metric, setMetric] = useState<TaskTrendMetric>('count')
+  const tasks = useTaskStore(state => state.tasks)
+  const trend = useMemo(() => buildTaskTrend(tasks), [tasks])
   const today = new Date()
-  const year = today.getFullYear()
-  const month = today.getMonth()
-  const firstDay = new Date(year, month, 1)
-  const lastDay = new Date(year, month + 1, 0)
-  const startDow = (firstDay.getDay() + 6) % 7
-  const cells: (string | null)[] = Array(startDow).fill(null)
-  for (let d = 1; d <= lastDay.getDate(); d++) {
-    cells.push(formatDateKey(new Date(year, month, d)))
-  }
-  while (cells.length % 7 !== 0) cells.push(null)
-
-  const weeks: (string | null)[][] = []
-  for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7))
-
-  // headerH = DOW 标题行高度(12) + 下方 gap(gap)
-  const { ref, cell } = useContainerCellSize(7, weeks.length, gap, 12 + gap)
-
-  const maxXP = Math.max(...Array.from(dayMap.values()).map((d) => d.xp), 1)
-  const todayStr = formatDateKey(today)
-  const DOW_LABELS = t.heatmap_dow
-
   return (
-    <div ref={ref} style={{ width: '100%', flex: 1 }}>
-      {/* DOW 标题 */}
-      <div style={{ display: 'flex', gap, marginBottom: gap }}>
-        {DOW_LABELS.map((l) => (
-          <div key={l} style={{ width: cell, height: 12, fontSize: 10, color: 'var(--color-text-dim)', textAlign: 'center', flexShrink: 0 }}>
-            {l}
-          </div>
+    <div data-trend-metric={metric} data-trend-range={mode} style={{ width: '100%', height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+      <TabSwitcher mode={mode} onMode={setMode} metric={metric} onMetric={setMetric} />
+      <div data-trend-calendar style={{ display: 'flex', flex: 1, minHeight: 0, minWidth: 0 }}>
+        {mode === 'month'
+          ? <MonthHeatmap dayMap={trend.days} metric={metric} gap={3} today={today} />
+          : <WeekHeatmap slotMap={trend.slots} metric={metric} gap={3} today={today} />}
+      </div>
+    </div>
+  )
+}
+
+function TabSwitcher({ mode, onMode, metric, onMetric }: {
+  mode: HeatmapMode; onMode: (mode: HeatmapMode) => void
+  metric: TaskTrendMetric; onMetric: (metric: TaskTrendMetric) => void
+}) {
+  const t = useT()
+  const style = (active: boolean) => ({
+    fontSize: 11, padding: '3px 8px', borderRadius: 'var(--radius-full)', border: 'none',
+    background: active ? 'color-mix(in srgb, var(--color-accent) 15%, transparent)' : 'transparent',
+    color: active ? 'var(--color-accent)' : 'var(--color-text-dim)',
+    cursor: 'pointer', fontWeight: active ? 500 : 400, whiteSpace: 'nowrap' as const,
+  })
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', gap: '4px 8px', marginBottom: 8, flexShrink: 0 }}>
+      <div style={{ display: 'flex', gap: 2 }}>
+        {(['month', 'week'] as const).map(value => (
+          <button type="button" key={value} aria-pressed={mode === value} onClick={() => onMode(value)} style={style(mode === value)}>
+            {value === 'month' ? t.heatmap_month : t.heatmap_week}
+          </button>
         ))}
       </div>
-      {/* 周行 */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
+        {(['count', 'time'] as const).map(value => (
+          <button type="button" key={value} aria-pressed={metric === value} onClick={() => onMetric(value)} style={style(metric === value)}>
+            {value === 'count' ? t.heatmap_countMetric : t.heatmap_timeMetric}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function MonthHeatmap({ dayMap, metric, gap, today }: { dayMap: TrendMap; metric: TaskTrendMetric; gap: number; today: Date }) {
+  const t = useT()
+  const dates = getTaskTrendMonthDates(today)
+  const startDow = (new Date(today.getFullYear(), today.getMonth(), 1).getDay() + 6) % 7
+  const cells: (string | null)[] = [...Array(startDow).fill(null), ...dates]
+  while (cells.length % 7 !== 0) cells.push(null)
+  const weeks: (string | null)[][] = []
+  for (let index = 0; index < cells.length; index += 7) weeks.push(cells.slice(index, index + 7))
+  const { ref, cell } = useContainerCellSize(7, weeks.length, gap, 12 + gap)
+  const max = getTaskTrendMax(dates, dayMap, metric)
+  const todayStr = formatDateKey(today)
+  return (
+    <div ref={ref} style={{ width: '100%', flex: 1, minHeight: 0 }}>
+      <div style={{ display: 'flex', gap, marginBottom: gap }}>
+        {t.heatmap_dow.map((label, index) => (
+          <div key={index} style={{ width: cell, height: 12, fontSize: 10, color: 'var(--color-text-dim)', textAlign: 'center', flexShrink: 0 }}>{label}</div>
+        ))}
+      </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap }}>
         {weeks.map((week, wi) => (
           <div key={wi} style={{ display: 'flex', gap }}>
-            {week.map((dateStr, di) =>
-              dateStr ? (
-                <HeatCell
-                  key={dateStr}
-                  date={dateStr}
-                  xp={dayMap.get(dateStr)?.xp ?? 0}
-                  count={dayMap.get(dateStr)?.count ?? 0}
-                  level={getHeatLevel(dayMap.get(dateStr)?.xp ?? 0, maxXP)}
-                  isToday={dateStr === todayStr}
-                  size={cell}
-                />
-              ) : (
-                <div key={`e-${wi}-${di}`} style={{ width: cell, height: cell, flexShrink: 0 }} />
-              )
-            )}
+            {week.map((date, di) => date ? (
+              <HeatCell key={date} date={date} total={dayMap.get(date)} metric={metric}
+                level={getTaskTrendHeatLevel(getTaskTrendValue(dayMap.get(date), metric), max)}
+                isToday={date === todayStr} size={cell} />
+            ) : <div key={'empty-' + wi + '-' + di} style={{ width: cell, height: cell, flexShrink: 0 }} />)}
           </div>
         ))}
       </div>
@@ -199,71 +121,35 @@ function MonthHeatmap({ dayMap, gap }: { dayMap: Map<string, DayData>; gap: numb
   )
 }
 
-function WeekHeatmap({ slotMap, gap }: { slotMap: SlotMap; gap: number }) {
+function WeekHeatmap({ slotMap, metric, gap, today }: { slotMap: TrendMap; metric: TaskTrendMetric; gap: number; today: Date }) {
   const t = useT()
-  const SLOT_LABEL_W = 40   // 时段标签列宽（px）
-  // headerH = DOW 标题行高度(12) + 下方 gap；rows = 4 时段
-  const { ref, cell } = useContainerCellSize(7, 4, gap, 12 + gap, SLOT_LABEL_W + 4)
-  // 与 hourToSlot 对应的时间范围
-  const SLOT_RANGES = ['0–5', '6–11', '12–17', '18–23']
-
-  const today = new Date()
-  const dayOfWeek = today.getDay() === 0 ? 7 : today.getDay()
-  const monday = new Date(today)
-  monday.setDate(today.getDate() - (dayOfWeek - 1))
-  const days: string[] = []
-  for (let i = 0; i < 7; i++) {
-    const d = new Date(monday)
-    d.setDate(monday.getDate() + i)
-    days.push(formatDateKey(d))
-  }
-
-  const SLOT_LABELS = t.heatmap_slots
+  const SLOT_LABEL_W = 40
+  const { ref, cell } = useContainerCellSize(7, 4, gap, 12 + gap, SLOT_LABEL_W + gap)
+  const ranges = ['0–5', '6–11', '12–17', '18–23']
+  const days = getTaskTrendWeekDates(today)
   const todayStr = formatDateKey(today)
-  const DOW_LABELS = t.heatmap_dow
-
-  const maxSlotXP = Math.max(
-    1,
-    ...days.flatMap((d) => SLOT_LABELS.map((_, si) => slotMap.get(`${d}-${si}`) ?? 0))
-  )
-
+  const max = getTaskTrendMax(days.flatMap(day => [0, 1, 2, 3].map(slot => day + '-' + slot)), slotMap, metric)
   return (
-    <div ref={ref} style={{ width: '100%', flex: 1 }}>
-      {/* 标题行 */}
+    <div ref={ref} style={{ width: '100%', flex: 1, minHeight: 0 }}>
       <div style={{ display: 'flex', gap, marginBottom: gap }}>
         <div style={{ width: SLOT_LABEL_W, flexShrink: 0 }} />
-        {days.map((d, i) => (
-          <div key={d} style={{
-            width: cell, flexShrink: 0, height: 12, fontSize: 10, textAlign: 'center',
-            color: d === todayStr ? 'var(--color-accent)' : 'var(--color-text-dim)',
-          }}>
-            {DOW_LABELS[i]}
+        {days.map((day, index) => (
+          <div key={day} style={{ width: cell, flexShrink: 0, height: 12, fontSize: 10, textAlign: 'center', color: day === todayStr ? 'var(--color-accent)' : 'var(--color-text-dim)' }}>
+            {t.heatmap_dow[index]}
           </div>
         ))}
       </div>
-
-      {/* 时段行 */}
       <div style={{ display: 'flex', flexDirection: 'column', gap }}>
-        {SLOT_LABELS.map((slotLabel, si) => (
-          <div key={slotLabel} style={{ display: 'flex', gap, alignItems: 'center' }}>
-            {/* 时段标签：名称 + 时间范围 */}
+        {t.heatmap_slots.map((slotLabel, slot) => (
+          <div key={slot} style={{ display: 'flex', gap, alignItems: 'center' }}>
             <div style={{ width: SLOT_LABEL_W, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 1 }}>
               <span style={{ fontSize: 10, color: 'var(--color-text-dim)', lineHeight: 1 }}>{slotLabel}</span>
-              <span style={{ fontSize: 9, color: 'var(--color-text-dim)', lineHeight: 1, opacity: 0.7 }}>{SLOT_RANGES[si]}</span>
+              <span style={{ fontSize: 9, color: 'var(--color-text-dim)', lineHeight: 1, opacity: 0.7 }}>{ranges[slot]}</span>
             </div>
-            {days.map((dateStr) => {
-              const xp = slotMap.get(`${dateStr}-${si}`) ?? 0
-              return (
-                <HeatCell
-                  key={`${dateStr}-${si}`}
-                  date={`${dateStr} ${slotLabel}`}
-                  xp={xp}
-                  count={0}
-                  level={getHeatLevel(xp, maxSlotXP)}
-                  isToday={false}
-                  size={cell}
-                />
-              )
+            {days.map(date => {
+              const total = slotMap.get(date + '-' + slot)
+              return <HeatCell key={date + '-' + slot} date={date} slot={slot} slotLabel={slotLabel}
+                total={total} metric={metric} level={getTaskTrendHeatLevel(getTaskTrendValue(total, metric), max)} isToday={false} size={cell} />
             })}
           </div>
         ))}
@@ -272,45 +158,19 @@ function WeekHeatmap({ slotMap, gap }: { slotMap: SlotMap; gap: number }) {
   )
 }
 
-interface HeatCellProps {
-  date: string
-  xp: number
-  count: number
-  level: 0 | 1 | 2 | 3 | 4
-  isToday: boolean
-  size: number
-}
-
-function HeatCell({ date, xp, count, level, isToday, size }: HeatCellProps) {
-  const [tooltip, setTooltip] = useState(false)
+function HeatCell({ date, slot, slotLabel, total, metric, level, isToday, size }: {
+  date: string; slot?: number; slotLabel?: string; total?: TaskTrendTotal
+  metric: TaskTrendMetric; level: 0 | 1 | 2 | 3 | 4; isToday: boolean; size: number
+}) {
   const t = useT()
-
+  const count = total?.count ?? 0
+  const minutes = total?.minutes ?? 0
+  const value = getTaskTrendValue(total, metric)
+  const label = date + (slotLabel ? ' ' + slotLabel : '') + ' · ' + t.heatmap_taskCount(count) + ' · ' + t.heatmap_minutes(minutes)
   return (
-    <div style={{ position: 'relative', flexShrink: 0 }}>
-      <div
-        style={{
-          width: size, height: size,
-          borderRadius: 'var(--radius-sm)',
-          background: HEAT_COLORS[level],
-          outline: isToday ? '1.5px solid var(--color-accent)' : 'none',
-          cursor: xp > 0 ? 'pointer' : 'default',
-          transition: 'transform 0.1s',
-        }}
-        onMouseEnter={() => setTooltip(true)}
-        onMouseLeave={() => setTooltip(false)}
-        onMouseDown={(e) => { e.currentTarget.style.transform = 'scale(0.9)' }}
-        onMouseUp={(e) => { e.currentTarget.style.transform = 'scale(1)' }}
-      />
-      {tooltip && xp > 0 && (
-        <div style={{
-          position: 'absolute', bottom: size + 4, left: '50%', transform: 'translateX(-50%)',
-          background: 'var(--color-text)', color: 'var(--color-bg)',
-          fontSize: 10, padding: '3px 8px', borderRadius: 'var(--radius-sm)',
-          whiteSpace: 'nowrap', zIndex: 50, pointerEvents: 'none',
-        }}>
-          {date} · +{xp} XP{count > 0 ? ` ${t.heatmap_countSuffix(count)}` : ''}
-        </div>
-      )}
-    </div>
+    <div role="img" title={label} aria-label={label} data-trend-date={date} data-trend-slot={slot}
+      data-trend-value={value} data-trend-count={count} data-trend-minutes={minutes} data-trend-level={level}
+      style={{ width: size, height: size, flexShrink: 0, borderRadius: 'var(--radius-sm)', background: HEAT_COLORS[level],
+        outline: isToday ? '1.5px solid var(--color-accent)' : 'none', cursor: value > 0 ? 'pointer' : 'default' }} />
   )
 }

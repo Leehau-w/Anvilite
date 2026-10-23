@@ -8,6 +8,7 @@ import { useGrowthEventStore } from '@/stores/growthEventStore'
 import { TaskItem } from './TaskItem'
 import { itemMotion } from './itemMotion'
 import { QuickInput } from './QuickInput'
+import { CategoryCreator } from '@/components/ui/CategoryCreator'
 import { TaskDrawer } from './TaskDrawer'
 import { HabitDrawer } from '@/components/dashboard/HabitDrawer'
 import { HabitContextMenu } from '@/components/dashboard/HabitContextMenu'
@@ -39,10 +40,12 @@ export function TaskList() {
   const catLabel = (cat: string) => resolveCatLabel(cat, areas, tr)
   const [mainTab, setMainTab] = useState<'tasks' | 'habits'>('tasks')
   const [activeCategory, setActiveCategory] = useState('ALL')
+  const [categorySelectionVersion, setCategorySelectionVersion] = useState(0)
   const [newGroupName, setNewGroupName] = useState('')
   const [addingGroup, setAddingGroup] = useState(false)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [editTask, setEditTask] = useState<Task | null>(null)
+  const [drawerCategory, setDrawerCategory] = useState<string | undefined>(undefined)
   const [trashMode, setTrashMode] = useState(false)
   const [hiddenMode, setHiddenMode] = useState(false)
   const [habitDrawerOpen, setHabitDrawerOpen] = useState(false)
@@ -71,6 +74,7 @@ export function TaskList() {
 
   const doing = useMemo(() => sortTasksInGroup(filtered.filter((t) => t.status === 'doing')), [filtered])
   const todo = useMemo(() => sortTasksInGroup(filtered.filter((t) => t.status === 'todo')), [filtered])
+  const waiting = useMemo(() => sortTasksInGroup(filtered.filter((t) => t.status === 'waiting')), [filtered])
   const done = useMemo(() => filtered.filter((t) => t.status === 'done'), [filtered])
 
   // 拖拽排序的本地状态
@@ -119,6 +123,7 @@ export function TaskList() {
     setTrashMode(false)
     setHiddenMode(false)
     setActiveCategory(cat)
+    setCategorySelectionVersion(version => version + 1)
     setSelectedTags([])
   }
 
@@ -177,17 +182,22 @@ export function TaskList() {
       <>
       {/* 分类Tab + 垃圾桶切换 */}
       <div
-        className="flex items-center gap-1 px-4 py-2 shrink-0 overflow-x-auto"
-        style={{ borderBottom: '1px solid var(--color-border)' }}
+        className="flex items-center gap-1 px-4 py-2 shrink-0"
+        style={{ borderBottom: '1px solid var(--color-border)', minWidth: 0 }}
       >
+        <div data-task-category-tabs style={{ display: 'flex', alignItems: 'center', gap: 4, flex: 1, minWidth: 0, overflowX: 'auto', scrollbarWidth: 'thin' }}>
         {[{ key: 'ALL', label: tr.tasklist_all }, ...getAreaCategories().map((c) => ({ key: c, label: catLabel(c) }))].map(({ key, label }) => {
           const isActive = isCatActive(key)
           return (
             <button
               key={key}
+              type="button"
+              data-task-category-tab={key}
+              aria-pressed={isActive}
               onClick={() => handleCategoryClick(key)}
               style={{
                 fontSize: 12,
+                flexShrink: 0,
                 letterSpacing: '0.02em',
                 padding: '4px 12px',
                 borderRadius: 'var(--radius-full)',
@@ -206,12 +216,18 @@ export function TaskList() {
             </button>
           )
         })}
-        <div style={{ flex: 1 }} />
+        <div data-task-category-create style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: '2px 8px', minHeight: 26 }}>
+          <CategoryCreator compact onCreated={handleCategoryClick} />
+        </div>
+        </div>
         <button
           onClick={() => { setHiddenMode((v) => !v); setTrashMode(false) }}
+          type="button"
+          aria-pressed={hiddenMode}
           title={tr.tasklist_hiddenTooltip}
           style={{
             fontSize: 12,
+            flexShrink: 0,
             padding: '4px 10px',
             borderRadius: 'var(--radius-full)',
             border: `1px solid ${hiddenMode ? 'var(--color-secondary)' : 'var(--color-border)'}`,
@@ -233,9 +249,12 @@ export function TaskList() {
         </button>
         <button
           onClick={() => { setTrashMode((v) => !v); setHiddenMode(false) }}
+          type="button"
+          aria-pressed={trashMode}
           title={tr.tasklist_trashTooltip}
           style={{
             fontSize: 12,
+            flexShrink: 0,
             padding: '4px 10px',
             borderRadius: 'var(--radius-full)',
             border: `1px solid ${trashMode ? 'var(--color-danger)' : 'var(--color-border)'}`,
@@ -306,13 +325,8 @@ export function TaskList() {
                       </div>
                       <div style={{ fontSize: 11, color: 'var(--color-text-dim)', marginTop: 2 }}>
                         {catLabel(task.category)}
-                        {task.status === 'done' && task.xpReward > 0 && (
-                          <span style={{ marginLeft: 6, color: 'var(--color-success)' }}>
-                            +{task.xpReward} XP
-                          </span>
-                        )}
                         {task.status !== 'done' && (
-                          <span style={{ marginLeft: 6, color: 'var(--color-warning)' }}>{tr.tasklist_pendingStatus}</span>
+                          <span style={{ marginLeft: 6, color: 'var(--color-warning)' }}>{task.status === 'waiting' ? tr.task_waiting : tr.tasklist_pendingStatus}</span>
                         )}
                       </div>
                     </div>
@@ -443,8 +457,9 @@ export function TaskList() {
 
           <div className="px-4 py-3 shrink-0">
             <QuickInput
-              onOpenDrawer={() => { setEditTask(null); setDrawerOpen(true) }}
+              onOpenDrawer={(category) => { setDrawerCategory(category); setEditTask(null); setDrawerOpen(true) }}
               defaultCategory={quickCreateCategory}
+              categorySelectionVersion={categorySelectionVersion}
             />
           </div>
 
@@ -495,6 +510,16 @@ export function TaskList() {
               </Section>
             )}
 
+            {waiting.length > 0 && (
+              <Section title={tr.tasklist_waiting} count={waiting.length}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <AnimatePresence mode="popLayout">
+                    {waiting.map((task) => <TaskItem key={task.id} task={task} onEdit={openEdit} />)}
+                  </AnimatePresence>
+                </div>
+              </Section>
+            )}
+
             {done.length > 0 && (
               <CompletedSection
                 done={done}
@@ -533,7 +558,7 @@ export function TaskList() {
         open={drawerOpen}
         onClose={() => { setDrawerOpen(false); setEditTask(null) }}
         editTask={editTask}
-        initialCategory={editTask ? undefined : quickCreateCategory}
+        initialCategory={editTask ? undefined : drawerCategory ?? quickCreateCategory}
       />
       </>
       )}
@@ -1094,11 +1119,19 @@ function HabitsTab({
   }
 
   function handleDelete(id: string) {
-    deleteHabit(id)
+    try {
+      deleteHabit(id)
+    } catch {
+      showToast(tr.activity_actionFailed)
+    }
   }
 
   function handleUndoHabit(habit: Habit) {
-    showToast(undoComplete(habit.id) ? tr.habit_undoneToast(habit.title) : tr.habit_undoUnavailable)
+    try {
+      showToast(undoComplete(habit.id) ? tr.habit_undoneToast(habit.title) : tr.habit_undoUnavailable)
+    } catch {
+      showToast(tr.activity_actionFailed)
+    }
   }
 
   function handleMaster(habit: Habit) {
@@ -1700,7 +1733,7 @@ function HabitRow({
           <span>{catLabel(habit.category)}</span>
           <span>{repeatLabel}</span>
           {habit.consecutiveCount > 0 && (
-            <span style={{ color: 'var(--color-xp)', fontFamily: 'var(--font-num)', fontWeight: 600 }}>🔥{habit.consecutiveCount}</span>
+            <span style={{ color: 'var(--color-xp)', fontFamily: 'var(--font-num)', fontWeight: 600 }}>{tr.archive_streak(habit.consecutiveCount)}</span>
           )}
         </div>
         {/* hover 操作栏 */}

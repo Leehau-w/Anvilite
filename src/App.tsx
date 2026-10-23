@@ -10,11 +10,9 @@ import { WorldMap } from '@/components/worldmap/WorldMap'
 import { InspirationModal } from '@/components/ui/InspirationModal'
 import { SOPPage } from '@/components/sop/SOPPage'
 import { ToastProvider, useToast } from '@/components/feedback/Toast'
-import { FeedbackProvider } from '@/components/feedback/FeedbackContext'
 import ErrorBoundary from '@/components/ui/ErrorBoundary'
 import { startDateWatcher } from '@/utils/dateWatcher'
 import { useHabitStore } from '@/stores/habitStore'
-import { useProsperityWatcher } from '@/hooks/useProsperityWatcher'
 import { useT } from '@/i18n'
 
 function App() {
@@ -22,8 +20,6 @@ function App() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [inspirationOpen, setInspirationOpen] = useState(false)
   const [, setDateTick] = useState(0)
-
-  useProsperityWatcher()
 
   useEffect(() => {
     return startDateWatcher(() => {
@@ -46,7 +42,6 @@ function App() {
 
   return (
     <ToastProvider>
-      <FeedbackProvider>
         <ErrorBoundary>
           <div
             style={{
@@ -85,7 +80,6 @@ function App() {
           <InspirationModal open={inspirationOpen} onClose={() => setInspirationOpen(false)} />
           <StaleTimerWatcher />
         </ErrorBoundary>
-      </FeedbackProvider>
     </ToastProvider>
   )
 }

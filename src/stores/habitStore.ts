@@ -1,14 +1,13 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { Habit, SubHabit, HabitGroup, HabitAction } from '@/types/habit'
-import { habitCycleKey, refreshHabitCycle } from '@/utils/habitCycle'
-import { findCompletionEvent } from '@/utils/completionEvent'
-import { getStoragePrefix } from './accountManager'
+import { habitCycleKey, refreshHabitCycle, closedHabitDate } from '@/utils/habitCycle'
+import { findCompletionEvent, restoreRemovedCompletionEvent } from '@/utils/completionEvent'
+import { getStoragePrefix, isAccountBindingCurrent } from './accountManager'
 import { generateId } from '@/utils/id'
 import { migrateCategory } from '@/utils/area'
 import { getTodayString, isSameLocalDate } from '@/utils/time'
 import { isHabitDueToday, calculateNewStreak, calculateToleranceUpdate } from '@/engines/habitEngine'
-import { calculateHabitXP } from '@/engines/xpEngine'
 import { useCharacterStore } from './characterStore'
 import { useGrowthEventStore } from './growthEventStore'
 import {
@@ -77,11 +76,29 @@ function actionSnapshot(habit: Habit, kind: HabitAction['kind'], xp: number): Ha
   }
 }
 
+// Undo only the completion flags on surviving IDs. Content, ordering, additions,
+// and removals made after completion belong to the user's later edits.
+function restoreSubHabitCompletion(current: SubHabit[], before: SubHabit[]): SubHabit[] {
+  const flags = new Map<string, boolean>()
+  const collect = (items: SubHabit[]) => items.forEach(item => {
+    flags.set(item.id, item.completed)
+    collect(item.subHabits)
+  })
+  collect(before)
+  const restore = (items: SubHabit[]): SubHabit[] => items.map(item => ({
+    ...item,
+    completed: flags.get(item.id) ?? item.completed,
+    subHabits: restore(item.subHabits),
+  }))
+  return restore(current)
+}
+
 function makeDefaultHabit(partial: Parameters<HabitStore['addHabit']>[0]): Habit {
   const now = new Date().toISOString()
   return {
     ...partial,
     id: generateId(),
+    lastMissCheckDate: closedHabitDate(),
     subHabits: [],
     status: 'active',
     isHidden: false,
@@ -103,6 +120,18 @@ function makeDefaultHabit(partial: Parameters<HabitStore['addHabit']>[0]): Habit
   }
 }
 
+// Restore only this failed action, retaining unrelated activity created by other callers.
+function rollbackHabitAction(habit: Habit, action: HabitAction) {
+  try { useHabitStore.setState(state => ({ habits: state.habits.map(current =>
+    current.id === habit.id && current.lastAction?.id === action.id ? habit : current) })) } catch { /* best-effort storage rollback */ }
+  const events = useGrowthEventStore.getState().events
+  const kept = events.filter(event => !(event.type === (action.kind === 'complete' ? 'habit_complete' : 'habit_skip') &&
+    event.details.entityId === habit.id && event.details.completionId === action.id))
+  if (kept.length !== events.length) {
+    try { useGrowthEventStore.setState({ events: kept }) } catch { /* memory is restored even if storage remains full */ }
+  }
+}
+
 export const useHabitStore = create<HabitStore>()(
   persist(
     (set, get) => ({
@@ -116,11 +145,27 @@ export const useHabitStore = create<HabitStore>()(
       },
 
       updateHabit: (id, patch) => {
+        const habit = get().habits.find(h => h.id === id)
         set((s) => ({
           habits: s.habits.map((h) =>
-            h.id === id ? { ...h, ...patch, updatedAt: new Date().toISOString() } : h
+            h.id === id ? {
+              ...h, ...patch,
+              // Resuming or changing a schedule starts observation with the new
+              // active schedule, without charging for an inactive interval.
+              ...((patch.status === 'active' || patch.isHidden === false || patch.deletedAt === null ||
+                ['repeatType', 'startDate', 'endDate', 'weeklyDays', 'weeklyMode', 'weeklyFlexibleCount',
+                  'monthlyDays', 'customIntervalDays', 'targetCount'].some(key => key in patch)) ? {
+                lastMissCheckDate: h.lastMissCheckDate && h.lastMissCheckDate > closedHabitDate()
+                  ? h.lastMissCheckDate : closedHabitDate(),
+              } : {}),
+              updatedAt: new Date().toISOString(),
+            } : h
           ),
         }))
+        if (habit?.lastAction?.kind === 'complete' && patch.actualMinutes !== undefined) {
+          const event = findCompletionEvent(useGrowthEventStore.getState().events.filter(e => e.type === 'habit_complete'), id, habit.lastAction.id)
+          if (event) useGrowthEventStore.getState().updateEventDetails(event.id, { actualMinutes: patch.actualMinutes })
+        }
       },
 
       deleteHabit: (id) => {
@@ -202,7 +247,6 @@ export const useHabitStore = create<HabitStore>()(
         // 达到目标次数：完整结算
         const newStreak = calculateNewStreak(habit, 'complete')
         const tolerance = calculateToleranceUpdate(habit, 'complete')
-        const { xp, ore } = calculateHabitXP(habit.difficulty, newStreak, habit.repeatType)
 
         // 每周弹性习惯：累计本周完成次数
         let newWeeklyCount = habit.weeklyCompletionCount ?? 0
@@ -226,33 +270,46 @@ export const useHabitStore = create<HabitStore>()(
           habitActualMinutes += Math.round(totalSec / 60)
         }
 
-        set((s) => ({
-          habits: s.habits.map((h) =>
-            h.id === id
-              ? {
-                  ...h,
-                  status: 'completed_today',
-                  cycleKey: habitCycleKey({ ...h, lastDueAt: now }),
-                  lastAction: actionSnapshot({ ...habit, actualMinutes: habitActualMinutes }, 'complete', xp),
-                  consecutiveCount: newStreak,
-                  totalCompletions: h.totalCompletions + 1,
-                  toleranceCharges: tolerance.charges,
-                  toleranceNextAt: tolerance.nextAt,
-                  weeklyCompletionCount: newWeeklyCount,
-                  currentCycleCount: 0,
-                  lastCompletedAt: now,
-                  lastDueAt: now,
-                  updatedAt: now,
-                  actualMinutes: habitActualMinutes,
-                  timerStartedAt: null,
-                  timerAccumulated: 0,
-                  subHabits: setSubHabitsCompleted(h.subHabits, true),
-                }
-              : h
-          ),
-        }))
+        const action = actionSnapshot({ ...habit, actualMinutes: habitActualMinutes }, 'complete', 0)
+        try {
+          set((s) => ({
+            habits: s.habits.map((h) =>
+              h.id === id
+                ? {
+                    ...h,
+                    status: 'completed_today',
+                    cycleKey: habitCycleKey({ ...h, lastDueAt: now }),
+                    lastAction: action,
+                    consecutiveCount: newStreak,
+                    totalCompletions: h.totalCompletions + 1,
+                    toleranceCharges: tolerance.charges,
+                    toleranceNextAt: tolerance.nextAt,
+                    weeklyCompletionCount: newWeeklyCount,
+                    currentCycleCount: 0,
+                    lastCompletedAt: now,
+                    lastDueAt: now,
+                    updatedAt: now,
+                    actualMinutes: habitActualMinutes,
+                    timerStartedAt: null,
+                    timerAccumulated: 0,
+                    subHabits: setSubHabitsCompleted(h.subHabits, true),
+                  }
+                : h
+            ),
+          }))
 
-        return { xp, ore, newStreak, partial: false }
+          useGrowthEventStore.getState().addEvent({
+            type: 'habit_complete', title: habit.title,
+            details: { entityId: id, completionId: action.id, actualMinutes: habitActualMinutes,
+              consecutiveCount: newStreak, categoryName: habit.category },
+            isMilestone: false,
+          })
+        } catch (error) {
+          rollbackHabitAction(habit, action)
+          throw error
+        }
+        try { useCharacterStore.getState().recordActivity() } catch (error) { console.warn('[HabitStore] Unable to record activity:', error) }
+        return { xp: 0, ore: 0, newStreak, partial: false }
       },
 
       undoComplete: (id, actionId) => {
@@ -261,18 +318,33 @@ export const useHabitStore = create<HabitStore>()(
         const action = habit.lastAction
         // Legacy records cannot reconstruct a prior snapshot or a reliable event identity.
         if (!action || (actionId && action.id !== actionId) || !isSameLocalDate(action.at, getTodayString())) return false
-        const event = findCompletionEvent(useGrowthEventStore.getState().events, id, action.id)
-        set((s) => ({
-          habits: s.habits.map((h) => h.id === id ? {
-            ...h, ...action.before, status: 'active', lastAction: null,
-            cycleKey: habitCycleKey({ ...h, ...action.before }),
-            updatedAt: new Date().toISOString(),
-          } : h),
-        }))
-        if (action.kind === 'complete' && action.xp > 0) {
-          useCharacterStore.getState().revokeXP(action.xp)
+        const previousEvents = useGrowthEventStore.getState().events
+        const event = findCompletionEvent(previousEvents.filter(e =>
+          e.type === (action.kind === 'complete' ? 'habit_complete' : 'habit_skip')), id, action.id)
+        try {
+          set((s) => ({
+            habits: s.habits.map((h) => h.id === id ? {
+              ...h, ...action.before,
+              subHabits: action.kind === 'complete'
+                ? restoreSubHabitCompletion(h.subHabits, action.before.subHabits) : h.subHabits,
+              status: 'active', lastAction: null,
+              cycleKey: habitCycleKey({ ...h, ...action.before }),
+              updatedAt: new Date().toISOString(),
+            } : h),
+          }))
+          if (event) useGrowthEventStore.getState().removeEvent(event.id)
+        } catch (error) {
+          try { set(state => ({ habits: state.habits.map(current =>
+            current.id === id && current.status === 'active' && !current.lastAction ? habit : current) })) } catch { /* best-effort storage rollback */ }
+          if (event) {
+            const current = useGrowthEventStore.getState().events
+            const restored = restoreRemovedCompletionEvent(current, previousEvents, event)
+            if (restored !== current) {
+              try { useGrowthEventStore.setState({ events: restored }) } catch { /* memory is restored even if storage remains full */ }
+            }
+          }
+          throw error
         }
-        if (event) useGrowthEventStore.getState().removeEvent(event.id)
         return true
       },
 
@@ -283,23 +355,34 @@ export const useHabitStore = create<HabitStore>()(
 
         const newStreak = calculateNewStreak(habit, 'skip')
         const now = new Date().toISOString()
+        const action = actionSnapshot(habit, 'skip', 0)
 
-        set((s) => ({
-          habits: s.habits.map((h) =>
-            h.id === id
-              ? {
-                  ...h,
-                  status: 'completed_today',
-                  consecutiveCount: newStreak,
-                  lastDueAt: now,
-                  cycleKey: habitCycleKey({ ...h, lastDueAt: now }),
-                  lastAction: actionSnapshot(habit, 'skip', 0),
-                  updatedAt: now,
-                }
-              : h
-          ),
-        }))
+        try {
+          set((s) => ({
+            habits: s.habits.map((h) =>
+              h.id === id
+                ? {
+                    ...h,
+                    status: 'completed_today',
+                    consecutiveCount: newStreak,
+                    lastDueAt: now,
+                    cycleKey: habitCycleKey({ ...h, lastDueAt: now }),
+                    lastAction: action,
+                    updatedAt: now,
+                  }
+                : h
+            ),
+          }))
 
+          useGrowthEventStore.getState().addEvent({
+            type: 'habit_skip', title: habit.title,
+            details: { entityId: id, completionId: action.id, consecutiveCount: newStreak, categoryName: habit.category },
+            isMilestone: false,
+          })
+        } catch (error) {
+          rollbackHabitAction(habit, action)
+          throw error
+        }
         return { newStreak }
       },
 
@@ -466,10 +549,7 @@ export const useHabitStore = create<HabitStore>()(
         )
         return {
           completed: todayDone.length,
-          totalXP: todayDone.reduce((sum, h) => {
-            const { xp } = calculateHabitXP(h.difficulty, h.consecutiveCount, h.repeatType)
-            return sum + (h.lastAction?.xp ?? xp)
-          }, 0),
+          totalXP: 0,
         }
       },
     }),
@@ -477,12 +557,7 @@ export const useHabitStore = create<HabitStore>()(
       name: `${getStoragePrefix()}-habits`,
       onRehydrateStorage: () => (state) => {
         if (!state) return
-        const now = new Date()
-        const dow = now.getDay() === 0 ? 7 : now.getDay()
-        const monday = new Date(now)
-        monday.setDate(now.getDate() - (dow - 1))
-        monday.setHours(0, 0, 0, 0)
-
+        const attendanceBefore = new Map(state.habits.map(h => [h.id, h]))
         // ── v0.3 迁移：移除 parentId/childIds/nestingLevel，过滤掉旧子习惯 ──
         if (!localStorage.getItem(SUBHABIT_MIGRATION_KEY)) {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -492,10 +567,6 @@ export const useHabitStore = create<HabitStore>()(
 
         state.habits = state.habits.map((h) => {
           const weeklyCount = h.weeklyCompletionCount ?? 0
-          const weeklyStale = weeklyCount > 0 &&
-            (!h.lastCompletedAt || new Date(h.lastCompletedAt) < monday)
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const legacy = h as any
           const patched: Habit = {
             ...h,
             sortOrder: h.sortOrder ?? Date.now(),
@@ -503,10 +574,11 @@ export const useHabitStore = create<HabitStore>()(
             deletedAt: h.deletedAt ?? null,
             timerStartedAt: h.timerStartedAt ?? null,
             actualMinutes: h.actualMinutes ?? 0,
+            timerAccumulated: h.timerAccumulated ?? 0,
             subHabits: h.subHabits ?? [],
             category: migrateCategory(h.category),
-            status: legacy.status === 'archived' ? 'paused' : h.status,
-            weeklyCompletionCount: weeklyStale ? 0 : weeklyCount,
+            status: h.status,
+            weeklyCompletionCount: weeklyCount,
           }
           // 清理旧字段
           delete (patched as any).parentId
@@ -518,10 +590,6 @@ export const useHabitStore = create<HabitStore>()(
         // ── v0.3.1 迁移：timerAccumulated ──────────────────────
         const HABIT_TIMER_MIGRATION = 'anvilite-migration-habit-timer-v031'
         if (!localStorage.getItem(HABIT_TIMER_MIGRATION)) {
-          state.habits = state.habits.map((h) => ({
-            ...h,
-            timerAccumulated: h.timerAccumulated ?? 0,
-          }))
           localStorage.setItem(HABIT_TIMER_MIGRATION, new Date().toISOString())
         }
 
@@ -539,6 +607,21 @@ export const useHabitStore = create<HabitStore>()(
 
         if (!state.completedHabitViewMode) state.completedHabitViewMode = 'area'
         if (!state.customHabitGroups) state.customHabitGroups = []
+        // Hydration normalizes in memory; save changed attendance state so cold
+        // restarts observe misses even without an edit. A later action already
+        // persists the new state, so never write a superseded hydration snapshot.
+        const hydratedHabits = state.habits
+        const attendanceChanged = hydratedHabits.some(h => {
+          const before = attendanceBefore.get(h.id)
+          return !before || h.lastMissCheckDate !== before.lastMissCheckDate ||
+            h.consecutiveCount !== before.consecutiveCount || h.toleranceCharges !== before.toleranceCharges ||
+            h.toleranceNextAt !== before.toleranceNextAt
+        })
+        if (attendanceChanged) queueMicrotask(() => {
+          if (useHabitStore.getState().habits !== hydratedHabits || !isAccountBindingCurrent()) return
+          try { useHabitStore.setState({ habits: hydratedHabits }) }
+          catch (error) { console.warn('[HabitStore] Unable to persist attendance watermark:', error) }
+        })
       },
     }
   )

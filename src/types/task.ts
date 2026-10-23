@@ -13,12 +13,15 @@ export interface Task {
   category: string
   difficulty: 1 | 2 | 3 | 4 | 5
   priority: 'urgent' | 'high' | 'medium' | 'low'
+  /** null or absent follows priority; custom colors use six-digit hex. */
+  backgroundColor?: string | null
   dueDate: string | null
   description: string
   /** @deprecated UI 不再使用，字段保留供历史数据兼容 */
   estimatedMinutes?: number | null
   actualMinutes: number
-  status: 'todo' | 'doing' | 'done'
+  status: 'todo' | 'doing' | 'waiting' | 'done'
+  /** Legacy reward retained for backup compatibility; new completions record zero. */
   xpReward: number
   completedAt: string | null
   completionId?: string

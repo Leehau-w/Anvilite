@@ -12,11 +12,15 @@
     "target": [
       {
         "target": "nsis",
-        "arch": ["x64"]
+        "arch": [
+          "x64"
+        ]
       },
       {
         "target": "portable",
-        "arch": ["x64"]
+        "arch": [
+          "x64"
+        ]
       }
     ],
     "icon": "build/icon.ico",
@@ -29,12 +33,20 @@
     "allowToChangeInstallationDirectory": true,
     "shortcutName": "Anvilite",
     "installerIcon": "build/icon.ico",
-    "uninstallerIcon": "build/icon.ico"
+    "uninstallerIcon": "build/icon.ico",
+    "artifactName": "Anvilite-Setup-${version}.exe"
   },
   "portable": {
     "artifactName": "Anvilite-${version}-portable.exe"
   },
   "extraResources": [
-    { "from": "build/icon.ico", "to": "build/icon.ico" }
+    {
+      "from": "build/icon.ico",
+      "to": "build/icon.ico"
+    },
+    {
+      "from": "dist-mcp",
+      "to": "mcp"
+    }
   ]
 }

@@ -1,7 +1,8 @@
 import { useMemo } from 'react'
 import { useSOPStore } from '@/stores/sopStore'
 import { useSettingsStore } from '@/stores/settingsStore'
-import { getSystemFolder, getSystemSOPs } from '@/data/systemSOPs'
+import { SYSTEM_FOLDER_ID } from '@/data/systemSOPs'
+import { useSOPLibrary } from '@/components/sop/useSOPLibrary'
 import { useT } from '@/i18n'
 import type { SOP } from '@/types/sop'
 
@@ -16,15 +17,15 @@ interface Props {
 export function FlowsSummaryCard({ onNavigate }: Props) {
   const t = useT()
   const lang = useSettingsStore((s) => s.settings.language)
-  const { folders, sops, selectSOP, collapsedFolderIds, toggleFolderCollapsed } = useSOPStore()
-  const systemFolder = useMemo(() => getSystemFolder(lang), [lang])
-  const systemSOPs = useMemo(() => getSystemSOPs(lang), [lang])
+  const { selectSOP, collapsedFolderIds, toggleFolderCollapsed } = useSOPStore()
+  const { folders, sops } = useSOPLibrary()
+  const systemFolder = folders.find(folder => folder.id === SYSTEM_FOLDER_ID)
 
   const userFolders = useMemo(
-    () => folders.filter((f) => !f.isSystem).sort((a, b) => a.sortOrder - b.sortOrder),
+    () => folders.filter((f) => f.id !== SYSTEM_FOLDER_ID).sort((a, b) => a.sortOrder - b.sortOrder),
     [folders]
   )
-  const allSOPs = useMemo(() => [...systemSOPs, ...sops], [systemSOPs, sops])
+  const allSOPs = sops
 
   function handleClick(sopId: string) {
     selectSOP(sopId)
@@ -32,7 +33,7 @@ export function FlowsSummaryCard({ onNavigate }: Props) {
   }
 
   const hasUser = userFolders.some((f) => allSOPs.some((s) => s.folderId === f.id))
-  const systemItems = allSOPs.filter((s) => s.folderId === systemFolder.id).slice(0, 4)
+  const systemItems = allSOPs.filter((s) => s.folderId === systemFolder?.id).slice(0, 4)
 
   if (!hasUser && systemItems.length === 0) {
     return (
@@ -59,7 +60,7 @@ export function FlowsSummaryCard({ onNavigate }: Props) {
     )
   }
 
-  const SYSTEM_ID = systemFolder.id
+  const SYSTEM_ID = SYSTEM_FOLDER_ID
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
@@ -89,7 +90,7 @@ export function FlowsSummaryCard({ onNavigate }: Props) {
         {systemItems.length > 0 && (
           <div style={{ marginBottom: 6 }}>
             <FolderHeader
-              label={`✨ ${t.sop_systemFolder}`}
+              label={`✨ ${systemFolder?.name ?? t.sop_systemFolder}`}
               count={systemItems.length}
               collapsed={collapsedFolderIds.includes(SYSTEM_ID)}
               onToggle={() => toggleFolderCollapsed(SYSTEM_ID)}
@@ -151,6 +152,7 @@ function FolderHeader({ label, count, collapsed, onToggle }: {
 function SOPRow({ sop, onClick }: { sop: SOP; onClick: () => void }) {
   return (
     <div
+      data-sop-summary-id={sop.id}
       onClick={onClick}
       style={{
         display: 'flex', alignItems: 'center', gap: 6,
