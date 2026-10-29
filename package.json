@@ -1,7 +1,7 @@
 {
   "name": "anvilite",
   "private": true,
-  "version": "0.4.2",
+  "version": "0.4.3",
   "description": "Personal task, habit and flow management desktop app",
   "author": "Leehau-w",
   "type": "module",

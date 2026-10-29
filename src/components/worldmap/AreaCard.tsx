@@ -4,7 +4,7 @@ import { AREA_TEMPLATES } from '@/types/area'
 import { useTaskStore } from '@/stores/taskStore'
 import { useHabitStore } from '@/stores/habitStore'
 import { isHabitDueToday } from '@/engines/habitEngine'
-import { getAreaActivityStats } from '@/utils/areaStats'
+import { getAreaActivityStats, formatAreaTime } from '@/utils/areaStats'
 import { getAreaDisplayName } from '@/utils/area'
 import { useT } from '@/i18n'
 
@@ -56,7 +56,7 @@ export function AreaCard({ area, editMode, onClick, onRename, onDelete }: AreaCa
     { label: t.worldmap_cardTodo, value: todoCount, color: 'var(--color-text)' },
     { label: t.worldmap_cardDoing, value: doingCount, color: 'var(--color-accent)' },
     { label: t.worldmap_cardCompleted, value: completedTaskCount, color: 'var(--color-success)' },
-    { label: t.worldmap_cardTime, value: t.heatmap_minutes(totalMinutes), color: 'var(--color-text)' },
+    { label: t.worldmap_cardTime, value: formatAreaTime(totalMinutes, t.milestone_timeValue), color: 'var(--color-text)' },
   ]
 
   return (

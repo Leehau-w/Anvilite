@@ -5,6 +5,7 @@ import { useTaskStore } from '@/stores/taskStore'
 import { useT, type Translations } from '@/i18n'
 import { cloneMindMapNode, type MindMapDocument, type MindMapNode, type MindMapTitleEdit } from '@/types/mindMap'
 import type { Task } from '@/types/task'
+import { bindMindMapSideDrag } from './mindMapSideDrag'
 import { getMindMapNodeTitle, resolveMindMapNodeTask } from '@/utils/mindMapTaskLinks'
 
 export interface MindMapCanvasControls { center: () => void; zoom: (delta: number) => void }
@@ -70,6 +71,7 @@ export function MindMapCanvas({ map, selectedNodeId, onSelect, onChange, control
     const el = host.current
     let active = true
     let refreshing = false
+    let sideDrag: ReturnType<typeof bindMindMapSideDrag> | undefined
     let composing = false
     let projectedTitles = new Map<string, string>()
     function rememberTitles(node: NodeObj) {
@@ -105,6 +107,7 @@ export function MindMapCanvas({ map, selectedNodeId, onSelect, onChange, control
     }
     function refresh() {
       if (!active || el.querySelector('#input-box')) return
+      sideDrag?.cancel()
       refreshing = true
       const value = latest.current
       const projection = projectMindMap(value.map.root, value.tasks, value.t)
@@ -131,6 +134,7 @@ export function MindMapCanvas({ map, selectedNodeId, onSelect, onChange, control
       // text. A stale drag or fold snapshot must never rename a changed task.
       if (latest.current.onChange(root, renderedRevision.current, titleEdits)) rememberTitles(root)
     }
+    sideDrag = bindMindMapSideDrag(mind, el, () => renderedRevision.current, (root, expectedRevision) => latest.current.onChange(root, expectedRevision, []))
     const operation = (event: Operation) => { if (event.name !== 'beginEdit') persist() }
     const select = (nodes: NodeObj[]) => { if (!refreshing) latest.current.onSelect(nodes[0]?.id ?? null) }
     mind.bus.addListener('operation', operation)
@@ -164,6 +168,7 @@ export function MindMapCanvas({ map, selectedNodeId, onSelect, onChange, control
     window.addEventListener('resize', resize)
     return () => {
       active = false
+      sideDrag?.dispose()
       clearTimeout(blurTimer)
       observer?.disconnect()
       window.removeEventListener('resize', resize)

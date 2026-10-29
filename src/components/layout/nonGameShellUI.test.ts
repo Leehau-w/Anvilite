@@ -135,10 +135,33 @@ it.each(['zh', 'en'] as const)('shows real daily completion and task minutes wit
   expect(stats.textContent).toContain(t.heatmap_minutes(35) + t.stats_todayMinutes)
   const bar = container.querySelector('[data-status-bar]')!
   expect(bar.textContent).toContain(t.dash_statDone + ' 3')
-  expect(bar.textContent).toContain(t.heatmap_minutes(35))
+  expect(bar.textContent).toContain(t.milestone_statTime + ' ' + t.milestone_timeValue(0, 35))
+  expect(bar.textContent).not.toContain(t.stats_todayMinutes)
   expect(container.querySelector('[data-personal-overview]')!.textContent).toContain(t.overview_pending)
   noGameText()
   expect(JSON.stringify({ tasks: useTaskStore.getState().tasks, habits: useHabitStore.getState().habits, character: useCharacterStore.getState().character })).toBe(before)
+})
+
+it.each(['zh', 'en'] as const)('formats the status bar time compactly without changing its daily data (%s)', async lang => {
+  const t = dictionaries[lang]
+  useSettingsStore.getState().setLanguage(lang)
+  await render(React.createElement(StatusBar))
+  const bar = container.querySelector('[data-status-bar]')!
+  expect(bar.textContent).toContain(t.dash_statDone + ' 0')
+  expect(bar.textContent).toContain(t.milestone_statTime + ' ' + t.milestone_timeValue(0, 0))
+  const task = addTask('Completed today', { status: 'done', completedAt: new Date().toISOString() })
+  for (const [minutes, hours, rest] of [[59, 0, 59], [60, 0, 60], [61, 1, 1], [61.2, 1, 1.2], [120, 2, 0]]) {
+    await act(async () => useTaskStore.getState().updateTask(task.id, { actualMinutes: minutes }))
+    expect(bar.textContent).toContain(t.milestone_statTime + ' ' + t.milestone_timeValue(hours, rest))
+    expect(bar.textContent).toContain(t.dash_statDone + ' 1')
+    expect(bar.textContent).not.toContain(t.stats_todayMinutes)
+  }
+  await act(async () => {
+    useTaskStore.getState().updateTask(task.id, { actualMinutes: 0.1 })
+    addTask('Fractional second', { status: 'done', completedAt: new Date().toISOString(), actualMinutes: 0.2 })
+  })
+  expect(bar.textContent).toContain(t.milestone_timeValue(0, 0.3))
+  expect(bar.textContent).not.toContain('0.30000000000000004')
 })
 
 it('keeps the original character card geometry, visibility and independent filters through hide, restore and hydration', async () => {

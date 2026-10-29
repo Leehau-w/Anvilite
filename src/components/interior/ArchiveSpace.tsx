@@ -12,6 +12,7 @@ import type { Habit } from '@/types/habit'
 import type { Area } from '@/types/area'
 import { AREA_TEMPLATES } from '@/types/area'
 import { formatDateKey } from '@/utils/time'
+import { formatAreaTime } from '@/utils/areaStats'
 import { isActivityHistoryEvent, getActivityHistoryView } from '@/utils/activityHistory'
 
 // ── 类型 ─────────────────────────────────────────────────────────────────────
@@ -47,10 +48,7 @@ function inPeriod(ts: string, range: { start: string; end: string }): boolean {
 }
 
 function fmtMinutes(mins: number, t: ReturnType<typeof useT>): string {
-  if (mins < 60) return t.archive_fmtMins(mins)
-  const h = Math.floor(mins / 60)
-  const m = mins % 60
-  return m > 0 ? t.archive_fmtHoursMin(h, m) : t.archive_fmtHours(h)
+  return formatAreaTime(mins, t.milestone_timeValue)
 }
 
 // ── 主组件 ────────────────────────────────────────────────────────────────────

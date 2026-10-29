@@ -192,7 +192,7 @@ export function MindMapPage() {
             <button type="button" className="mindmap-button" onClick={() => canvas.current?.center()}>{t.mindmap_center}</button>
           </div>
           <MindMapCanvas key={activeMap.id} map={activeMap} selectedNodeId={selectedNode?.id ?? null} onSelect={setSelectedNodeId} onChange={saveTree} controlsRef={canvas} resetVersion={resetVersion} />
-          <div className="mindmap-board-footer"><span>{t.mindmap_hint}</span><span>{t.mindmap_saved}</span></div>
+          <div className="mindmap-board-footer"><span style={{ marginLeft: 'auto' }}>{t.mindmap_saved}</span></div>
         </div>
         <aside className="mindmap-inspector" aria-label={t.mindmap_node}>
           <div className="mindmap-map-actions">
@@ -204,8 +204,13 @@ export function MindMapPage() {
               if (event.key === 'Enter' && (titleComposing.current || event.nativeEvent.isComposing || event.keyCode === 229)) { event.preventDefault(); event.stopPropagation() }
             }}>
               <label className="mindmap-label" htmlFor="mindmap-node-title">{t.mindmap_nodeTitle}</label>
-              <textarea id="mindmap-node-title" data-mindmap-node-title onBlur={() => { titleComposing.current = false }} className="mindmap-input mindmap-node-title" value={title} rows={2} onChange={event => setTitle(event.target.value)} maxLength={1000} />
-              <button type="submit" className="mindmap-button" disabled={!title.trim() || title.trim() === titleBaseline.current.title}>{t.common_save}</button>
+              <textarea id="mindmap-node-title" data-mindmap-node-title onBlur={() => { titleComposing.current = false }} className="mindmap-input mindmap-node-title" value={title} rows={2} onChange={event => setTitle(event.target.value)} maxLength={1000}
+                onKeyDown={event => {
+                  if (event.key !== 'Enter' || event.shiftKey) return
+                  event.preventDefault()
+                  event.stopPropagation()
+                  if (!event.repeat && title.trim() && title.trim() !== titleBaseline.current.title) event.currentTarget.form?.requestSubmit()
+                }} />
             </form>
             <div className="mindmap-task-section">
               <h2>{selectedNode.subTaskId ? t.mindmap_linkedSubTask : t.mindmap_linkedTask}</h2>
@@ -217,7 +222,6 @@ export function MindMapPage() {
                     <p className="mindmap-note">{t.mindmap_parentTask}: {linkedTask.title}</p>
                   </> : <TaskItem key={linkedTask.id} task={linkedTask} compact onEdit={task => setEditTaskId(task.id)} />}
                   <button type="button" className="mindmap-button" onClick={() => setEditTaskId(linkedTask.id)}>{linkedSubTask ? t.mindmap_openParentTask : t.mindmap_openTask}</button>
-                  <p className="mindmap-note">{t.mindmap_linkedHint}</p>
                 </> : <p className="mindmap-note">{t.mindmap_taskMissing}</p>}
                 {!selectedNode.subTaskId && <button type="button" className="mindmap-button" onClick={() => run(() => useMindMapStore.getState().unlinkTask(activeMap.id, selectedNode.id))}>{t.mindmap_unlink}</button>}
               </> : <div className="mindmap-node-actions">

@@ -19,7 +19,7 @@ import { ALL_DECORATIONS } from '@/types/decoration'
 import { isOverdue, formatRelativeDate } from '@/utils/time'
 import { getAreaDisplayName } from '@/utils/area'
 import { useT } from '@/i18n'
-import { getAreaActivityStats } from '@/utils/areaStats'
+import { getAreaActivityStats, formatAreaTime } from '@/utils/areaStats'
 
 interface InteriorSpaceProps {
   area: Area
@@ -137,8 +137,6 @@ export function InteriorSpace({ area, onExit }: InteriorSpaceProps) {
 
   // ── 右面板统计 ────────────────────────────────────────────────────
   const { completedTaskCount: completedCount, totalMinutes } = getAreaActivityStats(tasks, area.category)
-  const hours = Math.floor(totalMinutes / 60)
-  const mins = totalMinutes % 60
 
   return (
     <div
@@ -394,7 +392,7 @@ export function InteriorSpace({ area, onExit }: InteriorSpaceProps) {
                 <StatCell label={t.interior_statTasks} value={completedCount} unit={t.milestone_unitTasks} />
                 <StatCell
                   label={t.interior_statTime}
-                  value={hours > 0 ? `${hours}h ${mins}m` : `${mins}m`}
+                  value={formatAreaTime(totalMinutes, t.milestone_timeValue)}
                   unit=""
                   raw
                 />

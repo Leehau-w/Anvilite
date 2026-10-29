@@ -13,6 +13,7 @@ vi.mock('mind-elixir', () => {
   class FakeMindElixir {
     static SIDE = 2
     el: HTMLElement
+    container: HTMLElement
     data: any
     currentNode: any = null
     scaleVal = 1
@@ -25,7 +26,7 @@ vi.mock('mind-elixir', () => {
       fire: (event: string, ...args: unknown[]) => { this.handlers.get(event)?.forEach(fn => fn(...args)) },
     }
     options: any
-    constructor(options: any) { this.options = options; this.el = options.el; mock.instances.push(this) }
+    constructor(options: any) { this.options = options; this.el = options.el; this.container = this.el; mock.instances.push(this) }
     init(data: any) { this.refresh(data) }
     refresh(data: any) {
       this.data = JSON.parse(JSON.stringify(data)); this.currentNode = null; this.el.replaceChildren()
@@ -83,6 +84,11 @@ async function input(node: HTMLInputElement | HTMLTextAreaElement, value: string
   })
 }
 async function submit(form: HTMLFormElement) { await act(async () => { form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })) }) }
+async function enter(node: Element, options: KeyboardEventInit = {}) {
+  const event = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true, ...options })
+  await act(async () => { node.dispatchEvent(event) })
+  return event
+}
 const state = () => useMindMapStore.getState()
 function seedMap() {
   const map = state().createMap('Plan')!
@@ -125,7 +131,7 @@ it('adds, renames, folds and removes a branch without affecting tasks', async ()
   const child = state().maps[0].root.children![0].children!.at(-1)!
   expect(child.topic).toBe(zh.mindmap_newNode)
   await input(container.querySelector('[data-mindmap-node-title]')!, 'Named branch')
-  await submit(container.querySelector('.mindmap-inspector form')!)
+  await enter(container.querySelector('[data-mindmap-node-title]')!)
   expect(state().maps[0].root.children![0].children!.at(-1)!.topic).toBe('Named branch')
   await click(container.querySelector('[data-fake-node="branch"]')!); await click(button(zh.mindmap_collapse))
   expect(state().maps[0].root.children![0].expanded).toBe(false)
@@ -153,7 +159,7 @@ it('links an existing task, syncs status and title, unlinks safely and converts 
   expect((container.querySelector('[data-mindmap-node-title]') as HTMLTextAreaElement).value).toBe('Send revised email')
   expect(latestMind().data.nodeData.children[0].tags[0].text).toBe(zh.task_waiting)
   await input(container.querySelector('[data-mindmap-node-title]')!, 'Send from map')
-  await submit(container.querySelector('.mindmap-inspector form')!)
+  await enter(container.querySelector('[data-mindmap-node-title]')!)
   expect(useTaskStore.getState().tasks.find(item => item.id === task.id)?.title).toBe('Send from map')
   expect(latestMind().data.nodeData.children[0].topic).toBe('Send from map')
   await click(button(zh.mindmap_openTask)); expect(container.querySelector('[data-task-drawer]')?.getAttribute('data-task-drawer')).toBe(task.id)
@@ -268,7 +274,7 @@ it.each(['zh', 'en'] as const)('shows derived subtask titles and completion inde
   expect(container.querySelector('[data-mindmap-subtask-status]')?.getAttribute('data-mindmap-subtask-status')).toBe('done')
   expect((container.querySelector('[data-mindmap-node-title]') as HTMLTextAreaElement).value).toBe('Edited in tasks')
   await input(container.querySelector('[data-mindmap-node-title]')!, 'Edited in map')
-  await submit(container.querySelector('.mindmap-inspector form')!)
+  await enter(container.querySelector('[data-mindmap-node-title]')!)
   const current = useTaskStore.getState().tasks.find(item => item.id === task.id)!
   expect(current.title).toBe('Parent task'); expect(current.status).toBe('waiting')
   expect(current.subTasks[0]).toMatchObject({ id: childId, title: 'Edited in map', completed: true })
@@ -350,7 +356,7 @@ it('does not submit an inspector title during input method composition', async (
   await submit(container.querySelector('.mindmap-inspector form')!)
   expect(useTaskStore.getState().tasks.find(item => item.id === task.id)?.title).toBe('Original')
   await act(async () => { title.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true })) })
-  await submit(container.querySelector('.mindmap-inspector form')!)
+  await enter(title)
   expect(useTaskStore.getState().tasks.find(item => item.id === task.id)?.title).toBe('输入法标题')
 })
 
@@ -392,4 +398,22 @@ it('reports a legacy-link upgrade failure once without retrying on task updates'
   expect(update).toHaveBeenCalledTimes(1)
   expect(useTaskStore.getState().tasks[0].subTasks).toHaveLength(0)
   expect(container.querySelector('[data-mindmap-canvas]')).not.toBeNull()
+})
+
+
+it('keeps Shift+Enter for title newlines and ignores held Enter until a fresh save key', async () => {
+  seedMap(); await render(); await click(container.querySelector('[data-fake-node="branch"]')!)
+  const title = container.querySelector<HTMLTextAreaElement>('[data-mindmap-node-title]')!
+  const original = structuredClone(state().maps)
+  await input(title, 'First line')
+  expect((await enter(title, { shiftKey: true })).defaultPrevented).toBe(false)
+  expect(state().maps).toEqual(original)
+  await input(title, 'First line\nSecond line')
+  expect((await enter(title, { repeat: true })).defaultPrevented).toBe(true)
+  expect(state().maps).toEqual(original)
+  expect((await enter(title)).defaultPrevented).toBe(true)
+  expect(state().maps[0].root.children![0].topic).toBe('First line\nSecond line')
+  const revision = state().maps[0].revision
+  await enter(title)
+  expect(state().maps[0].revision).toBe(revision)
 })

@@ -12,6 +12,9 @@ export function StatusBar() {
   const t = useT()
   const activity = getTaskActivity(tasks, undefined, getTodayString())
   const completed = activity.completedCount + habits.getTodayStats().completed
+  const minutes = roundMinutes(activity.minutes)
+  const hours = minutes > 60 ? Math.floor(minutes / 60) : 0
+  const elapsed = t.milestone_timeValue(hours, hours ? roundMinutes(minutes % 60) : minutes)
 
   return (
     <footer data-status-bar className="flex items-center px-4 shrink-0 gap-3"
@@ -19,7 +22,9 @@ export function StatusBar() {
         fontSize: 11, color: 'var(--color-text-dim)', overflow: 'hidden', whiteSpace: 'nowrap' }}>
       <span style={{ color: 'var(--color-text)', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 150 }}>{name}</span>
       <span>{t.dash_statDone} <strong style={{ fontFamily: 'var(--font-num)', color: 'var(--color-text)' }}>{completed}</strong></span>
-      <span>{t.stats_todayMinutes} <strong style={{ fontFamily: 'var(--font-num)', color: 'var(--color-text)' }}>{t.heatmap_minutes(activity.minutes)}</strong></span>
+      <span>{t.milestone_statTime} <strong style={{ fontFamily: 'var(--font-num)', color: 'var(--color-text)' }}>{elapsed}</strong></span>
     </footer>
   )
 }
+
+function roundMinutes(value: number) { return value > Number.MAX_VALUE / 10 ? value : Math.round(value * 10) / 10 }
