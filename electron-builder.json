@@ -6,7 +6,8 @@
   },
   "files": [
     "dist/**/*",
-    "dist-electron/**/*"
+    "dist-electron/**/*",
+    "!node_modules/**/*"
   ],
   "win": {
     "target": [

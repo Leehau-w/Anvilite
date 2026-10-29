@@ -26,6 +26,21 @@ async function main() {
   assert.equal(metadata.version, version)
   assert.equal(metadata.name, 'anvilite')
   assert.equal(metadata.productName || require(path.join(root, 'electron-builder.json')).productName, 'Anvilite')
+  const archiveFiles = asar.listPackage(sourceAsar).map(file => file.replaceAll('\\', '/').replace(/^\//, ''))
+  assert.equal(archiveFiles.some(file => file === 'node_modules' || file.startsWith('node_modules/')), false, 'Production archive must not contain duplicated node_modules')
+  assert.equal(fs.existsSync(path.join(packed, 'resources/app.asar.unpacked')), false, 'Unexpected unpacked application tools')
+  const bundleFiles = ['dist', 'dist-electron'].flatMap(directory => walk(path.join(root, directory)))
+    .map(file => path.relative(root, file)).sort()
+  for (const relative of bundleFiles) {
+    const bundled = asar.extractFile(sourceAsar, relative)
+    assert.equal(createHash('sha256').update(bundled).digest('hex'), hash(path.join(root, relative)), 'Packaged bundle differs: ' + relative)
+  }
+  const appNotices = asar.extractFile(sourceAsar, path.join('dist', 'licenses', 'THIRD-PARTY-NOTICES.txt')).toString()
+  for (const name of ['react@', 'react-dom@', 'mind-elixir@5.15.1', 'zustand@', '@tiptap/core@', 'framer-motion@', 'vite@']) assert.ok(appNotices.includes(name), 'Frontend notice missing: ' + name)
+  assert.equal(appNotices.includes(root), false, 'Notices must not expose the build-machine path')
+  assert.ok(asar.extractFile(sourceAsar, path.join('dist', 'licenses', 'mind-elixir.txt')).toString().includes('MIT License'))
+  for (const file of ['server.cjs', 'THIRD-PARTY-NOTICES.txt']) assert.equal(hash(path.join(packed, 'resources/mcp', file)), hash(path.join(root, 'dist-mcp', file)), 'MCP resource differs: ' + file)
+
   const notices = fs.readFileSync(path.join(packed, 'resources/mcp/THIRD-PARTY-NOTICES.txt'), 'utf8')
   for (const name of ['@modelcontextprotocol/server@2.3.1', '@modelcontextprotocol/core@2.3.1', 'zod@4.6.7', 'Apache License', 'MIT License']) assert.ok(notices.includes(name))
   const files = ['Anvilite.exe', 'resources/app.asar', 'resources/mcp/server.cjs', 'resources/mcp/THIRD-PARTY-NOTICES.txt']
@@ -74,7 +89,7 @@ async function main() {
     "if (!profile || !nonce || !path.basename(profile).startsWith('anvilite-packaged-audit-') || fs.readFileSync(path.join(profile, 'synthetic-profile.marker'), 'utf8') !== nonce) throw new Error('Synthetic profile required')",
     "app.setPath('userData', profile); app.setPath('sessionData', path.join(profile, 'session')); app.setAppLogsPath(path.join(profile, 'logs'))",
     "app.disableHardwareAcceleration()",
-    "app.on('browser-window-created', (_event, win) => { win.hide(); win.webContents.on('did-finish-load', () => win.hide()) })",
+    "app.on('browser-window-created', (_event, win) => { win.setOpacity(0); win.setFocusable(false); win.setSkipTaskbar(true); win.hide(); win.show = win.showInactive = win.focus = () => {}; win.on('show', () => win.hide()); win.webContents.on('did-finish-load', () => win.hide()) })",
     "import(pathToFileURL(path.join(__dirname, '../business.asar/dist-electron/main.js')).href).catch(error => { console.error(error); app.quit() })",
   ].join('\n'))
   const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'anvilite-packaged-audit-'))
@@ -96,6 +111,7 @@ async function main() {
     page.on('console', message => { if (message.type() === 'error') errors.push(message.text()) })
     const ready = () => page.waitForFunction(async () => !!(await window.electronAPI?.mcpGetStatus?.())?.ready)
     await ready()
+    assert.equal(await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().every(win => !win.isVisible() && !win.isFocused())), true, 'Audit windows must stay hidden')
     const initial = await page.evaluate(() => window.electronAPI.mcpGetStatus())
     assert.equal(initial.enabled, false)
     const snapshot = await page.evaluate(() => {
@@ -146,7 +162,7 @@ async function main() {
     for (const key of ['id', 'status', 'currentCycleCount', 'totalCompletions', 'consecutiveCount', 'isHidden', 'actualMinutes'])
       assert.deepEqual((await read('habits')).habits[0][key], snapshot.habit[key])
     assert.deepEqual((await read('character')).character, snapshot.character)
-    checks.push('packaged runtime is isolated and uses release version', 'legacy task, paused habit, reward fields and dashboard layout survive cold hydration')
+    checks.push('no duplicated node_modules or unpacked app tools; frontend notices and bundle hashes verified', 'packaged runtime is isolated, hidden and uses release version', 'legacy task, paused habit, reward fields and dashboard layout survive cold hydration')
     await page.getByTitle('设置', { exact: true }).click()
     const panel = page.locator('[data-mcp-settings]')
     await panel.waitFor(); await panel.scrollIntoViewIfNeeded()
@@ -229,10 +245,11 @@ async function main() {
     assert.equal(hash(path.join(runtime, 'Anvilite.exe')), reference['Anvilite.exe'])
     assert.equal(hash(path.join(runtime, 'resources/mcp/server.cjs')), reference['resources/mcp/server.cjs'])
     for (const [relative, value] of Object.entries(reference)) assert.equal(hash(path.join(packed, relative)), value)
+    assert.equal(await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().every(win => !win.isVisible() && !win.isFocused())), true, 'Restarted audit windows must stay hidden')
     checks.push('production artifacts and instrumented-copy business bundles remain byte identical')
-    const report = { version, artifacts, checks, errors, reference,
+    const report = { version, artifacts, checks, errors, reference, bundleFilesVerified: bundleFiles.length, noPackagedNodeModules: true, frontendNoticesVerified: true, backgroundWindowsHidden: true,
       packagedRuntime: true, syntheticProfileOnly: true, actualInstallerExecuted: false,
-      runtimeInstrumentation: 'Copied payload startup manifest isolates userData before importing byte-identical production business archive.',
+      runtimeInstrumentation: 'Copied payload startup bootstrap isolates userData and hides audit windows before importing byte-identical production business archive.',
       installationLimitation: 'Host has registered Anvilite 0.3.3; NSIS execution would alter shared HKCU registration and may uninstall it. Both installer payloads were extracted and matched to packaged application instead.' }
     fs.writeFileSync(path.join(output, 'report.json'), JSON.stringify(report, null, 2))
     console.log(JSON.stringify({ version, checks: checks.length, artifacts: artifacts.length, errors, packagedRuntime: true, actualInstallerExecuted: false }))

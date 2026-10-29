@@ -43,3 +43,7 @@
 - [Windows x64便携版](https://github.com/Leehau-w/Anvilite/releases/download/v0.4.3/Anvilite-0.4.3-portable.exe)
 
 用户说明见[v0.4.3发布说明](../../docs/releases/v0.4.3.md)。
+
+## 发布后的安装器检测
+
+2026-10-29，Defender以`Program:Win32/Contebrew.A!ml`拦截并隔离本版安装器，发布前的功能和包一致性检查不构成恶意软件扫描。GitHub发布页已标明暂缓使用，改为预发布并取消最新版标记；原标签与附件保留用于追溯，未获得微软误报确认。后续修复与安全证据见[安装包排查](installer-security-2026-10-29.md)及[v0.4.4发布记录](release-v0.4.4.md)。

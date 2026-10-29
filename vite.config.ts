@@ -3,12 +3,14 @@ import react from '@vitejs/plugin-react'
 import electron from 'vite-plugin-electron'
 import renderer from 'vite-plugin-electron-renderer'
 import path from 'path'
+import { appNotices } from './scripts/app-notices'
 
 export default defineConfig({
   define: {
     __APP_VERSION__: JSON.stringify(process.env.npm_package_version ?? '0.0.0'),
   },
   plugins: [
+    appNotices(),
     react(),
     electron([
       {
