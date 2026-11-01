@@ -5,6 +5,7 @@ import path from 'path'
 import { fileURLToPath, pathToFileURL } from 'url'
 import { randomUUID } from 'crypto'
 import { LocalMcpBridge } from './mcpBridge'
+import { readSyncDirectoryGrants, serializeSyncDirectoryGrants, type SyncDirectoryGrant } from './syncDirectoryGrants'
 import type { BridgeBinding } from './mcpBridge'
 import type { McpDispatch, McpResult, McpReply, McpConfiguration } from '../src/mcp/contracts'
 
@@ -19,7 +20,7 @@ const rendererURL = isDev && VITE_DEV_SERVER_URL
 
 let mainWindow: BrowserWindow | null = null
 let documentGeneration = 0
-let approvedSyncDirectory: { selected: string; root: string; dev: bigint; ino: bigint } | null = null
+let approvedSyncDirectory: (SyncDirectoryGrant & { accountId: string }) | null = null
 
 function trustedDocument(url: string): boolean {
   try {
@@ -102,6 +103,13 @@ ipcMain.on('mcp-respond', (event, reply: McpReply) => {
 })
 
 class FileAccessError extends Error {}
+function syncGrantFile(): string { return path.join(app.getPath('userData'), 'sync-directory-grants.json') }
+function syncAccount(value: unknown = 'default'): string {
+  if (typeof value !== 'string' || !value || value.length > 256) throw new FileAccessError('invalid_account')
+  const binding = currentMcpBinding()
+  if (binding && binding.accountId !== value) throw new FileAccessError('account_changed')
+  return value
+}
 function samePath(a: string, b: string): boolean {
   return process.platform === 'win32' ? a.toLowerCase() === b.toLowerCase() : a === b
 }
@@ -114,20 +122,32 @@ function relativeJsonPath(value: unknown): string {
   return relative
 }
 
-function resolveApprovedSyncPath(directory: unknown, relativePath: unknown, createParents: boolean): string {
+function resolveApprovedSyncPath(directory: unknown, relativePath: unknown, createParents: boolean, accountId: string): string {
+  if (approvedSyncDirectory?.accountId !== accountId) approvedSyncDirectory = null
+  if (!approvedSyncDirectory) {
+    const saved = readSyncDirectoryGrants(syncGrantFile()).get(accountId)
+    if (saved) approvedSyncDirectory = { ...saved, accountId }
+  }
   const approval = approvedSyncDirectory
   if (typeof directory !== 'string' || !approval ||
       ![approval.selected, approval.root].some(p => samePath(path.resolve(directory), p))) {
     throw new FileAccessError('directory_not_authorized')
   }
   const relative = relativeJsonPath(relativePath)
-  const rootStat = fs.statSync(approval.root, { bigint: true })
-  if (!rootStat.isDirectory() || rootStat.dev !== approval.dev || rootStat.ino !== approval.ino ||
-      !samePath(fs.realpathSync(approval.selected), approval.root)) {
+  let unchanged = false
+  try {
+    const rootStat = fs.statSync(approval.root, { bigint: true })
+    unchanged = rootStat.isDirectory() && rootStat.dev === approval.dev && rootStat.ino === approval.ino &&
+      samePath(fs.realpathSync(approval.selected), approval.root)
+  } catch { /* A disconnected or removed folder must never authorize a replacement. */ }
+  if (!unchanged) {
     approvedSyncDirectory = null
     throw new FileAccessError('directory_not_authorized')
   }
   const target = path.resolve(approval.root, relative)
+  const grantFile = syncGrantFile()
+  const canonicalGrant = path.join(fs.realpathSync(path.dirname(grantFile)), path.basename(grantFile))
+  if ([path.resolve(grantFile), canonicalGrant].some(file => samePath(file, target))) throw new FileAccessError('invalid_path')
   const fromRoot = path.relative(approval.root, target)
   if (!fromRoot || fromRoot.startsWith('..') || path.isAbsolute(fromRoot)) throw new FileAccessError('invalid_path')
   let parent = approval.root
@@ -229,10 +249,11 @@ ipcMain.handle('save-file', async (event, content: unknown, defaultName: unknown
   } catch (error) { return accessFailure(error, 'write_failed') }
 })
 
-ipcMain.handle('select-sync-directory', async event => {
+ipcMain.handle('select-sync-directory', async (event, account: unknown) => {
   if (!trustedSender(event)) return { success: false, error: 'invalid_sender' }
   const generation = documentGeneration
   try {
+    const accountId = syncAccount(account)
     const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow!, {
       title: 'Select sync folder', properties: ['openDirectory', 'createDirectory'],
     })
@@ -242,15 +263,23 @@ ipcMain.handle('select-sync-directory', async event => {
     const root = fs.realpathSync(selected)
     const stat = fs.statSync(root, { bigint: true })
     if (!stat.isDirectory()) return { success: false, error: 'invalid_path' }
-    approvedSyncDirectory = { selected, root, dev: stat.dev, ino: stat.ino }
+    const grant = { selected, root, dev: stat.dev, ino: stat.ino }
+    const file = syncGrantFile()
+    const grants = readSyncDirectoryGrants(file)
+    grants.set(accountId, grant)
+    writeFileAtomically(file, serializeSyncDirectoryGrants(grants), () => {
+      if (generation !== documentGeneration || !trustedSender(event)) throw new FileAccessError('invalid_sender')
+      syncAccount(account)
+    })
+    approvedSyncDirectory = { ...grant, accountId }
     return { success: true, path: selected }
   } catch (error) { return accessFailure(error, 'read_failed') }
 })
 
-ipcMain.handle('read-sync-file', (event, directory: unknown, relativePath: unknown) => {
+ipcMain.handle('read-sync-file', (event, directory: unknown, relativePath: unknown, account: unknown) => {
   if (!trustedSender(event)) return { success: false, error: 'invalid_sender' }
   try {
-    const filePath = resolveApprovedSyncPath(directory, relativePath, false)
+    const filePath = resolveApprovedSyncPath(directory, relativePath, false, syncAccount(account))
     if (!fs.existsSync(filePath)) return { success: true, exists: false }
     const stat = fs.statSync(filePath)
     if (!stat.isFile() || stat.size > MAX_SAVE_FILE_SIZE) return { success: false, error: 'invalid_file' }
@@ -258,14 +287,15 @@ ipcMain.handle('read-sync-file', (event, directory: unknown, relativePath: unkno
   } catch (error) { return accessFailure(error, 'read_failed') }
 })
 
-ipcMain.handle('write-sync-file', (event, directory: unknown, relativePath: unknown, content: unknown) => {
+ipcMain.handle('write-sync-file', (event, directory: unknown, relativePath: unknown, content: unknown, account: unknown) => {
   if (!trustedSender(event)) return { success: false, error: 'invalid_sender' }
   if (typeof content !== 'string' || Buffer.byteLength(content, 'utf-8') > MAX_SAVE_FILE_SIZE) return { success: false, error: 'content_too_large' }
   try {
-    const filePath = resolveApprovedSyncPath(directory, relativePath, true)
+    const generation = documentGeneration
+    const filePath = resolveApprovedSyncPath(directory, relativePath, true, syncAccount(account))
     writeFileAtomically(filePath, content, () => {
-      if (!trustedSender(event)) throw new FileAccessError('invalid_sender')
-      if (resolveApprovedSyncPath(directory, relativePath, false) !== filePath) throw new FileAccessError('invalid_path')
+      if (generation !== documentGeneration || !trustedSender(event)) throw new FileAccessError('invalid_sender')
+      if (resolveApprovedSyncPath(directory, relativePath, false, syncAccount(account)) !== filePath) throw new FileAccessError('invalid_path')
     })
     return { success: true }
   } catch (error) { return accessFailure(error, 'write_failed') }

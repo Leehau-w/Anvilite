@@ -8,7 +8,7 @@ import type { Task } from '@/types/task'
 import { bindMindMapSideDrag } from './mindMapSideDrag'
 import { getMindMapNodeTitle, resolveMindMapNodeTask } from '@/utils/mindMapTaskLinks'
 
-export interface MindMapCanvasControls { center: () => void; zoom: (delta: number) => void }
+export interface MindMapCanvasControls { center: () => void; zoom: (delta: number) => void; cancelInteraction: () => void }
 interface Props {
   map: MindMapDocument
   selectedNodeId: string | null
@@ -143,6 +143,7 @@ export function MindMapCanvas({ map, selectedNodeId, onSelect, onChange, control
     selectCurrent()
     controlsRef.current = {
       center: () => mind.scaleFit(),
+      cancelInteraction: () => sideDrag?.cancel(),
       zoom: delta => mind.scale(Math.max(.25, Math.min(2, mind.scaleVal + delta))),
     }
     const onBlur = () => {

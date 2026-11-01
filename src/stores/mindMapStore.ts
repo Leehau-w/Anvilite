@@ -6,15 +6,17 @@ import { cloneMindMapNode, findMindMapNode, isValidMindMapNode, isValidMindMapSt
 import { assertAccountBindingCurrent, getStoragePrefix } from './accountManager'
 import { useTaskStore } from './taskStore'
 import type { Task } from '@/types/task'
+import { MindMapUndoHistory, changedTaskTitles, planUndoTaskTitles } from '@/utils/mindMapUndo'
 import { generateId } from '@/utils/id'
-import { getMindMapNodeTitle, resolveMindMapNodeTask, planMindMapTaskLinks, mergeMindMapTaskPatch, undoMindMapTaskPatch } from '@/utils/mindMapTaskLinks'
+import { MindMapTaskTitleConflictError, getMindMapNodeTitle, resolveMindMapNodeTask, planMindMapTaskLinks, mergeMindMapTaskPatch, undoMindMapTaskPatch } from '@/utils/mindMapTaskLinks'
 
 export interface MindMapStore extends MindMapState {
   createMap: (title: string) => MindMapDocument | null
   renameMap: (id: string, title: string) => boolean
   deleteMap: (id: string) => boolean
   selectMap: (id: string | null) => boolean
-  updateMapTree: (id: string, root: MindMapNode, expectedRevision: number, titleEdits?: MindMapTitleEdit[]) => boolean
+  updateMapTree: (id: string, root: MindMapNode, expectedRevision: number, titleEdits?: MindMapTitleEdit[], recordUndo?: boolean) => boolean
+  undoMap: (id: string) => boolean
   linkTask: (mapId: string, nodeId: string, taskId: string) => boolean
   unlinkTask: (mapId: string, nodeId: string) => boolean
   convertNodeToTask: (mapId: string, nodeId: string) => string | null
@@ -42,8 +44,10 @@ const converting = new Set<string>()
 export const useMindMapStore = create<MindMapStore>()(
   persist(
     (set, get) => {
+      const history = new MindMapUndoHistory()
       const commitMap = (previous: MindMapDocument, next: MindMapDocument,
-        undoRoot?: (current: MindMapNode) => MindMapNode) => {
+        undoRoot?: (current: MindMapNode) => MindMapNode,
+        options: { titles?: ReturnType<typeof changedTaskTitles>; history?: 'record' | 'clear' | 'undo' } = {}) => {
         try {
           set(state => ({ maps: state.maps.map(map => map.id === previous.id ? next : map) }))
         } catch (error) {
@@ -59,11 +63,14 @@ export const useMindMapStore = create<MindMapStore>()(
             try { set(state => ({ maps: state.maps.map(map => map.id === previous.id ? restored : map) })) }
             catch { /* The memory rollback still applies if persistent storage stays unavailable. */ }
           }
+          history.rebind(previous, get().maps.find(map => map.id === previous.id))
           throw error
         }
+        if (get().maps.find(map => map.id === next.id) !== next || options.history === 'clear') history.clear(next.id)
+        else if (options.history !== 'undo') history.record(previous, next, options.titles)
       }
       const commitLinkedTree = (previous: MindMapDocument, root: MindMapNode,
-        title: string, titleEdits: MindMapTitleEdit[] = []): boolean => {
+        title: string, titleEdits: MindMapTitleEdit[] = [], recordUndo = true): boolean => {
         if (previous.revision >= Number.MAX_SAFE_INTEGER) return false
         const plan = planMindMapTaskLinks(previous.id, root, useTaskStore.getState().tasks, titleEdits)
         const written: { before: Task; after: Task }[] = []
@@ -100,7 +107,7 @@ export const useMindMapStore = create<MindMapStore>()(
           if (!latest || latest.revision !== previous.revision) { rollback(); return false }
           if (JSON.stringify(plan.root) === JSON.stringify(previous.root) && title === previous.title) return true
           const next = { ...previous, title, root: plan.root, revision: previous.revision + 1, updatedAt: new Date().toISOString() }
-          commitMap(previous, next)
+          commitMap(previous, next, undefined, { titles: changedTaskTitles(written), history: recordUndo ? 'record' : 'clear' })
           return true
         } catch (error) { rollback(); throw error }
       }
@@ -171,6 +178,7 @@ export const useMindMapStore = create<MindMapStore>()(
             }) } catch { /* Retain the removed document in memory when persistence fails. */ }
             throw error
           }
+          history.clear(id)
           return true
         },
         selectMap: id => {
@@ -187,7 +195,7 @@ export const useMindMapStore = create<MindMapStore>()(
           }
           return true
         },
-        updateMapTree: (id, root, expectedRevision, titleEdits = []) => {
+        updateMapTree: (id, root, expectedRevision, titleEdits = [], recordUndo = true) => {
           assertAccountBindingCurrent()
           const previous = get().maps.find(map => map.id === id)
           if (!previous || previous.revision !== expectedRevision || !isValidMindMapNode(root) || root.id !== previous.root.id) return false
@@ -204,7 +212,45 @@ export const useMindMapStore = create<MindMapStore>()(
             ...references.get(node.id),
             ...(node.children !== undefined ? { children: node.children.map(sanitize) } : {}) })
           const clean = sanitize(root)
-          return commitLinkedTree(previous, clean, clean.taskId ? previous.title : clean.topic, titleEdits)
+          return commitLinkedTree(previous, clean, clean.taskId ? previous.title : clean.topic, titleEdits, recordUndo)
+        },
+        undoMap: id => {
+          assertAccountBindingCurrent()
+          const previous = get().maps.find(map => map.id === id)
+          if (!previous || previous.revision >= Number.MAX_SAFE_INTEGER) return false
+          const entry = history.peek(previous)
+          if (!entry) return false
+          const patches = planUndoTaskTitles(entry.titles, useTaskStore.getState().tasks)
+          const written: Array<{ before: Task; after: Task }> = []
+          const rollback = () => {
+            for (const write of [...written].reverse()) {
+              const current = useTaskStore.getState().tasks.find(task => task.id === write.before.id)
+              if (!current) continue
+              const patch = undoMindMapTaskPatch(write.before, write.after, current)
+              try { useTaskStore.setState(state => ({ tasks: state.tasks.map(task => task.id === current.id ? { ...task, ...patch } : task) })) }
+              catch { /* Persist updates memory first; preserve compensated titles for retry. */ }
+            }
+          }
+          try {
+            for (const patch of patches) {
+              const current = useTaskStore.getState().tasks.find(task => task.id === patch.before.id && !task.deletedAt)
+              if (!current) throw new MindMapTaskTitleConflictError()
+              const merged = mergeMindMapTaskPatch(patch, current)
+              const write = { before: current, after: { ...current, ...merged } }
+              written.push(write)
+              const unsubscribe = useTaskStore.subscribe(state => {
+                const value = state.tasks.find(task => task.id === current.id)
+                if (value?.title === merged.title && value.subTasks === merged.subTasks) write.after = value
+              })
+              try { useTaskStore.getState().updateTask(current.id, merged) } finally { unsubscribe() }
+            }
+            if (get().maps.find(map => map.id === id) !== previous) throw new MindMapTaskTitleConflictError()
+            const next = { ...previous, title: entry.map.title, root: cloneMindMapNode(entry.map.root),
+              revision: previous.revision + 1, updatedAt: new Date().toISOString() }
+            commitMap(previous, next, undefined, { history: 'undo' })
+            history.applied(id, entry, next)
+            return true
+          } catch (error) { rollback(); throw error }
         },
         linkTask: (mapId, nodeId, taskId) => {
           assertAccountBindingCurrent()

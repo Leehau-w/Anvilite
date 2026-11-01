@@ -417,3 +417,45 @@ it('keeps Shift+Enter for title newlines and ignores held Enter until a fresh sa
   await enter(title)
   expect(state().maps[0].revision).toBe(revision)
 })
+
+async function undoKey(node: EventTarget, options: KeyboardEventInit = {}) {
+  const event = new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true, cancelable: true, ...options })
+  await act(async () => { node.dispatchEvent(event) })
+  return event
+}
+
+it.each(['zh', 'en'] as const)('undoes toolbar and native branch changes with Ctrl+Z (%s)', async lang => {
+  useSettingsStore.getState().setLanguage(lang)
+  const original = seedMap()
+  await render()
+  await click(container.querySelector('[data-fake-node="branch"]')!)
+  await click(container.querySelector('[data-mindmap-add-child]')!)
+  expect(state().maps[0].root.children![0].children).toHaveLength(2)
+  expect((await undoKey(window)).defaultPrevented).toBe(true)
+  expect(state().maps[0].root).toEqual(original.root)
+  const mind = latestMind()
+  mind.data.nodeData.children[0].direction = 0
+  await act(async () => mind.bus.fire('operation', { name: 'moveNode' }))
+  await undoKey(window)
+  expect(state().maps[0].root).toEqual(original.root)
+})
+
+it('leaves input undo, composition, redo and modal dialogs to their own controls', async () => {
+  const map = seedMap(); await render()
+  await click(container.querySelector('[data-fake-node="branch"]')!)
+  await click(container.querySelector('[data-mindmap-add-child]')!)
+  const before = JSON.stringify(state().maps)
+  const title = container.querySelector('[data-mindmap-node-title]')!
+  expect((await undoKey(title)).defaultPrevented).toBe(false)
+  expect((await undoKey(window, { isComposing: true })).defaultPrevented).toBe(false)
+  expect((await undoKey(window, { shiftKey: true })).defaultPrevented).toBe(false)
+  expect((await undoKey(window, { repeat: true })).defaultPrevented).toBe(true)
+  expect(JSON.stringify(state().maps)).toBe(before)
+  const overlay = document.createElement('div'); overlay.setAttribute('role', 'dialog'); document.body.append(overlay)
+  expect((await undoKey(window)).defaultPrevented).toBe(false)
+  expect(JSON.stringify(state().maps)).toBe(before); overlay.remove()
+  await click(button(zh.mindmap_rename))
+  expect((await undoKey(window)).defaultPrevented).toBe(false)
+  expect(JSON.stringify(state().maps)).toBe(before)
+  expect(state().maps[0].id).toBe(map.id)
+})

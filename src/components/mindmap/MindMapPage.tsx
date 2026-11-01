@@ -54,7 +54,7 @@ export function MindMapPage() {
     const current = useMindMapStore.getState().maps.find(map => map.id === id)
     if (!current || !hasTaskReference(current.root)) return
     try {
-      if (!useMindMapStore.getState().updateMapTree(current.id, cloneMindMapNode(current.root), current.revision)) setError(t.mindmap_conflict)
+      if (!useMindMapStore.getState().updateMapTree(current.id, cloneMindMapNode(current.root), current.revision, [], false)) setError(t.mindmap_conflict)
     } catch (error) {
       setError(isMindMapTaskDepthError(error) ? t.mindmap_subTaskDepth : isMindMapTaskTitleConflictError(error) ? t.mindmap_conflict : t.mindmap_saveFailed)
     }
@@ -71,6 +71,31 @@ export function MindMapPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedNode?.id, liveTitle])
   useEffect(() => { setShowTaskSearch(false); setQuery('') }, [selectedNode?.id])
+
+  useEffect(() => {
+    const undo = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey) || event.shiftKey || event.altKey || event.key.toLowerCase() !== 'z' ||
+        document.querySelector('[role="dialog"], [aria-modal="true"], [data-task-drawer]') || event.defaultPrevented || event.isComposing || event.keyCode === 229 || titleComposing.current || dialog || editTaskId || !activeMap) return
+      const target = event.target
+      if (target instanceof Element && target.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="textbox"], #input-box')) return
+      event.preventDefault(); event.stopPropagation()
+      if (event.repeat || busy.current) return
+      canvas.current?.cancelInteraction()
+      busy.current = true
+      try {
+        if (!useMindMapStore.getState().undoMap(activeMap.id)) return
+        const current = useMindMapStore.getState().maps.find(map => map.id === activeMap.id)!
+        const node = findMindMapNode(current.root, selectedNodeId ?? current.root.id) ?? current.root
+        const value = getMindMapNodeTitle(node, useTaskStore.getState().tasks)
+        titleBaseline.current = { nodeId: node.id, title: value }; setTitle(value); setSelectedNodeId(node.id)
+        setError(''); setResetVersion(value => value + 1)
+      } catch (error) {
+        setError(isMindMapTaskTitleConflictError(error) ? t.mindmap_conflict : t.mindmap_saveFailed)
+      } finally { busy.current = false }
+    }
+    window.addEventListener('keydown', undo)
+    return () => window.removeEventListener('keydown', undo)
+  }, [activeMap?.id, selectedNodeId, dialog, editTaskId, t])
 
   function run(action: () => unknown) {
     if (busy.current) return

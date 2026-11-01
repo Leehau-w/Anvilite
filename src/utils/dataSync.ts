@@ -47,7 +47,7 @@ export async function chooseSyncDir(): Promise<{ success: boolean; dir?: string;
   if (!isAccountBindingCurrent()) return { success: false, error: 'account_changed' }
   if (!hasNativeSyncSupport()) return { success: false, error: 'unsupported' }
   try {
-    const result = await window.electronAPI!.selectSyncDirectory()
+    const result = await window.electronAPI!.selectSyncDirectory(getBoundAccountId())
     if (!isAccountBindingCurrent()) return { success: false, error: 'account_changed' }
     if (!result.success || !result.path) return { success: false, error: result.error ?? 'canceled' }
     setSyncDir(result.path)
@@ -67,7 +67,7 @@ export async function readSyncMetadata(dir = getSyncDir()): Promise<{
   if (!dir) return { success: false, error: 'no_dir' }
   if (!hasNativeSyncSupport()) return { success: false, error: 'unsupported' }
   try {
-    const result = await window.electronAPI!.readSyncFile(dir, getSyncFileName())
+    const result = await window.electronAPI!.readSyncFile(dir, getSyncFileName(), getBoundAccountId())
     if (!isAccountBindingCurrent()) return { success: false, error: 'account_changed' }
     if (!result.success) return { success: false, error: result.error ?? 'read_failed' }
     if (!result.exists) return { success: true, exists: false }
@@ -89,7 +89,7 @@ export async function writeSyncSnapshot(dir = getSyncDir()): Promise<{ success: 
   if (!hasNativeSyncSupport()) return { success: false, error: 'unsupported' }
   try {
     const payload = buildExportPayload()
-    const result = await window.electronAPI!.writeSyncFile(dir, getSyncFileName(), serializeExportData(payload))
+    const result = await window.electronAPI!.writeSyncFile(dir, getSyncFileName(), serializeExportData(payload), getBoundAccountId())
     if (!isAccountBindingCurrent()) return { success: false, error: 'account_changed' }
     if (!result.success) return { success: false, error: result.error ?? 'write_failed' }
     setLastSyncExportedAt(payload.exportedAt)
@@ -106,7 +106,7 @@ export async function restoreFromSync(dir = getSyncDir()): Promise<{ success: bo
   if (!dir) return { success: false, error: 'no_dir' }
   if (!hasNativeSyncSupport()) return { success: false, error: 'unsupported' }
   try {
-    const read = await window.electronAPI!.readSyncFile(dir, getSyncFileName())
+    const read = await window.electronAPI!.readSyncFile(dir, getSyncFileName(), getBoundAccountId())
     if (!isAccountBindingCurrent()) return { success: false, error: 'account_changed' }
     if (!read.success) return { success: false, error: read.error ?? 'read_failed' }
     if (!read.exists) return { success: false, error: 'not_found' }
@@ -116,7 +116,7 @@ export async function restoreFromSync(dir = getSyncDir()): Promise<{ success: bo
 
     const currentPayload = buildExportPayload()
     const backup = await window.electronAPI!.writeSyncFile(
-      dir, makeBackupFileName(), serializeExportData(currentPayload),
+      dir, makeBackupFileName(), serializeExportData(currentPayload), getBoundAccountId(),
     )
     if (!isAccountBindingCurrent()) return { success: false, error: 'account_changed' }
     if (!backup.success) return { success: false, error: backup.error ?? 'backup_failed' }

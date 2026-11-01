@@ -868,7 +868,7 @@ export const zh = {
   data_accountChanged: '账号已在其他窗口更改，请重新加载后再操作',
   data_importErrorWrite: '备份恢复失败，已恢复原数据，请重试',
   data_importErrorRollback: '备份恢复及回滚失败，本机数据可能不完整，请重新导入有效备份',
-  data_syncReselectFolder: '请重新选择同步文件夹，以允许本次启动访问该目录',
+  data_syncReselectFolder: '同步文件夹不可用或已更换，请重新选择',
   data_syncInvalidWindow: '当前窗口无法同步，请重新启动应用后重试',
   data_syncInvalidFile: '同步文件或路径无效，请检查文件或重新选择文件夹',
   data_section: '数据管理',

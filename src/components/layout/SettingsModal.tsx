@@ -242,7 +242,7 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
               zIndex: 500,
             }}
           />
-          <motion.div
+          <motion.div role="dialog" aria-modal="true" aria-label={t.settings_title}
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}

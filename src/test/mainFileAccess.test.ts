@@ -19,7 +19,7 @@ const harness = vi.hoisted(() => ({
 }))
 
 vi.mock('electron', () => ({
-  app: { whenReady: () => Promise.resolve(), on: vi.fn(), isPackaged: false },
+  app: { whenReady: () => Promise.resolve(), on: vi.fn(), isPackaged: false, getPath: () => path.resolve('C:/synthetic-user-data') },
   BrowserWindow: class {
     webContents = {
       send: vi.fn(), mainFrame: { url: '' }, getURL: () => this.webContents.mainFrame.url,
@@ -78,6 +78,8 @@ vi.mock('fs', () => {
 
 const root = path.resolve('C:/synthetic-approved')
 const target = path.join(root, 'snapshot.json')
+const grantFile = path.resolve('C:/synthetic-user-data/sync-directory-grants.json')
+const snapshotFiles = () => [...harness.files.entries()].filter(([name]) => name !== grantFile)
 const renderer = pathToFileURL(fileURLToPath(new URL('../../dist/index.html', import.meta.url))).href
 const event = () => ({ sender: harness.win.webContents, senderFrame: harness.win.webContents.mainFrame })
 const call = (channel: string, ...args: any[]) => harness.handlers.get(channel)!(event(), ...args)
@@ -90,6 +92,7 @@ beforeAll(async () => { await import('../../electron/main'); await Promise.resol
 beforeEach(() => {
   harness.files.clear(); harness.directories.clear(); harness.symlinks.clear(); harness.realpaths.clear()
   harness.directories.add(root)
+  harness.directories.add(path.dirname(grantFile))
   harness.files.set(target, '{"original":true}')
   harness.writeFailure = false; harness.renameFailure = false; harness.writeHook = undefined; harness.inode = 10n
   harness.win.webContents.mainFrame.url = renderer
@@ -106,13 +109,13 @@ describe('native file authorization and replacement regression', () => {
     expect(await call('read-sync-file', root, 'snapshot.json')).toMatchObject({ error: 'invalid_sender' })
   })
 
-  it('requires a native directory choice in each document session', async () => {
+  it('remembers native directory approval across document reloads', async () => {
     expect(await call('read-sync-file', root, 'snapshot.json')).toMatchObject({ error: 'directory_not_authorized' })
     await approve()
     expect(await call('read-sync-file', root, 'snapshot.json')).toEqual({ success: true, exists: true, content: '{"original":true}' })
     harness.navigationEvents.get('did-start-navigation')!({}, renderer, false, true)
-    expect(await call('write-sync-file', root, 'snapshot.json', '{}')).toMatchObject({ error: 'directory_not_authorized' })
-    expect(harness.files.get(target)).toBe('{"original":true}')
+    expect(await call('write-sync-file', root, 'snapshot.json', '{}')).toEqual({ success: true })
+    expect(harness.files.get(target)).toBe('{}')
   })
 
   it('rejects a different root and traversal even after approval', async () => {
@@ -141,23 +144,23 @@ describe('native file authorization and replacement regression', () => {
     await approve()
     harness.writeFailure = true
     expect(await call('write-sync-file', root, 'snapshot.json', '{"new":true}')).toMatchObject({ error: 'write_failed' })
-    expect([...harness.files.entries()]).toEqual([[target, '{"original":true}']])
+    expect(snapshotFiles()).toEqual([[target, '{"original":true}']])
     harness.writeFailure = false
     expect(await call('write-sync-file', root, 'snapshot.json', '{"new":true}')).toEqual({ success: true })
-    expect([...harness.files.entries()]).toEqual([[target, '{"new":true}']])
+    expect(snapshotFiles()).toEqual([[target, '{"new":true}']])
   })
 
   it('preserves the original snapshot if replacing the file fails', async () => {
     await approve(); harness.renameFailure = true
     expect(await call('write-sync-file', root, 'snapshot.json', '{}')).toMatchObject({ error: 'write_failed' })
-    expect([...harness.files.entries()]).toEqual([[target, '{"original":true}']])
+    expect(snapshotFiles()).toEqual([[target, '{"original":true}']])
   })
 
   it('rechecks the directory grant before replacing the snapshot', async () => {
     await approve()
     harness.writeHook = () => harness.navigationEvents.get('did-start-navigation')!({}, renderer, false, true)
-    expect(await call('write-sync-file', root, 'snapshot.json', '{}')).toMatchObject({ error: 'directory_not_authorized' })
-    expect([...harness.files.entries()]).toEqual([[target, '{"original":true}']])
+    expect(await call('write-sync-file', root, 'snapshot.json', '{}')).toMatchObject({ error: 'invalid_sender' })
+    expect(snapshotFiles()).toEqual([[target, '{"original":true}']])
   })
 
   it('only creates backup directories below the approved root', async () => {
@@ -217,4 +220,57 @@ describe('native file authorization and replacement regression', () => {
     harness.win.webContents.mainFrame.url = renderer
     expect(await call('read-sync-file', root, 'snapshot.json')).toMatchObject({ error: 'directory_not_authorized' })
   })
+})
+
+
+it('restores a native grant after a fresh main-process module starts', async () => {
+  await approve()
+  const stored = harness.files.get(grantFile)
+  expect(JSON.parse(stored!).grants[0].accountId).toBe('default')
+  vi.resetModules(); await import('../../electron/main'); await Promise.resolve()
+  expect(await call('read-sync-file', root, 'snapshot.json')).toMatchObject({ success: true, exists: true })
+  expect(harness.openDialog).toHaveBeenCalledOnce()
+})
+
+it('keeps independent directory grants per account and rejects a forged preference', async () => {
+  await approve()
+  expect(await call('read-sync-file', root, 'snapshot.json', 'other-account')).toMatchObject({ error: 'directory_not_authorized' })
+  const other = path.resolve('C:/synthetic-other-account')
+  harness.directories.add(other)
+  harness.openDialog.mockResolvedValue({ canceled: false, filePaths: [other] })
+  expect(await call('select-sync-directory', 'other-account')).toMatchObject({ success: true })
+  harness.navigationEvents.get('did-start-navigation')!({}, renderer, false, true)
+  expect(await call('read-sync-file', root, 'snapshot.json', 'default')).toMatchObject({ success: true })
+  expect(await call('read-sync-file', root, 'snapshot.json', 'other-account')).toMatchObject({ error: 'directory_not_authorized' })
+  expect(await call('write-sync-file', other, 'snapshot.json', '{}', 'other-account')).toMatchObject({ success: true })
+  expect(JSON.parse(harness.files.get(grantFile)!).grants).toHaveLength(2)
+})
+
+it('does not silently approve a corrupted or symbolic native grant file', async () => {
+  await approve()
+  harness.files.set(grantFile, '{invalid')
+  harness.navigationEvents.get('did-start-navigation')!({}, renderer, false, true)
+  expect(await call('read-sync-file', root, 'snapshot.json')).toMatchObject({ error: 'directory_not_authorized' })
+  await approve()
+  harness.symlinks.add(grantFile)
+  harness.navigationEvents.get('did-start-navigation')!({}, renderer, false, true)
+  expect(await call('read-sync-file', root, 'snapshot.json')).toMatchObject({ error: 'directory_not_authorized' })
+})
+
+it('does not report a successful directory choice when persisting its grant fails', async () => {
+  harness.writeFailure = true
+  harness.openDialog.mockResolvedValue({ canceled: false, filePaths: [root] })
+  expect(await call('select-sync-directory')).toMatchObject({ success: false })
+  expect(harness.files.has(grantFile)).toBe(false)
+  expect(await call('read-sync-file', root, 'snapshot.json')).toMatchObject({ error: 'directory_not_authorized' })
+})
+
+it('protects the native authorization file even if its containing folder was explicitly selected', async () => {
+  const profile = path.dirname(grantFile)
+  harness.openDialog.mockResolvedValue({ canceled: false, filePaths: [profile] })
+  expect(await call('select-sync-directory')).toMatchObject({ success: true })
+  const original = harness.files.get(grantFile)
+  expect(await call('write-sync-file', profile, path.basename(grantFile), '{"version":1,"grants":[]}')).toMatchObject({ error: 'invalid_path' })
+  expect(await call('read-sync-file', profile, path.basename(grantFile))).toMatchObject({ error: 'invalid_path' })
+  expect(harness.files.get(grantFile)).toBe(original)
 })

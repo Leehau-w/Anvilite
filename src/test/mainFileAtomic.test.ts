@@ -7,10 +7,10 @@ import { pathToFileURL, fileURLToPath } from 'node:url'
 const harness = vi.hoisted(() => ({
   handlers: new Map<string, (...args: any[]) => any>(),
   navigation: new Map<string, (...args: any[]) => any>(),
-  openDialog: vi.fn(), saveDialog: vi.fn(), win: null as any,
+  openDialog: vi.fn(), saveDialog: vi.fn(), win: null as any, userData: '',
 }))
 vi.mock('electron', () => ({
-  app: { whenReady: () => Promise.resolve(), on: vi.fn(), isPackaged: false },
+  app: { whenReady: () => Promise.resolve(), on: vi.fn(), isPackaged: false, getPath: () => harness.userData },
   BrowserWindow: class {
     webContents = {
       send: vi.fn(), mainFrame: { url: '' }, getURL: () => this.webContents.mainFrame.url,
@@ -39,6 +39,8 @@ const call = (name: string, ...args: unknown[]) => harness.handlers.get(name)!(
 beforeAll(async () => { await import('../../electron/main'); await Promise.resolve() })
 beforeEach(async () => {
   temporaryRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'anvilite-legacy-file-regression-'))
+  harness.userData = path.join(temporaryRoot, 'profile')
+  fs.mkdirSync(harness.userData)
   selected = path.join(temporaryRoot, 'approved')
   fs.mkdirSync(selected)
   target = path.join(selected, 'snapshot.json')

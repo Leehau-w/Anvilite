@@ -870,7 +870,7 @@ export const en: Translations = {
   data_accountChanged: 'The account changed in another window. Reload before continuing.',
   data_importErrorWrite: 'Restore failed. The original data was restored. Please retry.',
   data_importErrorRollback: 'Restore and rollback failed. Local data may be incomplete. Import a valid backup again.',
-  data_syncReselectFolder: 'Choose the sync folder again to allow access for this app session.',
+  data_syncReselectFolder: 'The sync folder is unavailable or has changed. Select it again.',
   data_syncInvalidWindow: 'This window cannot sync. Restart the app and retry.',
   data_syncInvalidFile: 'The sync file or path is invalid. Check the file or choose the folder again.',
   data_section: 'Data Management',

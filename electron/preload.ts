@@ -22,9 +22,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   close: () => ipcRenderer.send('window-close'),
   saveFile: (content: string, defaultName: string) =>
     ipcRenderer.invoke('save-file', content, defaultName),
-  selectSyncDirectory: () => ipcRenderer.invoke('select-sync-directory'),
-  readSyncFile: (dirPath: string, relativePath: string) =>
-    ipcRenderer.invoke('read-sync-file', dirPath, relativePath),
-  writeSyncFile: (dirPath: string, relativePath: string, content: string) =>
-    ipcRenderer.invoke('write-sync-file', dirPath, relativePath, content),
+  selectSyncDirectory: (accountId?: string) => ipcRenderer.invoke('select-sync-directory', accountId),
+  readSyncFile: (dirPath: string, relativePath: string, accountId?: string) =>
+    ipcRenderer.invoke('read-sync-file', dirPath, relativePath, accountId),
+  writeSyncFile: (dirPath: string, relativePath: string, content: string, accountId?: string) =>
+    ipcRenderer.invoke('write-sync-file', dirPath, relativePath, content, accountId),
 })
